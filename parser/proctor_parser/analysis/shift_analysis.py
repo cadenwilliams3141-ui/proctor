@@ -30,6 +30,7 @@ _MIN_UPSHIFTS = 3
 def compute(session: ParsedSession) -> dict:
     redline = session.meta.car_redline_rpm
     redline_f = float(redline) if redline else None
+    tick_rate = session.meta.tick_rate or 60
 
     from_gears: list[int] = []
     rpms: list[float] = []
@@ -39,15 +40,17 @@ def compute(session: ParsedSession) -> dict:
         gear = lap.raw["gear"].astype(np.int64)
         rpm = lap.raw["rpm"].astype(np.float64)
         moving = moving_mask(lap.raw["speed"])
-        # Upshift: gear steps up by exactly one, both sides in a forward ratio,
-        # and the car was moving on the pre-shift tick.
-        up = (
-            (gear[1:] == gear[:-1] + 1)
-            & (gear[:-1] >= 1)
-            & (gear[1:] >= 1)
-            & moving[:-1]
-        )
-        pre = np.flatnonzero(up)  # index of the tick before each shift
+        # iRacing's gearbox passes through neutral (0) for a few ticks
+        # mid-shift (3 -> 0 -> 4), so a consecutive-tick comparison never sees
+        # +1 on real data. Compare the sequence of forward-gear ticks instead,
+        # capping the neutral gap so a long coast in neutral is not a "shift".
+        nz = np.flatnonzero(gear >= 1)
+        if nz.size < 2:
+            continue
+        gseq = gear[nz]
+        gap_ok = np.diff(nz) <= 2 * tick_rate
+        up = (gseq[1:] == gseq[:-1] + 1) & gap_ok & moving[nz[:-1]]
+        pre = nz[:-1][up]  # last tick in the gear being left
         from_gears.extend(int(v) for v in gear[pre])
         rpms.extend(float(v) for v in rpm[pre])
 

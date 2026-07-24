@@ -28,11 +28,15 @@ def _register(module) -> None:
 
 
 from proctor_parser.analysis import (  # noqa: E402 — registry wiring
+    balance,
     corner_sections,
     delta_time,
     hardware,
     input_overlay,
+    lockup_wheelspin,
     report_card,
+    shift_analysis,
+    tire_temps,
     track_map,
     traction_circle,
 )
@@ -40,6 +44,7 @@ from proctor_parser.analysis import (  # noqa: E402 — registry wiring
 for _module in (
     delta_time, track_map, input_overlay, corner_sections,
     hardware, traction_circle, report_card,
+    lockup_wheelspin, shift_analysis, tire_temps, balance,
 ):
     _register(_module)
 

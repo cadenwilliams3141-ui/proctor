@@ -15,6 +15,137 @@ function num(v: unknown, digits = 2): string {
   return typeof v === "number" && Number.isFinite(v) ? v.toFixed(digits) : "—";
 }
 
+function StretchPanels({ metrics }: { metrics: Record<string, Block> }) {
+  const lock = metrics["lockup_wheelspin"];
+  const shift = metrics["shift_analysis"];
+  const temps = metrics["tire_temps"];
+  const balance = metrics["balance"];
+
+  const missing: string[] = [];
+  if (!lock) missing.push("lockup/wheelspin");
+  if (!shift) missing.push("shift analysis");
+  if (!temps) missing.push("tire temps");
+  if (!balance) missing.push("balance indicator");
+
+  const eventsTable = (events: unknown) =>
+    Array.isArray(events) && events.length > 0 ? (
+      <table>
+        <thead>
+          <tr><th>lap</th><th>at % of lap</th><th>wheels</th><th>ms</th></tr>
+        </thead>
+        <tbody>
+          {(events as Block[]).slice(0, 8).map((e, i) => (
+            <tr key={i}>
+              <td>{String(e.lap)}</td>
+              <td className="mono">{num(Number(e.start_pct) * 100, 1)}%</td>
+              <td className="mono">{Array.isArray(e.wheels) ? (e.wheels as string[]).join(",") : "—"}</td>
+              <td className="mono">{String(e.duration_ms)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    ) : null;
+
+  return (
+    <>
+      <div className="grid2">
+        {lock && (
+          <div className="panel">
+            <h3>Lockups & wheelspin</h3>
+            <p>
+              <b>{String(get(get(lock, "counts"), "lockup_events") ?? 0)}</b> lockup ·{" "}
+              <b>{String(get(get(lock, "counts"), "wheelspin_events") ?? 0)}</b> wheelspin events
+            </p>
+            {typeof get(lock, "lockups_finding") === "string" && (
+              <p className="neg">{String(get(lock, "lockups_finding"))}</p>
+            )}
+            {typeof get(lock, "wheelspin_finding") === "string" && (
+              <p className="neg">{String(get(lock, "wheelspin_finding"))}</p>
+            )}
+            {eventsTable(get(lock, "lockups"))}
+            <p className="caveat">{String(get(lock, "caveat") ?? "")}</p>
+          </div>
+        )}
+        {shift && (
+          <div className="panel">
+            <h3>Shift analysis</h3>
+            {get(shift, "insufficient_data") ? (
+              <p style={{ color: "var(--muted)" }}>{String(get(shift, "reason") ?? "insufficient data")}</p>
+            ) : (
+              <>
+                <p>{String(get(shift, "observation") ?? "")}</p>
+                <table>
+                  <thead><tr><th>from gear</th><th>shifts</th><th>median rpm</th><th>% of redline</th></tr></thead>
+                  <tbody>
+                    {Object.entries((get(shift, "by_gear") as Block) ?? {}).map(([g, v]) => (
+                      <tr key={g}>
+                        <td>{g}</td>
+                        <td>{String(get(v, "count"))}</td>
+                        <td className="mono">{num(get(v, "median_rpm"), 0)}</td>
+                        <td className="mono">{num(get(v, "pct_of_redline"), 1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            <p className="caveat">{String(get(shift, "caveat") ?? "")}</p>
+          </div>
+        )}
+        {temps && (
+          <div className="panel">
+            <h3>Tire temps (left-front)</h3>
+            {get(temps, "insufficient_data") ? (
+              <p style={{ color: "var(--muted)" }}>{String(get(temps, "reason") ?? "insufficient data")}</p>
+            ) : (
+              <p>
+                Session median L/M/R:{" "}
+                <b className="mono">
+                  {num(get(get(temps, "session_median"), "left_c"), 1)} /{" "}
+                  {num(get(get(temps, "session_median"), "middle_c"), 1)} /{" "}
+                  {num(get(get(temps, "session_median"), "right_c"), 1)} °C
+                </b>{" "}
+                · spread {num(get(get(temps, "session_median"), "spread_c"), 1)} °C
+              </p>
+            )}
+            <p style={{ color: "var(--muted)" }}>
+              {String(get(get(temps, "other_corners"), "reason") ?? "")}
+            </p>
+            <p className="caveat">{String(get(temps, "caveat") ?? "")}</p>
+          </div>
+        )}
+        {balance && (
+          <div className="panel">
+            <h3>Balance (over/understeer tendency)</h3>
+            {get(balance, "insufficient_data") ? (
+              <p style={{ color: "var(--muted)" }}>{String(get(balance, "reason") ?? "insufficient data")}</p>
+            ) : (
+              <>
+                <p>
+                  Divergences lean{" "}
+                  <b>{num(get(get(balance, "tendency"), "understeer_pct"), 1)}% understeer</b> /{" "}
+                  <b>{num(get(get(balance, "tendency"), "oversteer_pct"), 1)}% oversteer</b>{" "}
+                  (fit r² {num(get(balance, "fit_r2"), 3)})
+                </p>
+                {typeof get(balance, "finding") === "string" && <p>{String(get(balance, "finding"))}</p>}
+              </>
+            )}
+            <p className="caveat">{String(get(balance, "caveat") ?? "")}</p>
+          </div>
+        )}
+      </div>
+      {missing.length > 0 && (
+        <div className="panel">
+          <p style={{ color: "var(--muted)" }}>
+            Not yet computed for this session: {missing.join(", ")} — re-upload
+            the file to recompute once the modules land.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default async function HardwarePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const metricRows = (await sql`
@@ -123,14 +254,14 @@ export default async function HardwarePage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
+      <StretchPanels metrics={metrics} />
+
       <div className="panel">
-        <h3>Not built yet (honest list)</h3>
+        <h3>Not possible from disk telemetry (won't be faked)</h3>
         <p style={{ color: "var(--muted)" }}>
-          Lockup/wheelspin markers, shift analysis, tire temp spread, and the
-          over/understeer balance indicator land here as they are built.
-          Racecraft/positioning tips are not possible from disk telemetry (no
-          other-car channels), and brake temperature has no channel at all —
-          those will not be faked.
+          Racecraft/positioning tips need other-car channels the disk .ibt does
+          not contain, and brake temperature has no channel at all — only line
+          pressure exists.
         </p>
       </div>
       {hw && typeof get(hw, "caveat") === "string" && (

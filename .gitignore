@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.ibt
+.env
+.env.local
+node_modules/
+.next/
+.vercel/
+*.tsbuildinfo
+.processed.json
+config.json
+uploader.log

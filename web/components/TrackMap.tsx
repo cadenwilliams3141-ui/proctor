@@ -1,9 +1,19 @@
 "use client";
 
 /* SVG track map from the track_map metric payload (local-meter projection of
-   the reference lap's GPS), optionally colored by a speed trace. */
+   the reference lap's GPS), optionally colored by a speed trace. Optional
+   overlays: slip-event markers (lockups/wheelspin at their track position) and
+   a moving car dot at a given grid index (used by the live-trace tab). */
 
 type Loose = Record<string, any>;
+
+export type SlipMarker = {
+  start_pct: number;
+  kind: "lockup" | "wheelspin";
+  wheels?: string[];
+  peak_slip_ratio?: number;
+  lap?: number;
+};
 
 function speedColor(v: number, min: number, max: number): string {
   // blue (slow) → red (fast); hue 220 → 0
@@ -11,10 +21,12 @@ function speedColor(v: number, min: number, max: number): string {
   return `hsl(${220 - 220 * t}, 75%, 55%)`;
 }
 
-export default function TrackMap({ map, speed, corners }: {
+export default function TrackMap({ map, speed, corners, events, carIndex }: {
   map: Loose | undefined;
   speed: number[] | undefined;
   corners: Loose[];
+  events?: SlipMarker[];
+  carIndex?: number | null;
 }) {
   const xs: number[] | undefined = map?.x_m?.map(Number);
   const ys: number[] | undefined = map?.y_m?.map(Number);
@@ -37,6 +49,9 @@ export default function TrackMap({ map, speed, corners }: {
   const sMin = speed ? Math.min(...speed) : 0;
   const sMax = speed ? Math.max(...speed) : 1;
 
+  // Map a 0..1 track fraction onto a point index in the projected path.
+  const at = (pct: number) => Math.min(xs.length - 1, Math.max(0, Math.round(pct * (xs.length - 1))));
+
   const segments = [];
   for (let i = 1; i < xs.length; i++) {
     segments.push(
@@ -52,7 +67,7 @@ export default function TrackMap({ map, speed, corners }: {
   }
 
   const apexMarks = corners.map((c) => {
-    const idx = Math.min(999, Math.max(0, Math.round(Number(c.apex_pct) * 1000)));
+    const idx = at(Number(c.apex_pct));
     return (
       <g key={String(c.id)}>
         <circle cx={px(xs[idx])} cy={py(ys[idx])} r={5} fill="none" stroke="#e6edf3" strokeWidth={1.5} />
@@ -63,10 +78,40 @@ export default function TrackMap({ map, speed, corners }: {
     );
   });
 
+  const slipMarks = (events ?? []).map((e, i) => {
+    const idx = at(Number(e.start_pct));
+    const cx = px(xs[idx]), cy = py(ys[idx]);
+    const label = `${e.kind}${e.lap != null ? ` · lap ${e.lap}` : ""}${
+      e.wheels?.length ? ` · ${e.wheels.join(",")}` : ""
+    }${e.peak_slip_ratio != null ? ` · ratio ${e.peak_slip_ratio}` : ""}`;
+    return e.kind === "lockup" ? (
+      // red diamond = lockup under braking
+      <rect key={i} x={cx - 4} y={cy - 4} width={8} height={8} transform={`rotate(45 ${cx} ${cy})`}
+        fill="#f85149" stroke="#0d1117" strokeWidth={0.8}>
+        <title>{label}</title>
+      </rect>
+    ) : (
+      // amber circle = wheelspin under power
+      <circle key={i} cx={cx} cy={cy} r={4.5} fill="#d29922" stroke="#0d1117" strokeWidth={0.8}>
+        <title>{label}</title>
+      </circle>
+    );
+  });
+
+  const car =
+    carIndex != null && carIndex >= 0 && carIndex < xs.length ? (
+      <g>
+        <circle cx={px(xs[carIndex])} cy={py(ys[carIndex])} r={9} fill="none" stroke="#e6edf3" strokeWidth={1.5} opacity={0.6} />
+        <circle cx={px(xs[carIndex])} cy={py(ys[carIndex])} r={4.5} fill="#e6edf3" />
+      </g>
+    ) : null;
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
       {segments}
       {apexMarks}
+      {slipMarks}
+      {car}
       {speed && (
         <g>
           <text x={PAD} y={H - 6} fill="#8b949e" fontSize={11}>

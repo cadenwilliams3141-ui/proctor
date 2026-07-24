@@ -53,6 +53,15 @@ h3 { font-size: 14px; margin: 14px 0 6px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
 
+/* Drag-to-resize panels (ResizablePanel). The corner handle is the native CSS
+   resizer; the hint just makes it discoverable. */
+.panel--resizable {
+  resize: both;
+  overflow: auto;
+  min-width: 280px;
+}
+.panel--resizable::-webkit-resizer { border-color: var(--border); }
+
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; }

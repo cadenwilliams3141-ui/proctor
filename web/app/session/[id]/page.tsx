@@ -55,6 +55,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         <span className="stat"><span className="v mono">{fmtLap(best)}</span><br /><span className="l">best valid</span></span>
         <span className="stat">
           <Link href={`/session/${id}/laps`}>lap analysis →</Link><br />
+          <Link href={`/session/${id}/live`}>live trace →</Link><br />
           <Link href={`/session/${id}/hardware`}>hardware panel →</Link>
         </span>
       </div>

@@ -5,6 +5,7 @@ import type { LapRow, TraceRow } from "@/lib/types";
 import TrackMap from "@/components/TrackMap";
 import SpeedDeltaChart from "@/components/SpeedDeltaChart";
 import InputOverlayChart from "@/components/InputOverlayChart";
+import { atLeast, hiddenNote, type Tier } from "@/lib/tier";
 
 type Loose = Record<string, any>;
 
@@ -14,7 +15,9 @@ function fmtLap(s: number | null): string {
   return `${m}:${(s - m * 60).toFixed(3).padStart(6, "0")}`;
 }
 
-export default function LapAnalysis({ sessionId }: { sessionId: string }) {
+export default function LapAnalysis({ sessionId, tier }: {
+  sessionId: string; tier: Tier;
+}) {
   const [data, setData] = useState<Loose | null>(null);
   const [lapA, setLapA] = useState<number | null>(null);
   const [lapB, setLapB] = useState<number | null>(null);
@@ -149,16 +152,20 @@ export default function LapAnalysis({ sessionId }: { sessionId: string }) {
         </div>
       </div>
 
-      <div className="panel">
-        <h3>Input overlay</h3>
-        {tA && tB ? (
-          <InputOverlayChart a={tA} b={tB} />
-        ) : (
-          <p style={{ color: "var(--muted)" }}>loading traces…</p>
-        )}
-      </div>
+      {/* Map and delta are the core loop at every tier; the input overlay and
+          the dense per-section table step up from there. */}
+      {atLeast(tier, "intermediate") && (
+        <div className="panel">
+          <h3>Input overlay</h3>
+          {tA && tB ? (
+            <InputOverlayChart a={tA} b={tB} />
+          ) : (
+            <p style={{ color: "var(--muted)" }}>loading traces…</p>
+          )}
+        </div>
+      )}
 
-      {corners.length > 0 && lapA != null && (
+      {atLeast(tier, "advanced") && corners.length > 0 && lapA != null && (
         <div className="panel">
           <h3>Corner sections — time vs reference lap {refLap} (s)</h3>
           <CornerTable metrics={metrics} lapA={lapA} lapB={lapB} refLap={refLap} />
@@ -166,6 +173,12 @@ export default function LapAnalysis({ sessionId }: { sessionId: string }) {
             {String(metrics.corner_sections?.caveat ?? "")}
           </p>
         </div>
+      )}
+
+      {hiddenNote(tier, atLeast(tier, "intermediate") ? 1 : 2) && (
+        <p className="caveat">
+          {hiddenNote(tier, atLeast(tier, "intermediate") ? 1 : 2)}
+        </p>
       )}
     </>
   );

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { sql } from "@/lib/db";
 import TractionCircle from "@/components/TractionCircle";
+import { atLeast, hiddenNote, type Tier } from "@/lib/tier";
+import { readTier } from "@/lib/tier-server";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +150,18 @@ function StretchPanels({ metrics }: { metrics: Record<string, Block> }) {
 
 export default async function HardwarePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const tier: Tier = await readTier();
+  // Brake ceiling is the headline every tier gets. ABS/bias/FFB and the
+  // envelope are intermediate; noise floor and the stretch modules are deep
+  // detail. The data-wall panel is never gated — a casual reader is the most
+  // likely to expect racecraft tips, so they most need to see the wall.
+  const showDetail = atLeast(tier, "intermediate");
+  const showDeep = atLeast(tier, "advanced");
+  // Keep these in step with the gated blocks below — the note reports a count
+  // to the reader, so a stale number would be a (small) lie.
+  const DETAIL_PANELS = 3; // ABS+bias, force feedback, traction circle
+  const DEEP_PANELS = 5;   // pedal noise floor + the 4 stretch panels
+  const hiddenPanels = (showDetail ? 0 : DETAIL_PANELS) + (showDeep ? 0 : DEEP_PANELS);
   const metricRows = (await sql`
     SELECT metric_key, payload FROM session_metrics WHERE session_id = ${id}
   `) as unknown as { metric_key: string; payload: Block }[];
@@ -197,7 +211,7 @@ export default async function HardwarePage({ params }: { params: Promise<{ id: s
             </p>
           </div>
 
-          <div className="panel">
+          {showDetail && <div className="panel">
             <h3>ABS</h3>
             <p>
               Engaged on <b>{num(get(abs, "engaged_pct_of_braking"), 1)}%</b> of
@@ -220,9 +234,9 @@ export default async function HardwarePage({ params }: { params: Promise<{ id: s
                 )}
               </p>
             )}
-          </div>
+          </div>}
 
-          <div className="panel">
+          {showDeep && <div className="panel">
             <h3>Pedal noise floor</h3>
             <p>
               On full-throttle straights (pedal should read zero):{" "}
@@ -231,9 +245,9 @@ export default async function HardwarePage({ params }: { params: Promise<{ id: s
               spike {num(get(noise, "max_spike"), 4)}
             </p>
             <p className="caveat">{String(get(noise, "caveat") ?? "")}</p>
-          </div>
+          </div>}
 
-          <div className="panel">
+          {showDetail && <div className="panel">
             <h3>Force feedback</h3>
             <p>
               Clipping on <b>{num(get(ffb, "clipping_pct"), 2)}%</b> of moving
@@ -242,19 +256,25 @@ export default async function HardwarePage({ params }: { params: Promise<{ id: s
             {typeof get(ffb, "finding") === "string" && (
               <p className="neg">{String(get(ffb, "finding"))}</p>
             )}
-          </div>
+          </div>}
         </div>
       )}
 
-      <div className="panel">
-        <h3>Traction circle — your own envelope</h3>
-        <TractionCircle payload={tc as Record<string, any> | undefined} />
-        {typeof get(tc, "basis") === "string" && (
-          <p className="caveat">{String(get(tc, "basis"))} — {String(get(tc, "caveat") ?? "")}</p>
-        )}
-      </div>
+      {showDetail && (
+        <div className="panel">
+          <h3>Traction circle — your own envelope</h3>
+          <TractionCircle payload={tc as Record<string, any> | undefined} />
+          {typeof get(tc, "basis") === "string" && (
+            <p className="caveat">{String(get(tc, "basis"))} — {String(get(tc, "caveat") ?? "")}</p>
+          )}
+        </div>
+      )}
 
-      <StretchPanels metrics={metrics} />
+      {showDeep && <StretchPanels metrics={metrics} />}
+
+      {hiddenNote(tier, hiddenPanels) && (
+        <p className="caveat">{hiddenNote(tier, hiddenPanels)}</p>
+      )}
 
       <div className="panel">
         <h3>Not possible from disk telemetry (won't be faked)</h3>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "@/lib/db";
 import type { LapRow, MetricPayloads } from "@/lib/types";
 import ReportCard from "@/components/ReportCard";
+import { readTier } from "@/lib/tier-server";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ function fmtLap(s: number | null): string {
 
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const tier = await readTier();
   const [session] = await sql`
     SELECT s.*, f.filename FROM sessions s
     LEFT JOIN ingest_files f ON f.id = s.ingest_file_id
@@ -57,7 +59,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         </span>
       </div>
 
-      <ReportCard metrics={metrics} />
+      <ReportCard metrics={metrics} tier={tier} />
 
       <h2>Laps</h2>
       <div className="panel">

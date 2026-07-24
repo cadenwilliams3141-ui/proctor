@@ -1,4 +1,5 @@
 import type { MetricPayloads } from "@/lib/types";
+import { atLeast, hiddenNote, type Tier } from "@/lib/tier";
 
 /* Renders the module-7 fingerprint findings plus headline blocks from other
    metric payloads. Every card leads with data and shows its honesty caveat
@@ -37,10 +38,24 @@ function Card({ title, children, caveat }: {
   );
 }
 
-export default function ReportCard({ metrics }: { metrics: MetricPayloads }) {
+export default function ReportCard({ metrics, tier }: {
+  metrics: MetricPayloads; tier: Tier;
+}) {
   const rc = metrics["report_card"];
   const hw = metrics["hardware"];
   const tc = metrics["traction_circle"];
+
+  // Fuel/pace and driving style are the headline findings — every tier sees
+  // them. Rig-health and envelope detail step up from there.
+  const showDetail = atLeast(tier, "intermediate");
+  const showDeep = atLeast(tier, "advanced");
+  // Count only cards that would actually have rendered, so the note never
+  // claims something is hidden when the module simply produced nothing.
+  const detailCards = [rc, rc, hw]; // fatigue curve, frame health, hw snapshot
+  const deepCards = [tc];           // traction envelope
+  const hidden =
+    (showDetail ? 0 : detailCards.filter(Boolean).length) +
+    (showDeep ? 0 : deepCards.filter(Boolean).length);
 
   if (!rc && !hw && !tc) {
     return (
@@ -112,7 +127,7 @@ export default function ReportCard({ metrics }: { metrics: MetricPayloads }) {
             )}
           </Card>
         )}
-        {rc && (
+        {rc && showDetail && (
           <Card title="Fatigue curve" caveat={get(rc, "caveat")}>
             {get(fatigue, "insufficient_data") ? <Insufficient block={fatigue} /> : (
               <>
@@ -128,7 +143,7 @@ export default function ReportCard({ metrics }: { metrics: MetricPayloads }) {
             )}
           </Card>
         )}
-        {rc && (
+        {rc && showDetail && (
           <Card title="Frame-rate health">
             {get(frame, "available") === false ? (
               <p style={{ color: "var(--muted)" }}>
@@ -148,7 +163,7 @@ export default function ReportCard({ metrics }: { metrics: MetricPayloads }) {
             )}
           </Card>
         )}
-        {hw && (
+        {hw && showDetail && (
           <Card title="Hardware snapshot" caveat={get(hw, "caveat")}>
             <p>
               Brake sensor ceiling:{" "}
@@ -161,7 +176,7 @@ export default function ReportCard({ metrics }: { metrics: MetricPayloads }) {
             </p>
           </Card>
         )}
-        {tc && (
+        {tc && showDeep && (
           <Card title="Traction envelope" caveat={get(tc, "caveat")}>
             {get(tc, "insufficient_data") ? <Insufficient block={tc} /> : (
               <p>
@@ -175,6 +190,9 @@ export default function ReportCard({ metrics }: { metrics: MetricPayloads }) {
           </Card>
         )}
       </div>
+      {hiddenNote(tier, hidden) && (
+        <p className="caveat">{hiddenNote(tier, hidden)}</p>
+      )}
     </>
   );
 }

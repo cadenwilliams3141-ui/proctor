@@ -189,6 +189,38 @@ export default async function HardwarePage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
+      {hw && get(hw, "areas_of_concern") && (
+        <div className="panel">
+          <h3>Brake pedal & sensor — areas of concern</h3>
+          {(() => {
+            const aoc = get(hw, "areas_of_concern") as Block;
+            const concerns = get(aoc, "concerns");
+            if (!Array.isArray(concerns) || concerns.length === 0) {
+              return (
+                <p className="neg">
+                  {String(get(aoc, "finding") ?? "no brake-pedal or sensor concerns detected this session")}
+                </p>
+              );
+            }
+            return (
+              <ul style={{ margin: "6px 0", paddingLeft: 18 }}>
+                {(concerns as Block[]).map((c, i) => (
+                  <li key={i} style={{ marginBottom: 6 }}>
+                    <b>{String(c.area)}</b> — {String(c.observation)}
+                    {typeof c.watch === "string" && (
+                      <span className="caveat"> ({c.watch})</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+          <p className="caveat">
+            {String(get(get(hw, "areas_of_concern"), "caveat") ?? "")}
+          </p>
+        </div>
+      )}
+
       {hw && (
         <div className="grid2">
           <div className="panel">

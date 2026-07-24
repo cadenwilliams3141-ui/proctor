@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LapRow, TraceRow } from "@/lib/types";
-import TrackMap from "@/components/TrackMap";
+import TrackMap, { type SlipMarker } from "@/components/TrackMap";
 import SpeedDeltaChart from "@/components/SpeedDeltaChart";
 import InputOverlayChart from "@/components/InputOverlayChart";
+import ResizablePanel from "@/components/ResizablePanel";
+import TireTempHeatmap from "@/components/TireTempHeatmap";
+import BalanceExplainer from "@/components/BalanceExplainer";
 import { atLeast, hiddenNote, type Tier } from "@/lib/tier";
 
 type Loose = Record<string, any>;
@@ -90,6 +93,23 @@ export default function LapAnalysis({ sessionId, tier }: {
 
   const corners: Loose[] = metrics.corner_sections?.corners ?? [];
 
+  // Slip events on lap A, placed on the map at their track position.
+  const slipEvents: SlipMarker[] = (() => {
+    const lw = metrics.lockup_wheelspin;
+    if (!lw || lapA == null) return [];
+    const pick = (arr: Loose[] | undefined, kind: "lockup" | "wheelspin"): SlipMarker[] =>
+      (arr ?? [])
+        .filter((e) => Number(e.lap) === lapA)
+        .map((e) => ({
+          start_pct: Number(e.start_pct),
+          kind,
+          wheels: e.wheels,
+          peak_slip_ratio: Number(e.peak_slip_ratio),
+          lap: Number(e.lap),
+        }));
+    return [...pick(lw.lockups, "lockup"), ...pick(lw.wheelspin, "wheelspin")];
+  })();
+
   const selector = (value: number | null, onChange: (n: number) => void) => (
     <select
       value={value ?? ""}
@@ -121,19 +141,21 @@ export default function LapAnalysis({ sessionId, tier }: {
       </div>
 
       <div className="grid2">
-        <div className="panel">
+        <ResizablePanel id="laps-map">
           <h3>Track map</h3>
           <TrackMap
             map={metrics.track_map}
             speed={tA?.speed?.map(Number)}
             corners={corners}
+            events={slipEvents}
           />
           <p className="caveat">
-            driven line from lap GPS, colored by lap A speed — native data, no
+            driven line from lap GPS, colored by lap A speed · red diamonds =
+            lockups, amber dots = wheelspin on lap A — native data, no
             reconstruction
           </p>
-        </div>
-        <div className="panel">
+        </ResizablePanel>
+        <ResizablePanel id="laps-delta">
           <h3>Speed & time delta (A − B)</h3>
           {tA && tB && (
             <SpeedDeltaChart
@@ -149,37 +171,119 @@ export default function LapAnalysis({ sessionId, tier }: {
               delta-time metric not computed for these laps — showing speed only
             </p>
           )}
-        </div>
+        </ResizablePanel>
       </div>
 
-      {/* Map and delta are the core loop at every tier; the input overlay and
-          the dense per-section table step up from there. */}
+      {/* Map and delta are the core loop at every tier; the input overlay, the
+          tire-temp strip and the dense per-corner detail step up from there. */}
       {atLeast(tier, "intermediate") && (
-        <div className="panel">
+        <ResizablePanel id="laps-inputs">
           <h3>Input overlay</h3>
           {tA && tB ? (
             <InputOverlayChart a={tA} b={tB} />
           ) : (
             <p style={{ color: "var(--muted)" }}>loading traces…</p>
           )}
-        </div>
+        </ResizablePanel>
+      )}
+
+      {atLeast(tier, "intermediate") && (
+        <ResizablePanel id="laps-tiretemp">
+          <h3>Tire temp across the lap (left-front)</h3>
+          <TireTempHeatmap payload={metrics.tire_temps} />
+        </ResizablePanel>
       )}
 
       {atLeast(tier, "advanced") && corners.length > 0 && lapA != null && (
-        <div className="panel">
+        <ResizablePanel id="laps-corner-sections">
           <h3>Corner sections — time vs reference lap {refLap} (s)</h3>
           <CornerTable metrics={metrics} lapA={lapA} lapB={lapB} refLap={refLap} />
           <p className="caveat">
             {String(metrics.corner_sections?.caveat ?? "")}
           </p>
-        </div>
+        </ResizablePanel>
       )}
 
-      {hiddenNote(tier, atLeast(tier, "intermediate") ? 1 : 2) && (
-        <p className="caveat">
-          {hiddenNote(tier, atLeast(tier, "intermediate") ? 1 : 2)}
-        </p>
+      {atLeast(tier, "advanced") && (
+        <ResizablePanel id="laps-corner-context">
+          <h3>Corner context — what the car was doing</h3>
+          <CornerContext payload={metrics.corner_context} />
+        </ResizablePanel>
       )}
+
+      {atLeast(tier, "advanced") && (
+        <ResizablePanel id="laps-balance">
+          <h3>Balance — how the car rotated vs your steering</h3>
+          <BalanceExplainer payload={metrics.balance} />
+        </ResizablePanel>
+      )}
+
+      {/* Two intermediate panels (input overlay, tire temp) and three advanced
+          panels (corner sections, corner context, balance) can be hidden. */}
+      {(() => {
+        const hidden =
+          (atLeast(tier, "intermediate") ? 0 : 2) + (atLeast(tier, "advanced") ? 0 : 3);
+        return hiddenNote(tier, hidden) && <p className="caveat">{hiddenNote(tier, hidden)}</p>;
+      })()}
+    </>
+  );
+}
+
+function CornerContext({ payload }: { payload: Loose | undefined }) {
+  if (!payload) {
+    return (
+      <p style={{ color: "var(--muted)" }}>
+        corner context not computed for this session — re-upload to compute
+      </p>
+    );
+  }
+  if (payload.insufficient_data) {
+    return <p style={{ color: "var(--muted)" }}>{String(payload.reason ?? "insufficient data")}</p>;
+  }
+  const corners: Loose[] = payload.corners ?? [];
+  if (corners.length === 0) {
+    return (
+      <p style={{ color: "var(--muted)" }}>
+        {String(payload.finding ?? "no corners detected on the reference lap")}
+      </p>
+    );
+  }
+  const ms = (v: unknown) => (typeof v === "number" ? `${(v * 3.6).toFixed(0)}` : "—");
+  return (
+    <>
+      <table>
+        <thead>
+          <tr>
+            <th>corner</th><th>min</th><th>entry</th><th>exit</th>
+            <th>peak steer</th><th>lat g</th><th>brake g</th><th>LF temp L/M/R</th>
+          </tr>
+        </thead>
+        <tbody>
+          {corners.map((c) => {
+            const t = c.lf_tire_temp ?? {};
+            return (
+              <tr key={String(c.id)}>
+                <td>T{String(c.id)}</td>
+                <td className="mono">{ms(c.min_speed_ms)}</td>
+                <td className="mono">{ms(c.entry_speed_ms)}</td>
+                <td className="mono">{ms(c.exit_speed_ms)}</td>
+                <td className="mono">{typeof c.peak_abs_steer_rad === "number" ? `${((c.peak_abs_steer_rad * 180) / Math.PI).toFixed(0)}°` : "—"}</td>
+                <td className="mono">{typeof c.peak_lat_g === "number" ? c.peak_lat_g.toFixed(2) : "—"}</td>
+                <td className="mono">{typeof c.peak_brake_g === "number" ? c.peak_brake_g.toFixed(2) : "—"}</td>
+                <td className="mono">
+                  {t.available
+                    ? `${t.left_c}/${t.middle_c}/${t.right_c}°`
+                    : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="caveat">
+        speeds in km/h · from the reference lap (lap {String(payload.reference_lap)}) ·
+        {String(payload.caveat ?? "")}
+      </p>
     </>
   );
 }

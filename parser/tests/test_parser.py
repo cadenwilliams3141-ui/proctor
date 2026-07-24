@@ -127,3 +127,14 @@ def test_grid_shape_and_monotonicity():
     assert np.all(np.diff(lap.grid["grid_pct"]) > 0)
     raw_len = len(lap.raw["speed"])
     assert all(len(v) == raw_len for v in lap.raw.values())
+
+
+def test_repeated_lap_numbers_are_remapped_unique():
+    ch = make_core_channels(n_laps=6, incident_lap=None, slow_lap=None)
+    n = len(ch["Lap"])
+    ch["Lap"] = ch["Lap"] % 3  # reset/tow pattern: 0,1,2,0,1,2
+    sessions = parse_ibt(build_ibt(ch))
+    numbers = [lap.lap_number for lap in sessions[0].laps]
+    assert len(numbers) == 6
+    assert len(set(numbers)) == 6, f"lap numbers must be unique, got {numbers}"
+    assert numbers == sorted(numbers)  # chronological order preserved

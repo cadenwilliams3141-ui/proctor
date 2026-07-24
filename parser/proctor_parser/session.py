@@ -49,6 +49,8 @@ RAW_CHANNEL_MAP = {
     "lf_temp_l": "LFtempL",
     "lf_temp_m": "LFtempM",
     "lf_temp_r": "LFtempR",
+    "brake_bias": "dcBrakeBias",
+    "frame_rate": "FrameRate",
 }
 
 # Raw keys that also get resampled onto the fixed distance grid (5.4).
@@ -128,8 +130,16 @@ def parse_ibt(data: bytes | IbtFile, recorded_at: datetime | None = None) -> lis
     for session_num, s_start, s_end in contiguous_runs(session_num_ch):
         lap_runs = contiguous_runs(lap_ch[s_start:s_end])
         parsed_laps: list[ParsedLap] = []
+        # iRacing's lap counter repeats after resets/tows (0,1,2,0,1,…).
+        # lap_number must be unique per session — for modules keying dicts by
+        # it and for the DB constraint — so reused numbers are remapped to
+        # max_used+1, preserving chronological order.
+        used_numbers: set[int] = set()
 
         for run_idx, (lap_number, l_start, l_end) in enumerate(lap_runs):
+            if lap_number in used_numbers:
+                lap_number = max(used_numbers) + 1
+            used_numbers.add(lap_number)
             a, b = s_start + l_start, s_start + l_end
             n_ticks = b - a
 

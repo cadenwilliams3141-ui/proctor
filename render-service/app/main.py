@@ -36,6 +36,7 @@ async def ingest(
     background: BackgroundTasks,
     file: UploadFile,
     user_id: str = Form("caden"),
+    force: bool = Form(False),
 ) -> dict:
     data = await file.read()
     sha = hashlib.sha256(data).hexdigest()
@@ -45,8 +46,9 @@ async def ingest(
         row = conn.execute(
             "SELECT id, status FROM ingest_files WHERE sha256=%s", (sha,)
         ).fetchone()
-        if row is not None and row[1] != "failed":
-            # Dedupe: same bytes already ingested (or in flight).
+        if row is not None and row[1] != "failed" and not force:
+            # Dedupe: same bytes already ingested (or in flight). force=true
+            # reprocesses known bytes (e.g. after new analysis modules land).
             return {"ingest_file_id": row[0], "status": row[1], "duplicate": True}
         if row is not None:
             ingest_id = row[0]

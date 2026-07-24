@@ -27,6 +27,23 @@ def _register(module) -> None:
     _MODULES[module.METRIC_KEY] = module.compute
 
 
+from proctor_parser.analysis import (  # noqa: E402 — registry wiring
+    corner_sections,
+    delta_time,
+    hardware,
+    input_overlay,
+    report_card,
+    track_map,
+    traction_circle,
+)
+
+for _module in (
+    delta_time, track_map, input_overlay, corner_sections,
+    hardware, traction_circle, report_card,
+):
+    _register(_module)
+
+
 def compute_all(session: ParsedSession) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for key, fn in _MODULES.items():

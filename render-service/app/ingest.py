@@ -92,13 +92,15 @@ def process_file(ingest_id: int, filename: str, data: bytes, user_id: str) -> No
         conn.execute(
             "UPDATE ingest_files SET status='parsing' WHERE id=%s", (ingest_id,)
         )
-        # Re-processing (e.g. after a failure) must not duplicate sessions.
-        conn.execute(
-            "DELETE FROM sessions WHERE ingest_file_id=%s", (ingest_id,)
-        )
         sessions = parse_ibt(data, recorded_at=recorded_at_from_filename(filename))
-        for ps in sessions:
-            _write_session(conn, ingest_id, user_id, ps)
+        # One transaction per file: a failure leaves zero partial telemetry,
+        # and re-processing never duplicates sessions.
+        with conn.transaction():
+            conn.execute(
+                "DELETE FROM sessions WHERE ingest_file_id=%s", (ingest_id,)
+            )
+            for ps in sessions:
+                _write_session(conn, ingest_id, user_id, ps)
         conn.execute(
             "UPDATE ingest_files SET status='done', parsed_at=now(), error_detail=NULL WHERE id=%s",
             (ingest_id,),

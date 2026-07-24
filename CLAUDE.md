@@ -24,7 +24,8 @@ Product identity: observations, not verdicts. This constraint lives in the code 
 - Uploader (/uploader) ships to Caden's desktop rig — portable folder, not an .exe.
 - IDs (identifiers only): repo cadenwilliams3141-ui/proctor · Neon project shiny-shadow-96766321
   (db neondb) · Render service srv-d9hb6pnaqgkc73a12mh0 → https://proctor-ingest.onrender.com ·
-  Vercel project prj_i1eT9J2fu4qZHJkjUPWn1zeryR5E (team garrr) → proctor-eight.vercel.app.
+  Vercel project prj_i1eT9J2fu4qZHJkjUPWn1zeryR5E (team garrr) → proctor-eight.vercel.app ·
+  Notion hub https://app.notion.com/p/3a71934544588133a2a8d5b602628fc5
 - Secrets are in Render/Vercel env vars — retrieve via MCP if ever needed; NEVER hardcode or
   paste a connection string anywhere (not in code, not in Notion, not in chat).
 

@@ -50,6 +50,28 @@ def test_hardware_brake_bias_available():
     assert bias["changed_during_session"] is False
 
 
+def test_hardware_areas_of_concern_clean_session():
+    aoc = hardware.compute(_session())["areas_of_concern"]
+    # Silent pedal, no FFB clipping on the synthetic: nothing to flag, said so.
+    assert aoc["concerns"] == []
+    assert "no brake-pedal or sensor concerns" in aoc["finding"]
+    assert json.loads(json.dumps(aoc))
+
+
+def test_hardware_areas_of_concern_flags_pedal_noise():
+    ch = make_core_channels()
+    br = ch["BrakeRaw"].copy()
+    # Nonzero brake-sensor reading on full-throttle straights = a noise spike.
+    br[ch["Throttle"] > 0.9] = 0.02
+    ch["BrakeRaw"] = br
+    session = parse_ibt(build_ibt(ch))[0]
+
+    aoc = hardware.compute(session)["areas_of_concern"]
+    assert any(c["area"] == "brake sensor noise" for c in aoc["concerns"])
+    assert "finding" not in aoc  # a real concern -> not the all-clear path
+    assert json.loads(json.dumps(aoc))
+
+
 def test_hardware_payload_is_json_serializable():
     payload = hardware.compute(_session())
     assert json.loads(json.dumps(payload))["basis"]

@@ -113,6 +113,17 @@ def test_tire_temps_reports_lf_edges():
     assert json.loads(json.dumps(payload))
 
 
+def test_tire_temps_curve_across_lap():
+    curve = tire_temps.compute(_session())["curve"]
+    assert curve["corner"] == "LF"
+    assert len(curve["grid_pct"]) == 100
+    assert len(curve["left_c"]) == len(curve["middle_c"]) == len(curve["right_c"]) == 100
+    # Constant synthetic temps -> a flat curve at each edge.
+    assert set(curve["left_c"]) == {80.0}
+    assert set(curve["middle_c"]) == {85.0}
+    assert set(curve["right_c"]) == {90.0}
+
+
 # --- balance --------------------------------------------------------------
 
 def test_balance_insufficient_when_yaw_flat():
@@ -141,4 +152,42 @@ def test_balance_computes_payload_when_yaw_tracks_steer():
         assert payload["fit_r2"] >= 0.3
         assert "understeer_pct" in payload["tendency"]
         assert set(payload["by_input_state"]) == {"braking", "on_throttle", "coasting"}
+        # Brake bias is carried on the synthetic (constant 52.0 front).
+        bias = payload["brake_bias"]
+        assert bias["available"] is True
+        assert bias["front_pct_values"] == [52.0]
+        assert bias["changed_during_session"] is False
+        # No corners on the constant-speed reference -> by_corner says so.
+        assert payload["by_corner"]["available"] is False
+    assert json.loads(json.dumps(payload))
+
+
+def test_balance_by_corner_places_divergences_on_a_carved_corner():
+    ch = make_core_channels()
+    n = len(ch["Gear"])
+    rng = np.random.default_rng(0)
+    steer = ch["SteeringWheelAngle"]
+    ch["YawRate"] = 0.03 * steer * ch["Speed"] + rng.normal(0, 0.01, n)
+    session = parse_ibt(build_ibt(ch))[0]
+
+    # Carve a dip into the reference lap's grid speed so a corner is detected.
+    ref = min(
+        (l for l in session.laps if l.is_valid and not l.is_anomalous),
+        key=lambda l: l.lap_time_s,
+    )
+    pct = (np.arange(1000) + 0.5) / 1000
+    speed = np.full(1000, 50.0)
+    region = np.abs(pct - 0.5) < 0.08
+    x = (pct[region] - 0.5) / 0.08
+    speed[region] = 50.0 - 30.0 * 0.5 * (1.0 + np.cos(np.pi * x))
+    ref.grid["speed"] = speed.astype(np.float32)
+
+    payload = balance.compute(session)
+    if "insufficient_data" not in payload:
+        bc = payload["by_corner"]
+        assert bc["available"] is True
+        assert len(bc["corners"]) >= 1
+        for c in bc["corners"]:
+            assert c["lean"] in ("understeer", "oversteer", "even", "no divergences here")
+            assert c["start_pct"] <= c["apex_pct"] <= c["end_pct"]
     assert json.loads(json.dumps(payload))

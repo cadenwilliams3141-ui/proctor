@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from proctor_parser.session import ParsedSession
+from proctor_parser.analysis.corners import detect_corners
+from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "balance"
 
@@ -44,6 +45,7 @@ _DIVERGENCE_PCTILE = 90
 
 def compute(session: ParsedSession) -> dict:
     steer_parts, speed_parts, yaw_parts, brake_parts, thr_parts = [], [], [], [], []
+    dist_parts = []
     for lap in session.laps:
         if not lap.is_valid or "speed" not in lap.raw or len(lap.raw["speed"]) == 0:
             continue
@@ -57,6 +59,7 @@ def compute(session: ParsedSession) -> dict:
         yaw_parts.append(lap.raw["yaw_rate"].astype(np.float64)[keep])
         brake_parts.append(lap.raw["brake_raw"].astype(np.float64)[keep])
         thr_parts.append(lap.raw["throttle"].astype(np.float64)[keep])
+        dist_parts.append(lap.raw["dist"].astype(np.float64)[keep])
 
     if not steer_parts:
         return {
@@ -72,6 +75,7 @@ def compute(session: ParsedSession) -> dict:
     yaw = np.concatenate(yaw_parts)
     brake = np.concatenate(brake_parts)
     throttle = np.concatenate(thr_parts)
+    dist = np.concatenate(dist_parts)
 
     x = steer * speed
     sxx = float(np.sum(x * x))
@@ -131,10 +135,106 @@ def compute(session: ParsedSession) -> dict:
             "on_throttle": _state_block(diverge & on_throttle, understeer, oversteer),
             "coasting": _state_block(diverge & coasting, understeer, oversteer),
         },
+        "by_corner": _by_corner(session, dist, diverge, understeer, oversteer),
+        "brake_bias": _brake_bias(session),
         "caveat": _CAVEAT,
     }
     payload["finding"] = _finding(payload["by_input_state"])
     return payload
+
+
+def _reference_lap(session: ParsedSession) -> ParsedLap | None:
+    """Fastest valid non-anomalous lap, else fastest valid (contract rule 4)."""
+    valid = [l for l in session.laps if l.is_valid and l.lap_time_s is not None]
+    if not valid:
+        return None
+    clean = [l for l in valid if not l.is_anomalous]
+    return min(clean or valid, key=lambda l: l.lap_time_s)
+
+
+def _by_corner(
+    session: ParsedSession,
+    dist: np.ndarray,
+    diverge: np.ndarray,
+    understeer: np.ndarray,
+    oversteer: np.ndarray,
+) -> dict:
+    """Understeer/oversteer lean inside each corner the reference lap carved.
+
+    Ties the session-wide balance read to *where* on track it happened: corner
+    windows come from the reference lap's speed profile, and the already-computed
+    per-tick divergence flags are masked to each window by distance. Descriptive
+    only — the corners are this driver's line, not the track's surveyed geometry.
+    """
+    ref = _reference_lap(session)
+    if ref is None:
+        return {"available": False, "reason": "no reference lap to place corners on"}
+    corners = detect_corners(ref.grid["speed"], ref.grid["grid_pct"])
+    if not corners:
+        return {
+            "available": False,
+            "reason": "no corners detected on the reference lap's speed profile",
+        }
+
+    out: list[dict] = []
+    for c in corners:
+        in_corner = (dist >= c["start_pct"]) & (dist <= c["end_pct"])
+        div_here = diverge & in_corner
+        n = int(np.count_nonzero(div_here))
+        us = round(100.0 * int((div_here & understeer).sum()) / n, 1) if n else 0.0
+        os = round(100.0 * int((div_here & oversteer).sum()) / n, 1) if n else 0.0
+        if n == 0:
+            lean = "no divergences here"
+        elif us > os:
+            lean = "understeer"
+        elif os > us:
+            lean = "oversteer"
+        else:
+            lean = "even"
+        out.append({
+            "id": c["id"],
+            "start_pct": c["start_pct"],
+            "apex_pct": c["apex_pct"],
+            "end_pct": c["end_pct"],
+            "understeer_pct": us,
+            "oversteer_pct": os,
+            "lean": lean,
+            "divergence_ticks": n,
+        })
+    return {"available": True, "reference_lap": int(ref.lap_number), "corners": out}
+
+
+def _brake_bias(session: ParsedSession) -> dict:
+    """Front brake-bias value(s) this session, with a general-mechanism note.
+
+    Descriptive: reports the front-share value and whether the driver moved it,
+    and explains the general relationship to balance without recommending any
+    setting (Proctor observes, it does not prescribe setups).
+    """
+    parts = [
+        lap.raw["brake_bias"]
+        for lap in session.laps
+        if "brake_bias" in lap.raw and len(lap.raw["brake_bias"])
+    ]
+    if not parts:
+        return {
+            "available": False,
+            "reason": "brake-bias channel not carried for this session",
+        }
+    series = np.round(np.concatenate(parts).astype(np.float64), 1)
+    keep = np.concatenate(([True], np.diff(series) != 0))
+    distinct = [float(v) for v in series[keep]]
+    return {
+        "available": True,
+        "front_pct_values": distinct,
+        "changed_during_session": len(distinct) > 1,
+        "note": (
+            "brake bias is the front share of braking force; as a general "
+            "mechanism more front bias leans the braking phase toward understeer "
+            "and less toward oversteer. Compare it against the braking lean above "
+            "— Proctor reports the value, it does not recommend a setting."
+        ),
+    }
 
 
 def _split(understeer: np.ndarray, oversteer: np.ndarray, n_div: int) -> dict:

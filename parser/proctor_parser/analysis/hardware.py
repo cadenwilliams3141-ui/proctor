@@ -25,11 +25,16 @@ _BASIS = "raw sensor channels across all laps in this session"
 _CAVEAT = "single-session observation; hardware trends need history"
 _NOISE_CAVEAT = "sensor-wear early-warning baseline; trend needs multiple sessions"
 
-# dcBrakeBias is a core channel but is NOT carried into ParsedLap.raw (it is
-# absent from RAW_CHANNEL_MAP), exactly like FrameRate. We look for it under
-# either a contract key or its raw channel name so a future contract that
-# carries it "just works"; on the v1 contract neither is present and the
-# brake-bias block honestly reports itself unavailable rather than fabricating.
+# "Worth noticing" thresholds for the areas-of-concern summary. These are watch
+# heuristics, not pass/fail limits: any pedal-noise spike is surfaced (the noise
+# floor should be silent), and FFB clipping is flagged past a small share of
+# moving ticks where lost detail starts to matter at the limit.
+_FFB_CLIP_CONCERN_PCT = 2.0
+
+# dcBrakeBias is carried into ParsedLap.raw as "brake_bias" (RAW_CHANNEL_MAP).
+# We still look for it under either the contract key or its raw channel name so
+# the block degrades honestly on any future/partial contract that drops it,
+# reporting itself unavailable rather than fabricating a value.
 _BIAS_KEYS = ("brake_bias", "dcBrakeBias")
 
 
@@ -58,13 +63,18 @@ def compute(session: ParsedSession) -> dict:
     ffb_stops = _concat(session, "ffb_stops")
     moving = moving_mask(speed)
 
+    brake_vs_raw = _brake_vs_raw(brake, brake_raw, moving)
+    noise = _pedal_noise_floor(throttle, brake_raw)
+    ffb = _ffb(ffb_stops, moving)
+
     return {
         "basis": _BASIS,
-        "brake_vs_raw": _brake_vs_raw(brake, brake_raw, moving),
+        "brake_vs_raw": brake_vs_raw,
         "abs": _abs_block(brake, abs_active, moving),
         "brake_bias": _brake_bias(session),
-        "pedal_noise_floor": _pedal_noise_floor(throttle, brake_raw),
-        "ffb": _ffb(ffb_stops, moving),
+        "pedal_noise_floor": noise,
+        "ffb": ffb,
+        "areas_of_concern": _areas_of_concern(noise, ffb),
         "caveat": _CAVEAT,
     }
 
@@ -175,4 +185,43 @@ def _ffb(ffb_stops: np.ndarray, moving: np.ndarray) -> dict:
     out = {"clipping_pct": clipping_pct}
     if clipping_pct == 0.0:
         out["finding"] = "no FFB clipping detected"
+    return out
+
+
+def _areas_of_concern(noise: dict, ffb: dict) -> dict:
+    """Descriptive brake-pedal / sensor watch items drawn from the blocks above.
+
+    Observations, never a verdict or health score: each entry names what a
+    channel showed and where the watch heuristic sits, and an all-clear session
+    returns an explicit "nothing to flag" finding rather than an empty silence.
+    """
+    concerns: list[dict] = []
+
+    spike_ticks = noise.get("spike_ticks")
+    if isinstance(spike_ticks, int) and spike_ticks > 0:
+        concerns.append({
+            "area": "brake sensor noise",
+            "observation": (
+                f"{spike_ticks} of {noise.get('qualifying_ticks')} full-throttle "
+                f"ticks read a nonzero brake (peak {noise.get('max_spike')}), "
+                "where the pedal should be silent"
+            ),
+            "watch": _NOISE_CAVEAT,
+        })
+
+    clip = ffb.get("clipping_pct")
+    if isinstance(clip, (int, float)) and clip >= _FFB_CLIP_CONCERN_PCT:
+        concerns.append({
+            "area": "force-feedback clipping",
+            "observation": (
+                f"FFB torque clipped against the stops on {clip}% of moving "
+                "ticks — detail is lost wherever it saturates"
+            ),
+            "watch": f"flagged past {_FFB_CLIP_CONCERN_PCT:.0f}% of moving ticks",
+        })
+
+    out: dict = {"concerns": concerns}
+    if not concerns:
+        out["finding"] = "no brake-pedal or sensor concerns detected this session"
+    out["caveat"] = "watch items, not diagnoses; a trend needs multiple sessions"
     return out

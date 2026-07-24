@@ -31,6 +31,7 @@ _CAVEAT = (
     "across sessions"
 )
 _TAIL_FRACTION = 0.25  # temps read from the final quarter of each lap
+_CURVE_POINTS = 100    # distance bins for the across-lap heat-map curve
 
 
 def compute(session: ParsedSession) -> dict:
@@ -41,10 +42,18 @@ def compute(session: ParsedSession) -> dict:
     middles: list[float] = []
     rights: list[float] = []
     spreads: list[float] = []
+    curve_ref: ParsedLap | None = None
     for lap in clean:
         means = _tail_means(lap)
         if means is None:
             continue
+        # Across-lap curve comes from the fastest clean lap that carries temps.
+        if curve_ref is None or (
+            lap.lap_time_s is not None
+            and curve_ref.lap_time_s is not None
+            and lap.lap_time_s < curve_ref.lap_time_s
+        ):
+            curve_ref = lap
         left, middle, right = means
         spread = max(left, middle, right) - min(left, middle, right)
         per_lap[str(lap.lap_number)] = {
@@ -88,6 +97,8 @@ def compute(session: ParsedSession) -> dict:
         "note": _NOTE,
         "caveat": _CAVEAT,
     }
+    if curve_ref is not None:
+        payload["curve"] = _curve(curve_ref)
     # Masking freezes wear, not temperature: keep the temps, flag the wear gap.
     if session.meta.wear_masked:
         payload["wear"] = {
@@ -109,3 +120,27 @@ def _tail_means(lap: ParsedLap) -> tuple[float, float, float] | None:
     middle = float(np.mean(lap.raw["lf_temp_m"][start:]))
     right = float(np.mean(lap.raw["lf_temp_r"][start:]))
     return left, middle, right
+
+
+def _curve(lap: ParsedLap) -> dict:
+    """LF L/M/R edge temps resampled onto a fixed distance grid for a heat map.
+
+    Distance is forced monotonic (cumulative max) to survive tick jitter, then
+    np.interp maps each edge onto _CURVE_POINTS evenly-spaced distance bins so
+    the UI can draw temperature against track position for one reference lap.
+    """
+    grid = (np.arange(_CURVE_POINTS, dtype=np.float64) + 0.5) / _CURVE_POINTS
+    d = np.maximum.accumulate(lap.raw["dist"].astype(np.float64))
+
+    def onto(edge: str) -> list[float]:
+        vals = np.interp(grid, d, lap.raw[f"lf_temp_{edge}"].astype(np.float64))
+        return [round(float(v), 1) for v in vals]
+
+    return {
+        "source_lap": int(lap.lap_number),
+        "corner": "LF",
+        "grid_pct": [round(float(v), 4) for v in grid],
+        "left_c": onto("l"),
+        "middle_c": onto("m"),
+        "right_c": onto("r"),
+    }

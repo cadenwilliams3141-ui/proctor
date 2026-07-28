@@ -32,7 +32,7 @@ export default function SpeedDeltaChart({ speedA, speedB, delta, corners }: {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={320}>
+    <ResponsiveContainer width="100%" height="100%" minHeight={240}>
       <ComposedChart data={rows} syncId="lap-compare">
         <CartesianGrid stroke="#21262d" />
         <XAxis

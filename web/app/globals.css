@@ -53,14 +53,39 @@ h3 { font-size: 14px; margin: 14px 0 6px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
 
-/* Drag-to-resize panels (ResizablePanel). The corner handle is the native CSS
-   resizer; the hint just makes it discoverable. */
+/* Analysis boxes that auto-fit the screen (ResizablePanel). The box height
+   tracks the viewport by default; the native corner handle still allows a
+   remembered manual override. */
 .panel--resizable {
+  position: relative;
   resize: both;
   overflow: auto;
-  min-width: 280px;
+  max-width: 100%;
+  min-width: 260px;
 }
 .panel--resizable::-webkit-resizer { border-color: var(--border); }
+
+/* `fill` panels hand their auto-fit height to a single SVG child so the visual
+   grows with the box; the viewBox keeps it aspect-correct. */
+.panel--fill { display: flex; flex-direction: column; }
+.panel--fill > svg { flex: 1 1 auto; min-height: 0; width: 100%; height: 100%; }
+.panel--fill > .recharts-responsive-container { flex: 1 1 auto; min-height: 0; }
+
+/* Reset-to-auto-fit control, shown only once a box has a manual size. */
+.rp-reset {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  padding: 0 6px;
+  line-height: 1.6;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.rp-reset:hover { color: var(--accent); border-color: var(--accent); cursor: pointer; }
 
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }

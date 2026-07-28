@@ -159,7 +159,7 @@ export default function LiveTrace({ sessionId }: { sessionId: string; tier: Tier
       {trace && (
         <>
           <div className="grid2">
-            <ResizablePanel id="live-map">
+            <ResizablePanel id="live-map" fill>
               <h3>Track map</h3>
               <TrackMap
                 map={metrics.track_map}
@@ -174,7 +174,7 @@ export default function LiveTrace({ sessionId }: { sessionId: string; tier: Tier
               </p>
             </ResizablePanel>
 
-            <ResizablePanel id="live-traction">
+            <ResizablePanel id="live-traction" fill>
               <h3>Traction — where the car is being pushed</h3>
               <LiveTractionCircle payload={metrics.traction_circle} latG={latG} longG={longG} />
               <p className="caveat">
@@ -282,7 +282,7 @@ function LiveTractionCircle({ payload, latG, longG }: { payload: Loose | undefin
   }
 
   return (
-    <svg viewBox={`0 0 ${W} ${W}`} style={{ width: "100%", height: "auto", maxWidth: 360 }}>
+    <svg viewBox={`0 0 ${W} ${W}`} style={{ width: "100%", height: "100%", display: "block" }} preserveAspectRatio="xMidYMid meet">
       {rings}
       <line x1={C} y1={10} x2={C} y2={W - 10} stroke="#21262d" />
       <line x1={10} y1={C} x2={W - 10} y2={C} stroke="#21262d" />

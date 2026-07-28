@@ -107,7 +107,7 @@ export default function TrackMap({ map, speed, corners, events, carIndex }: {
     ) : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "100%", display: "block" }} preserveAspectRatio="xMidYMid meet">
       {segments}
       {apexMarks}
       {slipMarks}

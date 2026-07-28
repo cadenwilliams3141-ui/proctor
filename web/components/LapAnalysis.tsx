@@ -141,7 +141,7 @@ export default function LapAnalysis({ sessionId, tier }: {
       </div>
 
       <div className="grid2">
-        <ResizablePanel id="laps-map">
+        <ResizablePanel id="laps-map" fill>
           <h3>Track map</h3>
           <TrackMap
             map={metrics.track_map}
@@ -155,7 +155,7 @@ export default function LapAnalysis({ sessionId, tier }: {
             reconstruction
           </p>
         </ResizablePanel>
-        <ResizablePanel id="laps-delta">
+        <ResizablePanel id="laps-delta" fill>
           <h3>Speed & time delta (A − B)</h3>
           {tA && tB && (
             <SpeedDeltaChart

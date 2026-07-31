@@ -1,29 +1,30 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import "./globals.css";
-import TierSelect from "@/components/TierSelect";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
+import { Inter } from "next/font/google";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+import "./globals.css";
+
+/* Inter throughout — headings and body are the same family; hierarchy comes
+   from size and space, never from a heavier weight. next/font inlines and
+   self-hosts it at build time rather than hitting Google at runtime, which is
+   what the design handoff asks for. */
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Proctor",
-  description: "Sim-racing telemetry: observations, not verdicts.",
+  description:
+    "iRacing telemetry analysis. Observations, not verdicts — every comparison is you against you.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body>
-        <header className="site">
-          <Link href="/" className="brand">Proctor</Link>
-          <span className="tagline">observations, not verdicts — you vs. you</span>
-          <span className="spacer" />
-          <TierSelect />
-        </header>
-        <main>{children}</main>
-      </body>
+    <html lang="en" className={inter.variable}>
+      {/* Each app owns all of its own chrome, so the document body is bare. */}
+      <body>{children}</body>
     </html>
   );
 }

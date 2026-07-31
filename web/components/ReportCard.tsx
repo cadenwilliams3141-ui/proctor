@@ -47,8 +47,8 @@ export default function ReportCard({ metrics, tier }: {
 
   // Fuel/pace and driving style are the headline findings — every tier sees
   // them. Rig-health and envelope detail step up from there.
-  const showDetail = atLeast(tier, "intermediate");
-  const showDeep = atLeast(tier, "advanced");
+  const showDetail = atLeast(tier, "deep");
+  const showDeep = atLeast(tier, "everything");
   // Count only cards that would actually have rendered, so the note never
   // claims something is hidden when the module simply produced nothing.
   const detailCards = [rc, rc, hw]; // fatigue curve, frame health, hw snapshot

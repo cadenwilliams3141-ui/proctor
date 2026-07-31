@@ -155,8 +155,8 @@ export default async function HardwarePage({ params }: { params: Promise<{ id: s
   // envelope are intermediate; noise floor and the stretch modules are deep
   // detail. The data-wall panel is never gated — a casual reader is the most
   // likely to expect racecraft tips, so they most need to see the wall.
-  const showDetail = atLeast(tier, "intermediate");
-  const showDeep = atLeast(tier, "advanced");
+  const showDetail = atLeast(tier, "deep");
+  const showDeep = atLeast(tier, "everything");
   // Keep these in step with the gated blocks below — the note reports a count
   // to the reader, so a stale number would be a (small) lie.
   const DETAIL_PANELS = 3; // ABS+bias, force feedback, traction circle

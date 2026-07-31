@@ -176,7 +176,7 @@ export default function LapAnalysis({ sessionId, tier }: {
 
       {/* Map and delta are the core loop at every tier; the input overlay, the
           tire-temp strip and the dense per-corner detail step up from there. */}
-      {atLeast(tier, "intermediate") && (
+      {atLeast(tier, "deep") && (
         <ResizablePanel id="laps-inputs">
           <h3>Input overlay</h3>
           {tA && tB ? (
@@ -187,14 +187,14 @@ export default function LapAnalysis({ sessionId, tier }: {
         </ResizablePanel>
       )}
 
-      {atLeast(tier, "intermediate") && (
+      {atLeast(tier, "deep") && (
         <ResizablePanel id="laps-tiretemp">
           <h3>Tire temp across the lap (left-front)</h3>
           <TireTempHeatmap payload={metrics.tire_temps} />
         </ResizablePanel>
       )}
 
-      {atLeast(tier, "advanced") && corners.length > 0 && lapA != null && (
+      {atLeast(tier, "everything") && corners.length > 0 && lapA != null && (
         <ResizablePanel id="laps-corner-sections">
           <h3>Corner sections — time vs reference lap {refLap} (s)</h3>
           <CornerTable metrics={metrics} lapA={lapA} lapB={lapB} refLap={refLap} />
@@ -204,14 +204,14 @@ export default function LapAnalysis({ sessionId, tier }: {
         </ResizablePanel>
       )}
 
-      {atLeast(tier, "advanced") && (
+      {atLeast(tier, "everything") && (
         <ResizablePanel id="laps-corner-context">
           <h3>Corner context — what the car was doing</h3>
           <CornerContext payload={metrics.corner_context} />
         </ResizablePanel>
       )}
 
-      {atLeast(tier, "advanced") && (
+      {atLeast(tier, "everything") && (
         <ResizablePanel id="laps-balance">
           <h3>Balance — how the car rotated vs your steering</h3>
           <BalanceExplainer payload={metrics.balance} />
@@ -222,7 +222,7 @@ export default function LapAnalysis({ sessionId, tier }: {
           panels (corner sections, corner context, balance) can be hidden. */}
       {(() => {
         const hidden =
-          (atLeast(tier, "intermediate") ? 0 : 2) + (atLeast(tier, "advanced") ? 0 : 3);
+          (atLeast(tier, "deep") ? 0 : 2) + (atLeast(tier, "everything") ? 0 : 3);
         return hiddenNote(tier, hidden) && <p className="caveat">{hiddenNote(tier, hidden)}</p>;
       })()}
     </>

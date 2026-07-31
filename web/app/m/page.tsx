@@ -12,6 +12,19 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Proctor",
   description: "The after-session read.",
+  /* Added to the home screen, this opens fullscreen with no browser chrome.
+     `black-translucent` lets the app paint under the status bar, which only
+     works because the layout already respects env(safe-area-inset-*) — the
+     tab bar and the corner sheet both sit against the home indicator. */
+  appleWebApp: {
+    capable: true,
+    title: "Proctor",
+    statusBarStyle: "black-translucent",
+  },
+  /* Next emits the standardised `mobile-web-app-capable`. iOS 16.4+ honours the
+     manifest's display:standalone, but older iOS only understands the legacy
+     Apple name — so it is set explicitly rather than left to chance. */
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 export const viewport = {

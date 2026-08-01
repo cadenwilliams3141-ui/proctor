@@ -474,6 +474,21 @@ export function absencesFrom(
     });
   }
 
+  /* tire_temps ran but carries no across-lap curve.
+     The temperature strip reads that curve, so without it the strip is empty —
+     and an empty strip that says nothing is indistinguishable from a car with
+     no tire-temp channel at all. It is not the same thing, so it says so. This
+     is what a session ingested before the module gained its curve looks like. */
+  if (ran(tt) && tt.curve == null) {
+    out.push({
+      key: "tire_temp_curve",
+      title: "Tire temperature across the lap",
+      reason:
+        "This session's tire-temperature block carries per-lap averages but no across-lap curve, so there is nothing to draw against track position. The left-front channel is in the file — re-ingest the session to compute the curve from it.",
+      permanent: false,
+    });
+  }
+
   /* Modules that could not run on THIS session. Not permanent: the channel
      exists, this file just did not carry enough of it. The module's own reason
      is what gets rendered. */

@@ -58,6 +58,102 @@ def test_detect_corners_constant_speed_is_empty():
 
 
 # --------------------------------------------------------------------------- #
+# corner geometry — radius and turn direction of the driven line
+# --------------------------------------------------------------------------- #
+
+def _circuit_gps(pct, arcs, track_m=4000.0, lat0=33.0, lon0=-84.0):
+    """Lat/Lon for a path that is straight except for the given arcs.
+
+    Each arc is (center_pct, half_width_pct, radius_m, +1 left / -1 right).
+    Curvature is integrated to a heading and then to a position, so the arcs
+    come out at exactly the radius asked for — which is what makes the fitted
+    radius checkable against a known answer.
+    """
+    n = len(pct)
+    ds = track_m / n
+    kappa = np.zeros(n)
+    for center, half, radius, sign in arcs:
+        kappa[np.abs(pct - center) < half] = sign / radius
+
+    theta = np.cumsum(kappa * ds)
+    x = np.cumsum(np.cos(theta) * ds)
+    y = np.cumsum(np.sin(theta) * ds)
+    lat = lat0 + y / 111320.0
+    lon = lon0 + x / (111320.0 * np.cos(np.radians(lat0)))
+    return lat, lon
+
+
+def test_corner_geometry_fits_a_known_radius_and_direction():
+    speed, pct = _dip_profile(depth_min=20.0, center=0.5, half=0.08)
+    # The ARC is narrower than the speed dip on purpose: a corner window runs
+    # from the braking point to where speed recovers, so it spills onto the
+    # straights either side. The fit has to stay inside the bend anyway.
+    lat, lon = _circuit_gps(pct, arcs=[(0.5, 0.03, 180.0, +1)])
+
+    corner = detect_corners(speed, pct, lat, lon)[0]
+    assert corner["radius_m"] == pytest.approx(180, rel=0.05)
+    assert corner["dir"] == "left"
+
+
+def test_corner_geometry_reads_a_right_hander_as_right():
+    speed, pct = _dip_profile(depth_min=18.0, center=0.5, half=0.08)
+    lat, lon = _circuit_gps(pct, arcs=[(0.5, 0.03, 95.0, -1)])
+
+    corner = detect_corners(speed, pct, lat, lon)[0]
+    assert corner["radius_m"] == pytest.approx(95, rel=0.05)
+    assert corner["dir"] == "right"
+
+
+def test_corner_geometry_absent_when_no_gps_is_supplied():
+    speed, pct = _dip_profile(depth_min=20.0)
+    corner = detect_corners(speed, pct)[0]
+    # Not null — ABSENT. A caller that did not ask for geometry is not handed a
+    # pair of nulls it has to interpret.
+    assert "radius_m" not in corner
+    assert "dir" not in corner
+
+
+def test_corner_geometry_is_null_when_the_apex_sits_on_a_straight():
+    """A speed dip on straight road is not a corner, and says so."""
+    speed, pct = _dip_profile(depth_min=20.0, center=0.5, half=0.08)
+    lat, lon = _circuit_gps(pct, arcs=[])  # dead straight throughout
+
+    corner = detect_corners(speed, pct, lat, lon)[0]
+    assert corner["radius_m"] is None
+    assert corner["dir"] is None
+
+
+def test_corner_geometry_rejects_an_implausible_radius():
+    """Beyond the plausibility cap the fit reports nothing, not a huge number."""
+    speed, pct = _dip_profile(depth_min=20.0, center=0.5, half=0.08)
+    lat, lon = _circuit_gps(pct, arcs=[(0.5, 0.03, 5000.0, +1)])
+
+    corner = detect_corners(speed, pct, lat, lon)[0]
+    assert corner["radius_m"] is None
+    assert corner["dir"] is None
+
+
+def test_corner_sections_carries_the_geometry():
+    """The payload the UI reads gets radius and direction, not just windows."""
+    session = _synthetic_session()
+    ref = min(
+        (l for l in session.laps if l.is_valid and not l.is_anomalous),
+        key=lambda l: l.lap_time_s,
+    )
+    speed, pct = _dip_profile(depth_min=20.0, center=0.5, half=0.08)
+    lat, lon = _circuit_gps(pct, arcs=[(0.5, 0.03, 140.0, -1)])
+    ref.grid["speed"] = speed
+    ref.grid["lat_gps"] = lat
+    ref.grid["lon_gps"] = lon
+
+    payload = corner_sections.compute(session)
+    corner = payload["corners"][0]
+    assert corner["radius_m"] == pytest.approx(140, rel=0.05)
+    assert corner["dir"] == "right"
+    json.dumps(payload)
+
+
+# --------------------------------------------------------------------------- #
 # delta_time
 # --------------------------------------------------------------------------- #
 

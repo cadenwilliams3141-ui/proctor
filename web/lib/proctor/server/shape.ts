@@ -224,12 +224,18 @@ export function cornersFrom(
         ? { radius_m: Math.round(Number(c.radius_m)), dir: c.dir as "left" | "right" }
         : null;
 
-    // The apex is the slowest point of the corner, which is where the line is
-    // tightest — so it is the right place to measure the radius.
+    /* The apex is the slowest point of the corner, which is where the line is
+       tightest — so it is the right place to measure the radius.
+
+       FLOOR, not round. The parser's grid holds bin CENTRES, grid_pct[i] =
+       (i + 0.5) / 1000, so rounding lands one sample past the apex every time
+       and the fitted radius comes out a couple of metres off what the parser
+       itself reports for the same corner. Flooring inverts both that grid and a
+       plain i/n grid correctly. */
     const geom =
       emitted ??
       (n > 0
-        ? fitCornerGeometry(map.x_m, map.y_m, wrapIdx(Math.round(apex_pct * n), n), spacing)
+        ? fitCornerGeometry(map.x_m, map.y_m, wrapIdx(Math.floor(apex_pct * n), n), spacing)
         : null);
 
     return [

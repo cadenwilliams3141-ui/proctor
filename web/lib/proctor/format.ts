@@ -47,6 +47,16 @@ export function fixed(v: number | null | undefined, dp = 1): string {
   return v.toFixed(dp);
 }
 
+/** "180 m right". Both halves come from the same geometric fit, so if the fit
+ *  did not land, neither half is claimed. */
+export function fmtCornerGeometry(
+  radius_m: number | null | undefined,
+  dir: "left" | "right" | null | undefined,
+): string {
+  if (radius_m == null || dir == null) return "radius not fitted";
+  return `${radius_m} m ${dir}`;
+}
+
 /** "29 Jul" — sessions are read within days of driving, so no year. */
 export function fmtDay(iso: string | null | undefined): string {
   if (!iso) return ABSENT;

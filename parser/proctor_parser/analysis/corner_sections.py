@@ -53,7 +53,15 @@ def compute(session: ParsedSession) -> dict:
 
     ref_pct = ref.grid["grid_pct"].astype(np.float64)
     inv_ref = 1.0 / np.clip(ref.grid["speed"].astype(np.float64), MIN_SPEED_MS, None)
-    corners = detect_corners(ref.grid["speed"], ref.grid["grid_pct"])
+    # GPS goes in so each corner also carries the radius and turn direction of
+    # the line the driver drove. Absent GPS the geometry keys are simply not
+    # emitted, and the corner keeps its speed-derived boundaries.
+    corners = detect_corners(
+        ref.grid["speed"],
+        ref.grid["grid_pct"],
+        ref.grid.get("lat_gps"),
+        ref.grid.get("lon_gps"),
+    )
 
     # Equal-track-length quarters between start and end. The true apex is carried
     # through even though it may not fall on the S2/S3 boundary.
@@ -71,13 +79,19 @@ def compute(session: ParsedSession) -> dict:
                 mask = (ref_pct >= lo) & (ref_pct < hi)
             sections.append({"s": k + 1, "start_pct": round(lo, 4), "end_pct": round(hi, 4)})
             masks.append(mask)
-        corners_payload.append({
+        block = {
             "id": c["id"],
             "start_pct": c["start_pct"],
             "apex_pct": c["apex_pct"],
             "end_pct": c["end_pct"],
             "sections": sections,
-        })
+        }
+        # Present, possibly null, whenever geometry was attempted. Null means
+        # the fit did not land on a corner-shaped answer — never a radius of 0.
+        if "radius_m" in c:
+            block["radius_m"] = c["radius_m"]
+            block["dir"] = c["dir"]
+        corners_payload.append(block)
         section_masks[c["id"]] = masks
 
     per_lap: dict[str, dict] = {}

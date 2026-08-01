@@ -43,6 +43,11 @@ export type Screen =
 export type AnalysisView = "loss" | "ribbon" | "map";
 
 export interface ProctorState {
+  /** Which session the whole surface is reading. "latest" is resolved
+   *  server-side to the newest ingested session — the shell has to open on
+   *  something before the driver has picked anything, and the session they
+   *  just drove is the one they came to look at. */
+  sessionId: string;
   screen: Screen;
   view: AnalysisView;
   lapA: number | null;
@@ -59,6 +64,7 @@ export interface ProctorState {
 }
 
 type Action =
+  | { t: "session"; id: string }
   | { t: "screen"; screen: Screen }
   | { t: "view"; view: AnalysisView }
   | { t: "lapA"; lap: number }
@@ -73,6 +79,20 @@ type Action =
 
 function reducer(s: ProctorState, a: Action): ProctorState {
   switch (a.t) {
+    case "session":
+      // A different session shares nothing with the one before it: lap 4 of
+      // yesterday's race is not lap 4 of this one, and carrying the selection
+      // across would put a stale lap number against a new set of traces.
+      if (a.id === s.sessionId) return { ...s, screen: "analyse" };
+      return {
+        ...s,
+        sessionId: a.id,
+        screen: "analyse",
+        lapA: null,
+        lapB: null,
+        selCorner: null,
+        sheet: null,
+      };
     case "screen":
       return { ...s, screen: a.screen, sheet: null };
     case "view":
@@ -105,6 +125,7 @@ function reducer(s: ProctorState, a: Action): ProctorState {
 }
 
 const INITIAL: ProctorState = {
+  sessionId: "latest",
   screen: "analyse",
   view: "loss",
   lapA: null,
@@ -137,7 +158,7 @@ interface Ctx {
 const ProctorCtx = createContext<Ctx | null>(null);
 
 export function ProctorProvider({
-  sessionId = "fixture",
+  sessionId = "latest",
   initialTier = DEFAULT_TIER,
   initialScreen = "analyse",
   initialView = "loss",
@@ -154,6 +175,7 @@ export function ProctorProvider({
 }) {
   const [state, dispatch] = useReducer(reducer, {
     ...INITIAL,
+    sessionId,
     tier: initialTier,
     screen: initialScreen,
     view: initialView,
@@ -164,8 +186,13 @@ export function ProctorProvider({
 
   useEffect(() => {
     let live = true;
+    /* Drop the previous session's bundle before the next one lands. Holding it
+       would show one session's laps under another session's header for as long
+       as the fetch takes — the loading state has to be empty, not stale. */
+    setBundle(null);
+    setError(null);
     data
-      .loadSession(sessionId)
+      .loadSession(state.sessionId)
       .then((b) => {
         if (!live) return;
         setBundle(b);
@@ -174,7 +201,7 @@ export function ProctorProvider({
     return () => {
       live = false;
     };
-  }, [sessionId]);
+  }, [state.sessionId]);
 
   const cleanLaps = useMemo(
     () => (bundle ? bundle.laps.filter(isUsable).map((l) => l.lap_number) : []),

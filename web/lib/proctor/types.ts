@@ -74,9 +74,15 @@ export interface Corner {
   start_pct: number;
   apex_pct: number;
   end_pct: number;
-  /** Parser has curvature and should emit these; today the UI infers them. */
-  radius_m: number;
-  dir: "left" | "right";
+  /** Fitted server-side to the reference lap's recorded GPS path, or taken
+   *  from the parser once it emits them.
+   *
+   *  NULL when the fit did not land on a corner-shaped answer — an apex sitting
+   *  on a near-straight section returns a radius in the tens of thousands of
+   *  metres, which is not a corner radius and must not be printed as one. There
+   *  is no sentinel for it: a radius of 0 would read as a measurement. */
+  radius_m: number | null;
+  dir: "left" | "right" | null;
 }
 
 /** The four sub-sections a corner's delta is split across, in order. */

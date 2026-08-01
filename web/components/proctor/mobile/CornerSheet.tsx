@@ -12,7 +12,7 @@ import { useEffect, useMemo } from "react";
 import { Info } from "lucide-react";
 
 import { CH, INK, deltaColor, dim, inkA } from "@/lib/proctor/channels";
-import { fixed, fmtDelta, kmh, toG } from "@/lib/proctor/format";
+import { fixed, fmtCornerGeometry, fmtDelta, kmh, toG } from "@/lib/proctor/format";
 import { pathFor, pathLength, project, windowExtent, wrapIndex } from "@/lib/proctor/geometry";
 import { observation } from "@/lib/proctor/ledger";
 import { noteFor } from "@/lib/proctor/provenance";
@@ -153,7 +153,7 @@ export default function CornerSheet() {
         <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-2)" }}>
           <span style={{ font: "500 22px var(--font-heading)" }}>T{c.id}</span>
           <span style={{ fontSize: 12, color: dim(45) }}>
-            {c.radius_m} m {c.dir} · at {(c.apex_pct * 100).toFixed(0)}% of the lap
+            {fmtCornerGeometry(c.radius_m, c.dir)} · at {(c.apex_pct * 100).toFixed(0)}% of the lap
           </span>
           <span style={{ flex: 1 }} />
           <span

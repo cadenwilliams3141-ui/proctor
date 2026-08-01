@@ -12,7 +12,7 @@ import { useProctor } from "@/lib/proctor/store";
 import type { IngestRow, SessionRow } from "@/lib/proctor/types";
 
 export default function SessionsScreen() {
-  const { dispatch } = useProctor();
+  const { dispatch, bundle } = useProctor();
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [ingest, setIngest] = useState<IngestRow[] | null>(null);
 
@@ -20,6 +20,10 @@ export default function SessionsScreen() {
     data.listSessions().then(setSessions).catch(() => setSessions([]));
     data.listIngest().then(setIngest).catch(() => setIngest([]));
   }, []);
+
+  // Which row the analysis surface is currently reading. The shell opens on
+  // "latest", so this is only known once that session has actually loaded.
+  const openId = bundle ? String(bundle.session.id) : null;
 
   return (
     <div className="scrollpane" style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}>
@@ -139,19 +143,20 @@ export default function SessionsScreen() {
             </tr>
           </thead>
           <tbody>
-            {sessions?.map((s, i) => (
+            {sessions?.map((s) => (
               <tr
                 key={String(s.id)}
-                data-clickable={i === 0 ? "true" : undefined}
-                title={
-                  i === 0
-                    ? "Open this session"
-                    : "No traces stored for this session in the current data source."
-                }
-                onClick={() => i === 0 && dispatch({ t: "screen", screen: "analyse" })}
+                data-clickable="true"
+                title="Open this session"
+                onClick={() => dispatch({ t: "session", id: String(s.id) })}
               >
                 <td>
                   <span style={{ font: "500 12.5px var(--font-heading)" }}>{s.track_name}</span>
+                  {openId === String(s.id) && (
+                    <span className="tag" style={{ marginLeft: 7, fontSize: 10, color: CH.a }}>
+                      open
+                    </span>
+                  )}
                   {s.wear_masked && (
                     <span className="tag-warn" style={{ marginLeft: 7 }}>
                       wear masked

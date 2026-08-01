@@ -13,7 +13,7 @@ import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import { CH, deltaColor, deltaSense, dim, inkA } from "@/lib/proctor/channels";
-import { fixed, fmtDelta, fmtLap, kmh, toG } from "@/lib/proctor/format";
+import { fixed, fmtCornerGeometry, fmtDelta, fmtLap, kmh, toG } from "@/lib/proctor/format";
 import { windowExtent, wrapIndex } from "@/lib/proctor/geometry";
 import { noteFor } from "@/lib/proctor/provenance";
 import { observation, ranked } from "@/lib/proctor/ledger";
@@ -330,7 +330,7 @@ function RankedRow({
         T{c.corner.id}
       </span>
       <span style={{ width: 62, fontSize: 10, color: dim(40) }}>
-        {c.corner.radius_m} m {c.corner.dir}
+        {fmtCornerGeometry(c.corner.radius_m, c.corner.dir)}
       </span>
 
       {/* Diverging bar: right for a loss, left for a gain, from a centre line. */}
@@ -403,7 +403,7 @@ function CornerLocator({ selected }: { selected: CornerDelta }) {
       padding="var(--space-3) var(--space-4) var(--space-2)"
       style={{ flex: "none" }}
       title={`T${c.id}`}
-      sub={`${c.radius_m} m ${c.dir} · at ${(c.apex_pct * 100).toFixed(0)}% of the lap`}
+      sub={`${fmtCornerGeometry(c.radius_m, c.dir)} · at ${(c.apex_pct * 100).toFixed(0)}% of the lap`}
       right={
         <span
           className="num"

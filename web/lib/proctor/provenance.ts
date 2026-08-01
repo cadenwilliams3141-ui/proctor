@@ -30,8 +30,8 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
     note: "The lap gap minus the sum of the corner gaps. What is left went to the parts of the lap that are not corners.",
   },
   "corner.radius_m": {
-    provenance: "awaited",
-    note: "Corner radius is inferred here from the reference lap's curvature. The parser has the curvature and should emit radius and turn direction directly.",
+    provenance: "derived",
+    note: "Corner radius and direction are fitted to the recorded GPS path of your reference lap — the radius your line took through the corner, not the track's surveyed radius. If the parser starts emitting them, its values are used instead.",
   },
   "corner.boundaries": {
     provenance: "derived",
@@ -39,7 +39,7 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
   },
   "traction.envelope": {
     provenance: "derived",
-    note: "The boundary is the outer edge of what you demonstrated this session — not a physics limit. It is binned at 10° with a ±10° rolling maximum, so treat it as a boundary estimate rather than an exact edge.",
+    note: "The boundary is the outer edge of what you demonstrated this session — not a physics limit. Each 10° bin takes the 98th percentile of the g there, then a ±10° rolling maximum closes the gaps a thin bin would otherwise cut into it. Treat it as a boundary estimate rather than an exact edge.",
   },
   "traction.lapUtilisation": {
     provenance: "measured",

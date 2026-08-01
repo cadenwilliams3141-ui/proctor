@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+
+import { guarded } from "@/lib/proctor/server/respond";
+import { traces } from "@/lib/proctor/server/queries";
+
+/* Traces by lap number, for callers that load them lazily rather than taking
+ * the whole bundle. Capped at four laps: an A/B comparison plus a lookahead is
+ * what the surface asks for, and an uncapped list is an easy way to ask Neon
+ * for every array in the session by accident. */
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +15,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  if (!/^\d+$/.test(id)) {
+    return NextResponse.json({ error: `not a session id: ${id}` }, { status: 400 });
+  }
+
   const lapsParam = new URL(req.url).searchParams.get("laps") ?? "";
   const lapNumbers = lapsParam
     .split(",")
@@ -16,13 +27,8 @@ export async function GET(
   if (lapNumbers.length === 0 || lapNumbers.length > 4) {
     return NextResponse.json({ error: "pass 1-4 lap numbers: ?laps=3,7" }, { status: 400 });
   }
-  const rows = await sql`
-    SELECT l.lap_number, t.grid_pct, t.speed, t.throttle, t.brake, t.brake_raw,
-           t.steer, t.gear, t.rpm, t.lat_accel, t.long_accel, t.lat_gps,
-           t.lon_gps, t.abs_active
-    FROM lap_traces t
-    JOIN laps l ON l.id = t.lap_id
-    WHERE l.session_id = ${id} AND l.lap_number = ANY(${lapNumbers})
-  `;
-  return NextResponse.json({ traces: rows });
+
+  return guarded(async () =>
+    NextResponse.json({ traces: await traces(id, lapNumbers) }),
+  );
 }

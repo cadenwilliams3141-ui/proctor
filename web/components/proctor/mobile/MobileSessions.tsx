@@ -10,12 +10,16 @@ import { useProctor } from "@/lib/proctor/store";
 import type { SessionRow } from "@/lib/proctor/types";
 
 export default function MobileSessions() {
-  const { dispatch } = useProctor();
+  const { dispatch, bundle } = useProctor();
   const [rows, setRows] = useState<SessionRow[] | null>(null);
 
   useEffect(() => {
     data.listSessions().then(setRows).catch(() => setRows([]));
   }, []);
+
+  // The ring marks the session the app is actually reading, not simply the
+  // newest one — the app opens on the newest, but the driver can pick another.
+  const openId = bundle ? String(bundle.session.id) : null;
 
   return (
     <div>
@@ -32,20 +36,18 @@ export default function MobileSessions() {
             key={String(s.id)}
             type="button"
             className="tap"
-            disabled={i !== 0}
-            title={i === 0 ? "Open this session" : "No traces stored for this session yet."}
-            onClick={() => i === 0 && dispatch({ t: "screen", screen: "analyse" })}
+            title="Open this session"
+            onClick={() => dispatch({ t: "session", id: String(s.id) })}
             style={{
               background: "var(--color-surface)",
               borderRadius: "var(--radius-md)",
               border: 0,
               textAlign: "left",
               boxShadow:
-                i === 0
+                openId === String(s.id)
                   ? "inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent)"
                   : "var(--shadow-sm)",
               padding: "var(--space-4)",
-              opacity: i === 0 ? 1 : 0.62,
               animation: "fadeUp .4s both",
               animationDelay: `${(0.05 + i * 0.06).toFixed(2)}s`,
             }}

@@ -9,3 +9,29 @@ Copy this folder anywhere on the rig and double-click `run.bat`.
 - Keeps a local ledger (`.processed.json`) so restarts don't re-upload;
   the server dedupes by SHA-256 as a backstop.
 - Logs to the console and `uploader.log`.
+
+## Re-ingesting after the analysis changes
+
+`reingest.bat` (or `python reingest.py`) re-sends every `.ibt` in the folder
+with `force=true`, waits for each parse to finish, and prints what happened.
+
+Run it whenever the analysis modules change. A session parsed before a module
+existed carries no results for that module, and the screens report it missing
+until the file goes through again.
+
+    reingest.bat                     every .ibt in the folder
+    python reingest.py --dry-run     list what would be sent, send nothing
+    python reingest.py --newest 5    only the five most recent files
+    python reingest.py --match mugello
+
+It has to run here, on the rig, and that is not an oversight: the ingest
+service never stores the `.ibt` bytes. `ingest_files` keeps a filename, a
+SHA-256 and a status; the bytes arrive in the POST body and are gone when the
+request ends. There is no reprocess-by-id endpoint because there would be
+nothing for it to read. `force=true` only means "do not skip this upload just
+because you have seen these bytes before" — the file still has to be attached.
+
+Each file replaces that session's rows inside one transaction, so a failure
+leaves the existing data alone rather than half-replacing it. Files written in
+the last two minutes are skipped in case iRacing is still writing them
+(`--include-fresh` overrides).

@@ -33,6 +33,52 @@ export function project(
 
 const wrapAt = (i: number, n: number) => ((i % n) + n) % n;
 
+/** Degrees of latitude per metre is ~constant; longitude shrinks by cos(lat). */
+const M_PER_DEG = 111320;
+
+/** GPS to the local metres frame the parser writes.
+ *
+ *  Identical to the projection in track_map.py, corners.py and
+ *  track_width.py — deliberately, because the centreline, the fitted corner
+ *  radii, the used-width band and any lap's own driven line all have to land on
+ *  the same canvas. The origin comes from the track_width payload rather than
+ *  being recomputed, so a lap the band was not built from still lines up. */
+export function gpsToLocal(
+  lat: number[],
+  lon: number[],
+  origin: { lat: number; lon: number },
+): { x: number[]; y: number[] } {
+  const scaleX = M_PER_DEG * Math.cos((origin.lat * Math.PI) / 180);
+  const n = Math.min(lat.length, lon.length);
+  const x = new Array<number>(n);
+  const y = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    x[i] = (lon[i] - origin.lon) * scaleX;
+    y[i] = (lat[i] - origin.lat) * M_PER_DEG;
+  }
+  return { x, y };
+}
+
+/** Fit a projection to several point sets at once.
+ *
+ *  A projection fitted to the centreline alone clips the band that hangs off
+ *  either side of it, which is the one thing the racing-line view exists to
+ *  show. */
+export function projectAll(
+  sets: { x: number[]; y: number[] }[],
+  w: number,
+  h: number,
+  pad: number,
+): Projection {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const s of sets) {
+    xs.push(...s.x);
+    ys.push(...s.y);
+  }
+  return project(xs.length ? xs : [0, 1], ys.length ? ys : [0, 1], w, h, pad);
+}
+
 /** An "M x y L x y ..." path over a sample range, wrapping across the line. */
 export function pathFor(
   p: Projection,

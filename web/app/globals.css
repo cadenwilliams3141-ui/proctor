@@ -299,6 +299,23 @@ button[disabled] {
   cursor: not-allowed;
 }
 
+/* An in-flight spinner. Kept spinning under prefers-reduced-motion, at a much
+   slower rate: this one is not decoration — it is the only thing on screen
+   saying an upload is still running, and a frozen spinner reads as a hang. */
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 2.4s;
+  }
+}
+
 .tag {
   display: inline-flex;
   align-items: center;

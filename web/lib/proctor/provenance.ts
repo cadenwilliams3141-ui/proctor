@@ -67,7 +67,23 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
   },
   "live.sweep": {
     provenance: "derived",
-    note: "A constant-distance sweep, not a real-time replay — the traces are distance-resampled. At 1× the elapsed time matches the lap time, but the car does not slow down where you slowed down.",
+    note: "Position over time, reconstructed from your own speed channel: the grid is evenly spaced in distance, so the time to cross each step is that step divided by the speed you were doing, and the running total is scaled onto the lap time actually recorded. At 1× the marker reaches each point of the circuit at the moment you reached it. It is a replay of where the car was, not a re-simulation — between two stored samples the position is interpolated.",
+  },
+  "grip.mu": {
+    provenance: "measured",
+    note: "Horizontal force over vertical force, both read from the accelerometers at the same instant. This is the grip you USED, not the grip the tires had — a careful lap reads low because you asked for less. One accelerometer means it is a whole-car figure and cannot name a single tire, and the vertical channel carries downforce and bumps as well as weight.",
+  },
+  "input.response": {
+    provenance: "measured",
+    note: "Both sides of each control are recorded: the pedal sensor under your foot and the pressure the car applied, the throttle you asked for and the wheel speeds that resulted, the lock you turned and the lateral force that came back. The gap between them is measured, not inferred.",
+  },
+  "stint.trend": {
+    provenance: "derived",
+    note: "A drift across the laps of one run, fitted over your clean laps in the order you drove them. It names no cause: tires, brakes, fuel load, track surface and simply learning the lap all move these numbers, and one session cannot separate them.",
+  },
+  "track.width": {
+    provenance: "derived",
+    note: "The band between your leftmost and rightmost line across the clean laps of this session, measured perpendicular to your reference lap. It is the road YOU used — the .ibt carries no kerbs, white lines or surveyed track edges, so where the band is narrow you were repeatable, not hemmed in.",
   },
   "racecraft": {
     provenance: "absent",

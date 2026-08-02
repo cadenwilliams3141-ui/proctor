@@ -4,16 +4,32 @@
  * to pick laps with — the comparison is the primary act on this screen, so it
  * gets persistent chrome rather than a dropdown.
  *
- * The honesty rule that shapes this component: unusable laps (out/in, partial,
- * anomalous) stay VISIBLE and stay EXCLUDED. Dimmed, never dropped. A lap that
- * vanishes from the list is a lap the driver cannot reason about. */
+ * ┌ WHY EVERY LAP IS SELECTABLE NOW ────────────────────────────────────────┐
+ * │ Lap A used to be pinned to the reference lap, and only clean laps could │
+ * │ go in lap B. Between them those two rules made most comparisons         │
+ * │ unaskable: lap 7 against lap 12 when neither is the fastest, or the     │
+ * │ flagged lap against the clean one either side of it — which is exactly  │
+ * │ the comparison you want when you are trying to understand what the      │
+ * │ flagged lap did.                                                        │
+ * │                                                                         │
+ * │ So both slots are selectable, and the only thing that disqualifies a    │
+ * │ lap is having no stored trace — with no channels there is nothing to    │
+ * │ compare. Choosing an excluded lap is allowed and SAYS SO: the row keeps │
+ * │ its tag, and the screen carries a banner naming what is unusual about   │
+ * │ it. The honesty rule is that an excluded lap is never silently averaged │
+ * │ in; it was never that you may not look at one deliberately.             │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * Unusable laps stay VISIBLE and stay EXCLUDED from anything automatic —
+ * dimmed, never dropped. A lap that vanishes from the list is a lap the driver
+ * cannot reason about. */
 
 import { useMemo } from "react";
 
-import { dim } from "@/lib/proctor/channels";
-import { fmtDay, fmtLap } from "@/lib/proctor/format";
+import { CH, dim } from "@/lib/proctor/channels";
+import { fmtLap } from "@/lib/proctor/format";
 import { useProctor } from "@/lib/proctor/store";
-import { isUsable } from "@/lib/proctor/types";
+import { isUsable, type Lap } from "@/lib/proctor/types";
 
 export default function LapRail() {
   const { bundle, state, dispatch, referenceLap } = useProctor();
@@ -47,9 +63,7 @@ export default function LapRail() {
           {session.track_name ?? "Unknown track"}
         </div>
         <div style={{ fontSize: 11.5, color: dim(48), marginTop: 3 }}>
-          {[session.car_name, session.session_type, fmtDay(session.recorded_at)]
-            .filter(Boolean)
-            .join(" · ")}
+          {[session.car_name, session.session_type].filter(Boolean).join(" · ")}
         </div>
         <div style={{ display: "flex", gap: 5, marginTop: 9, flexWrap: "wrap" }}>
           <span className="tag tag-neutral" style={{ fontSize: 10, padding: "2px 8px" }}>
@@ -67,6 +81,44 @@ export default function LapRail() {
         </div>
       </div>
 
+      {/* Which slot a click fills. Two buttons rather than a modifier key,
+          because a modifier key is a thing you have to already know. */}
+      <div style={{ padding: "0 var(--space-4) var(--space-3)" }}>
+        <div
+          style={{
+            font: "500 9.5px var(--font-heading)",
+            letterSpacing: ".1em",
+            textTransform: "uppercase",
+            color: dim(38),
+            marginBottom: 5,
+          }}
+        >
+          clicking a lap sets
+        </div>
+        <div className="seg" style={{ width: "100%" }}>
+          {(["A", "B"] as const).map((which) => (
+            <button
+              key={which}
+              type="button"
+              className="seg-opt"
+              data-active={state.pick === which}
+              onClick={() => dispatch({ t: "pick", which })}
+              title={
+                which === "A"
+                  ? "Lap A is the lap everything is measured against."
+                  : "Lap B is the lap being measured."
+              }
+              style={{ flex: 1, fontSize: 11, padding: "4px 8px" }}
+            >
+              <span style={{ color: which === "A" ? CH.a : CH.b, fontWeight: 600 }}>{which}</span>
+              <span style={{ marginLeft: 5, color: dim(50) }}>
+                {which === "A" ? state.lapA ?? "—" : state.lapB ?? "—"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="rule" style={{ "--fade": "40px" } as React.CSSProperties} />
 
       {/* Lap list */}
@@ -79,6 +131,7 @@ export default function LapRail() {
           const hasTrace = bundle.traces[lap.lap_number] != null;
           const isA = lap.lap_number === state.lapA;
           const isB = lap.lap_number === state.lapB;
+          const isReference = lap.lap_number === referenceLap;
           const t = lap.lap_time_s;
 
           // Bar is the gap to the driver's OWN best valid lap, not to a target.
@@ -87,19 +140,13 @@ export default function LapRail() {
               ? `${Math.max(3, ((t - scale.best) / Math.max(scale.worst - scale.best, 1e-6)) * 100).toFixed(1)}%`
               : "0%";
 
-          const why = isA
-            ? `Lap ${lap.lap_number} is your reference — your own fastest clean lap. Everything is measured against it.`
-            : !usable
-            ? lap.is_out_lap
-              ? "Out or in lap — not a representative flying lap."
-              : lap.is_anomalous
-                ? "Flagged as anomalous. Shown, but excluded from comparisons."
-                : "Not a valid lap. Shown, but excluded from comparisons."
-            : !hasTrace
-              ? "No trace stored for this lap, so it cannot be compared."
-              : `Compare lap ${lap.lap_number} against lap ${state.lapA ?? referenceLap}`;
-
-          const selectable = usable && hasTrace && !isA;
+          // The ONLY disqualifier: no channels means nothing to compare.
+          const selectable = hasTrace;
+          const why = !hasTrace
+            ? "No trace was stored for this lap, so there is nothing to compare."
+            : `${isA || isB ? "Already " : ""}Set lap ${lap.lap_number} as ${state.pick}${
+                excludedReason(lap) ? ` — ${excludedReason(lap)}` : ""
+              }${isReference ? " · your fastest clean lap" : ""}`;
 
           return (
             <button
@@ -108,7 +155,14 @@ export default function LapRail() {
               className={selectable ? "lrow" : undefined}
               disabled={!selectable}
               title={why}
-              onClick={() => selectable && dispatch({ t: "lapB", lap: lap.lap_number })}
+              onClick={() =>
+                selectable &&
+                dispatch(
+                  state.pick === "A"
+                    ? { t: "lapA", lap: lap.lap_number }
+                    : { t: "lapB", lap: lap.lap_number },
+                )
+              }
               style={{
                 display: "flex",
                 width: "100%",
@@ -143,7 +197,7 @@ export default function LapRail() {
                   width: 17,
                   textAlign: "right",
                   font: "500 11px var(--font-heading)",
-                  color: usable ? "var(--color-text)" : dim(28),
+                  color: usable ? "var(--color-text)" : dim(34),
                 }}
               >
                 {lap.lap_number}
@@ -161,9 +215,9 @@ export default function LapRail() {
               <span
                 className="num"
                 style={{
-                  width: 60,
+                  width: 58,
                   fontSize: 11.5,
-                  color: usable ? dim(80) : dim(34),
+                  color: usable ? dim(80) : dim(40),
                 }}
               >
                 {fmtLap(t)}
@@ -191,20 +245,26 @@ export default function LapRail() {
                   }}
                 />
               </span>
+              {/* An excluded lap keeps a mark on it wherever it is shown, so a
+                  comparison against one can never look like a clean one. */}
               <span
-                className="num"
                 style={{
-                  width: 38,
+                  width: 40,
                   textAlign: "right",
                   fontSize: 10.5,
-                  color: usable ? dim(50) : dim(30),
+                  color: usable ? dim(50) : CH.warn,
                 }}
+                className={usable ? "num" : undefined}
               >
-                {usable && scale && t != null
-                  ? t === scale.best
-                    ? "best"
-                    : `+${(t - scale.best).toFixed(2)}`
-                  : "—"}
+                {!hasTrace
+                  ? "—"
+                  : !usable
+                    ? shortTag(lap)
+                    : scale && t != null
+                      ? t === scale.best
+                        ? "best"
+                        : `+${(t - scale.best).toFixed(2)}`
+                      : "—"}
               </span>
             </button>
           );
@@ -220,11 +280,32 @@ export default function LapRail() {
           boxShadow: `inset 0 1px 0 ${dim(8)}`,
         }}
       >
-        Click a lap to set B. Bars are the gap to your own best valid lap; out/in,
-        partial and anomalous laps are dimmed, not hidden.
+        Any lap with a stored trace can go in either slot — including out, in and
+        flagged laps, which stay marked wherever they appear. Bars are the gap to
+        your own best valid lap.
       </div>
     </aside>
   );
+}
+
+/** Why a lap is excluded from anything automatic, in a few words. */
+export function excludedReason(lap: Lap): string | null {
+  if (isUsable(lap)) return null;
+  if (lap.lap_time_s == null) return "no complete lap time was recorded for it";
+  if (lap.is_out_lap) return "an out or in lap, so not a representative flying lap";
+  if (lap.is_anomalous) {
+    return lap.incident_delta > 0
+      ? `flagged: ${lap.incident_delta} incident${lap.incident_delta === 1 ? "" : "s"} were logged on it`
+      : "flagged: its speed profile is unlike your other laps this session";
+  }
+  return "not a valid lap";
+}
+
+function shortTag(lap: Lap): string {
+  if (lap.lap_time_s == null) return "part";
+  if (lap.is_out_lap) return "out";
+  if (lap.is_anomalous) return "flag";
+  return "excl";
 }
 
 const RAIL: React.CSSProperties = {

@@ -495,78 +495,180 @@ function TireStrip() {
   );
 }
 
+/* Three lanes, each with its own band and its own row for a label.
+ *
+ * The labels used to sit at the vertical MIDDLE of the lane they name — which
+ * is exactly where that lane's trace runs, so a full-throttle stretch drew
+ * straight through the word "throttle". They are on the lane's baseline now,
+ * in a gutter the traces never enter, and each lane has a band so a trace
+ * cannot stray into its neighbour's row either.
+ *
+ * The brake lane draws TWO things: the pedal sensor under your foot, and the
+ * pressure the car actually applied. Where they part company is the ABS taking
+ * pressure back out, which is otherwise invisible on this screen. */
+const LANE_H = 42;
+const LANE_GAP = 8;
+const GUTTER = 58;
+const PLOT_R = 1176;
+const IN_VB_W = 1180;
+const IN_VB_H = 3 * LANE_H + 2 * LANE_GAP + 12;
+
+interface InputSeries {
+  points: string;
+  color: string;
+  width: number;
+  opacity: number;
+  /** Set only on the brake pedal trace, so it reads as the request rather than
+   *  as a second measurement of what the car did. */
+  dash?: string;
+}
+
 function InputsPanel({ ci }: { ci: number }) {
   const { traceA, traceB } = useProctor();
 
   const lanes = useMemo(() => {
     if (!traceA || !traceB) return null;
     const n = traceA.speed.length;
-    const X = (i: number) => 46 + (i / (n - 1)) * (1176 - 46);
-    const maxSteer = Math.max(...traceA.steer.map(Math.abs), 1e-6);
-    return [
-      {
-        label: "throttle",
-        baseY: 32,
-        a: polyline(traceA.throttle, X, (v) => 32 - v * 24),
-        b: polyline(traceB.throttle, X, (v) => 32 - v * 24),
-        labelY: 14,
-      },
-      {
-        label: "brake",
-        baseY: 62,
-        a: polyline(traceA.brake, X, (v) => 62 - v * 24),
-        b: polyline(traceB.brake, X, (v) => 62 - v * 24),
-        labelY: 44,
-      },
-      {
-        label: "steer",
-        baseY: 80,
-        a: polyline(traceA.steer, X, (v) => 80 - (v / maxSteer) * 12),
-        b: polyline(traceB.steer, X, (v) => 80 - (v / maxSteer) * 12),
-        labelY: 74,
-      },
-    ].map((l) => ({ ...l, X }));
+    const X = (i: number) => GUTTER + (i / (n - 1)) * (PLOT_R - GUTTER);
+    const maxSteer = Math.max(...traceA.steer.map(Math.abs), ...traceB.steer.map(Math.abs), 1e-6);
+
+    const top = (row: number) => 8 + row * (LANE_H + LANE_GAP);
+    // Pedals fill downward from the top of their lane; steering is centred on
+    // its own zero line, because zero lock is the middle of that channel.
+    const pedalY = (row: number) => (v: number) => top(row) + LANE_H - v * (LANE_H - 4);
+    const steerY = (row: number) => (v: number) =>
+      top(row) + LANE_H / 2 - (v / maxSteer) * (LANE_H / 2 - 3);
+
+    return {
+      X,
+      maxSteer,
+      rows: ([
+        {
+          label: "throttle",
+          unit: "0–100%",
+          top: top(0),
+          baseline: top(0) + LANE_H,
+          series: [
+            { points: polyline(traceA.throttle, X, pedalY(0)), color: CH.a, width: 1.4, opacity: 1 },
+            { points: polyline(traceB.throttle, X, pedalY(0)), color: CH.b, width: 1.4, opacity: 0.8 },
+          ],
+        },
+        {
+          label: "brake",
+          unit: "pedal vs applied",
+          top: top(1),
+          baseline: top(1) + LANE_H,
+          series: [
+            /* brake_raw is the sensor under the foot; brake is what the car
+               used. Drawn on one lane so the gap between them reads as the gap
+               it is, rather than as two unrelated shapes. */
+            {
+              points: polyline(traceA.brake_raw, X, pedalY(1)),
+              color: CH.loss,
+              width: 1.1,
+              opacity: 0.55,
+              dash: "3 3",
+            },
+            { points: polyline(traceA.brake, X, pedalY(1)), color: CH.a, width: 1.4, opacity: 1 },
+            { points: polyline(traceB.brake, X, pedalY(1)), color: CH.b, width: 1.4, opacity: 0.8 },
+          ],
+        },
+        {
+          label: "steer",
+          unit: `±${((maxSteer * 180) / Math.PI).toFixed(0)}°`,
+          top: top(2),
+          baseline: top(2) + LANE_H / 2,
+          centred: true,
+          series: [
+            { points: polyline(traceA.steer, X, steerY(2)), color: CH.a, width: 1.4, opacity: 1 },
+            { points: polyline(traceB.steer, X, steerY(2)), color: CH.b, width: 1.4, opacity: 0.8 },
+          ],
+        },
+      ] as {
+        label: string;
+        unit: string;
+        top: number;
+        baseline: number;
+        centred?: boolean;
+        series: InputSeries[];
+      }[]),
+    };
   }, [traceA, traceB]);
 
   if (!lanes || !traceA) return null;
-  const X = lanes[0].X;
 
   return (
-    <Panel title="Inputs" sub="lap A solid, lap B behind it" padding="var(--space-3)">
+    <Panel
+      title="Inputs"
+      sub="lap A solid, lap B behind it · the dashed line is your brake pedal, the solid one the pressure the car used"
+      padding="var(--space-3)"
+    >
       <svg
-        viewBox="0 0 1180 96"
+        viewBox={`0 0 ${IN_VB_W} ${IN_VB_H}`}
         preserveAspectRatio="none"
-        style={{ width: "100%", height: 96, display: "block" }}
+        style={{ width: "100%", height: IN_VB_H, display: "block" }}
         aria-hidden
       >
         <defs>
           <clipPath id="in-wipe">
             <rect
-              x="0"
+              x={GUTTER}
               y="0"
-              width="1180"
-              height="96"
+              width={PLOT_R - GUTTER}
+              height={IN_VB_H}
               style={{
-                transformOrigin: "0 0",
+                transformOrigin: `${GUTTER}px 0`,
                 animation: "wipeX 1.5s cubic-bezier(.3,.7,.2,1) both",
                 animationDelay: ".3s",
               }}
             />
           </clipPath>
         </defs>
-        {lanes.map((l) => (
+
+        {lanes.rows.map((l) => (
           <g key={l.label}>
-            <text x={0} y={l.labelY} fill={inkA(0.4)} fontSize={9} fontWeight={500}>
+            {/* The lane's own band, so a trace can never be read against the
+                wrong label. */}
+            <rect x={GUTTER} y={l.top} width={PLOT_R - GUTTER} height={LANE_H} fill={inkA(0.022)} />
+            <text x={0} y={l.top + 11} fill={inkA(0.46)} fontSize={10} fontWeight={500}>
               {l.label}
             </text>
-            <line x1={46} y1={l.baseY} x2={1176} y2={l.baseY} stroke={inkA(0.07)} />
+            <text x={0} y={l.top + 23} fill={inkA(0.26)} fontSize={9}>
+              {l.unit}
+            </text>
+            <line
+              x1={GUTTER}
+              y1={l.baseline}
+              x2={PLOT_R}
+              y2={l.baseline}
+              stroke={inkA(l.centred ? 0.12 : 0.09)}
+              strokeDasharray={l.centred ? "2 3" : undefined}
+            />
             <g clipPath="url(#in-wipe)">
-              <polyline points={l.a} fill="none" stroke={CH.a} strokeWidth={1.4} />
-              <polyline points={l.b} fill="none" stroke={CH.b} strokeWidth={1.4} opacity={0.8} />
+              {l.series.map((s, i) => (
+                <polyline
+                  key={i}
+                  points={s.points}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth={s.width}
+                  opacity={s.opacity}
+                  strokeDasharray={s.dash}
+                />
+              ))}
             </g>
           </g>
         ))}
-        <line x1={X(ci)} y1={0} x2={X(ci)} y2={92} stroke="#e9e9ed" strokeWidth={1} opacity={0.4} />
+
+        <line
+          x1={lanes.X(ci)}
+          y1={0}
+          x2={lanes.X(ci)}
+          y2={IN_VB_H - 4}
+          stroke="#e9e9ed"
+          strokeWidth={1}
+          opacity={0.4}
+        />
       </svg>
     </Panel>
   );

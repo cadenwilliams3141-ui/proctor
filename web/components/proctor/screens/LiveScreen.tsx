@@ -1,40 +1,50 @@
 "use client";
 
-/* Live trace — a constant-distance sweep of the reference lap.
+/* Live trace — the lap played back in the time it actually took.
  *
- * ┌ THE LABEL HAS TO STAY TRUE ─────────────────────────────────────────────┐
- * │ This is NOT a real-time replay, even at 1x. The traces are distance-    │
- * │ resampled, so wall-clock elapsed time matches the lap time but the car  │
- * │ does not decelerate where the driver decelerated. The UI says exactly   │
- * │ that, in those words.                                                   │
+ * ┌ WHAT CHANGED, AND WHY IT MATTERS ───────────────────────────────────────┐
+ * │ This screen used to advance one distance sample per tick of the clock.  │
+ * │ The traces are resampled to even spacing in DISTANCE, so that put the   │
+ * │ car round the lap at a single constant speed — inching down the         │
+ * │ straights and rocketing through the slow corners. The timing was not    │
+ * │ slightly off; it was inverted.                                          │
  * │                                                                         │
- * │ To make it a genuine replay the parser must keep the original time base │
- * │ alongside the distance grid, and playback must advance by TIME index    │
- * │ rather than distance index. Until then: do not relabel this a replay.   │
+ * │ It now advances WALL-CLOCK TIME and asks lib/proctor/timebase where the │
+ * │ car was at that moment. The time base is the integral of the recorded   │
+ * │ speed along the distance grid, normalised onto the recorded lap time,   │
+ * │ so at 1x the marker reaches every point of the circuit at the moment    │
+ * │ the driver reached it and the lap takes exactly as long as it did.      │
+ * │                                                                         │
+ * │ It is a replay of WHERE THE CAR WAS, not a re-simulation. Between two   │
+ * │ stored samples the position is interpolated, and the screen says so.    │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
- * `liveIdx` is deliberately local state rather than store state. At 60fps a
- * store update would re-render the whole app and restart every CSS entrance
+ * `t` is deliberately local state rather than store state. At 60fps a store
+ * update would re-render the whole app and restart every CSS entrance
  * animation on screen; here it re-renders one screen. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, RotateCcw } from "lucide-react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtLap, kmh, pct, toG } from "@/lib/proctor/format";
-import { wrapIndex } from "@/lib/proctor/geometry";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
+import { buildTimebase, sampleAt, stepAt } from "@/lib/proctor/timebase";
 
 const SPEEDS = [1, 2, 4, 8] as const;
 const STORAGE_KEY = "proctor-speed-mul";
+/** Trail length in SECONDS, not samples. A fixed sample count draws a long tail
+ *  on a straight and a stub through a hairpin, because the samples are evenly
+ *  spaced in distance — the same mistake in miniature that the sweep had. */
+const TRAIL_S = 1.6;
 
 export default function LiveScreen() {
   const { bundle, state, dispatch, traceA } = useProctor();
-  const [idx, setIdx] = useState(0);
+  const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
   const last = useRef<number | null>(null);
@@ -49,18 +59,21 @@ export default function LiveScreen() {
     }
   }, [dispatch]);
 
-  const n = traceA?.speed.length ?? 0;
-  const lapTime = traceA?.lap_time_s ?? 0;
+  const tb = useMemo(() => (traceA ? buildTimebase(traceA) : null), [traceA]);
+  const lapTime = tb?.lapTime ?? 0;
+
+  // A different lap starts at its own beginning rather than at the elapsed time
+  // of the lap before it, which would land somewhere arbitrary.
+  useEffect(() => {
+    setT(0);
+  }, [traceA?.lap_number]);
 
   useEffect(() => {
-    if (!playing || n === 0) return;
+    if (!playing || lapTime <= 0) return;
     const tick = (now: number) => {
       if (last.current != null) {
-        const dt = (now - last.current) / 1000;
-        // sweepSeconds is the lap's OWN time divided by the multiplier, so 1x
-        // takes as long as the lap did rather than some fixed duration.
-        const sweep = lapTime / state.speedMul;
-        setIdx((v) => (v + (dt * n) / sweep) % n);
+        const dt = ((now - last.current) / 1000) * state.speedMul;
+        setT((v) => (v + dt) % lapTime);
       }
       last.current = now;
       raf.current = requestAnimationFrame(tick);
@@ -71,24 +84,31 @@ export default function LiveScreen() {
       raf.current = null;
       last.current = null;
     };
-  }, [playing, n, lapTime, state.speedMul]);
+  }, [playing, lapTime, state.speedMul]);
 
   const onScrub = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const r = scrub.current?.getBoundingClientRect();
-      if (!r || n === 0) return;
+      if (!r || lapTime <= 0) return;
       setPlaying(false);
-      setIdx(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (n - 1));
+      setT(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * lapTime);
     },
-    [n],
+    [lapTime],
   );
 
-  if (!bundle || !traceA) {
+  if (!bundle || !traceA || !tb) {
     return <div style={{ padding: "var(--space-8) var(--space-6)", color: dim(45) }}>Reading…</div>;
   }
 
-  const i = wrapIndex(Math.round(idx), n);
-  const percent = ((i / (n - 1)) * 100).toFixed(1);
+  const n = traceA.speed.length;
+  const idx = tb.indexAt(t);
+  // The scrub bar is a TIME bar. Filling it by distance would put the handle
+  // three-quarters along while only half the lap had elapsed.
+  const timePct = lapTime > 0 ? (t / lapTime) * 100 : 0;
+  const distPct = n > 1 ? (idx / (n - 1)) * 100 : 0;
+  // How many samples the trail covers depends on how fast the car is going
+  // right here, which is the whole point of measuring it in seconds.
+  const trailSamples = Math.max(4, Math.round(idx - tb.indexAt(Math.max(0, t - TRAIL_S))));
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -97,7 +117,7 @@ export default function LiveScreen() {
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "var(--space-4)",
+          gap: "var(--space-3)",
           padding: "var(--space-4) var(--space-6) var(--space-3)",
           flex: "none",
         }}
@@ -111,9 +131,30 @@ export default function LiveScreen() {
           {playing ? <Pause size={15} /> : <Play size={15} />}
           {playing ? "Pause" : "Play"}
         </button>
+        <button
+          type="button"
+          className="pk"
+          title="Back to the start of the lap"
+          aria-label="Back to the start of the lap"
+          onClick={() => setT(0)}
+          style={{
+            flex: "none",
+            border: 0,
+            background: "transparent",
+            color: dim(45),
+            display: "grid",
+            placeItems: "center",
+            width: 30,
+            height: 30,
+            borderRadius: "var(--radius-sm)",
+            cursor: "pointer",
+          }}
+        >
+          <RotateCcw size={14} />
+        </button>
 
-        <span style={{ fontSize: 12.5, color: dim(60), flex: "none" }}>
-          lap {traceA.lap_number}
+        <span className="num" style={{ fontSize: 12.5, color: dim(60), flex: "none", width: 108 }}>
+          {fmtLap(t)} <span style={{ color: dim(35) }}>/ {fmtLap(lapTime)}</span>
         </span>
 
         <div
@@ -126,15 +167,32 @@ export default function LiveScreen() {
               style={{
                 position: "absolute",
                 inset: "0 auto 0 0",
-                width: `${percent}%`,
+                width: `${timePct}%`,
                 borderRadius: 2,
                 background: "var(--ch-a)",
+              }}
+            />
+            {/* Where the car is round the LAP, against where it is in TIME. The
+                two only line up on a circuit driven at a constant speed, and
+                the gap between them is exactly what this screen was getting
+                wrong before. */}
+            <div
+              title="how far round the lap the car is"
+              style={{
+                position: "absolute",
+                left: `${distPct}%`,
+                top: -3,
+                width: 2,
+                height: 10,
+                marginLeft: -1,
+                background: CH.b,
+                opacity: 0.75,
               }}
             />
             <div
               style={{
                 position: "absolute",
-                left: `${percent}%`,
+                left: `${timePct}%`,
                 top: -4,
                 width: 12,
                 height: 12,
@@ -147,8 +205,8 @@ export default function LiveScreen() {
           </div>
         </div>
 
-        <span className="num" style={{ fontSize: 11.5, color: dim(45), width: 46, flex: "none" }}>
-          {percent}%
+        <span className="num" style={{ fontSize: 11, color: dim(42), width: 96, flex: "none" }}>
+          {distPct.toFixed(1)}% <span style={{ color: dim(30) }}>of the lap</span>
         </span>
 
         <div className="seg" style={{ flex: "none" }}>
@@ -169,10 +227,10 @@ export default function LiveScreen() {
           ))}
         </div>
 
-        <span style={{ fontSize: 10.5, color: dim(40), flex: "none", width: 190 }}>
+        <span style={{ fontSize: 10.5, color: dim(40), flex: "none", width: 168, lineHeight: 1.35 }}>
           {state.speedMul === 1
-            ? `1× takes as long as the lap did — ${fmtLap(lapTime)}`
-            : `${(lapTime / state.speedMul).toFixed(0)} s for the full lap`}
+            ? `real time — ${fmtLap(lapTime)}, the lap's own time`
+            : `${state.speedMul}× real time · ${(lapTime / state.speedMul).toFixed(1)} s a lap`}
         </span>
       </div>
 
@@ -188,7 +246,7 @@ export default function LiveScreen() {
       >
         <Panel
           title="Driven line"
-          sub={`brightness = speed · trail is the last ${TRAIL} samples`}
+          sub="brightness = speed · the trail is the last 1.6 seconds"
           padding="var(--space-3)"
           style={{ minHeight: 0 }}
           foot={<Caveat>{noteFor("live.sweep")}</Caveat>}
@@ -202,24 +260,30 @@ export default function LiveScreen() {
               speed={traceA.speed}
               apexes={bundle.corners}
               events={bundle.events.filter((e) => e.lap_number === traceA.lap_number)}
-              car={i}
-              trail={TRAIL}
+              car={idx}
+              trail={trailSamples}
             />
           </div>
         </Panel>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", minHeight: 0 }}>
-          <GGPanel i={i} />
-          <Readouts i={i} />
+          <GGPanel idx={idx} tb={tb} t={t} />
+          <Readouts idx={idx} />
         </div>
       </div>
     </div>
   );
 }
 
-const TRAIL = 90;
-
-function GGPanel({ i }: { i: number }) {
+function GGPanel({
+  idx,
+  tb,
+  t,
+}: {
+  idx: number;
+  tb: ReturnType<typeof buildTimebase>;
+  t: number;
+}) {
   const { bundle, traceA } = useProctor();
 
   const geom = useMemo(() => {
@@ -229,7 +293,10 @@ function GGPanel({ i }: { i: number }) {
     const X = (lat: number) => 150 + lat * s;
     const Y = (lon: number) => 150 - lon * s;
     const rings: number[] = [];
-    for (let g = 0.5; g <= maxG; g += 0.5) rings.push(g * s);
+    // Same spacing rule as the Rig screen's plot: never more than five rings,
+    // or the labels pile up in the middle of a high-g session.
+    const step = maxG <= 2.5 ? 0.5 : maxG <= 5 ? 1 : Math.ceil(maxG / 5);
+    for (let g = step; g <= maxG; g += step) rings.push(g * s);
     const poly = bundle.traction.envelope
       .map((e) => {
         const r = (e.angle_deg * Math.PI) / 180;
@@ -241,16 +308,23 @@ function GGPanel({ i }: { i: number }) {
 
   if (!bundle || !traceA || !geom) return null;
 
-  const n = traceA.speed.length;
+  /* The trail behind the dot is the last second of driving, sampled in TIME.
+     Sampled by index it would sweep the g-g plot at a different rate depending
+     on where the car was — fast where the samples are close in time, slow where
+     they are far apart — which is the same distortion the map had. */
+  const STEPS = 40;
+  const WINDOW_S = 1.0;
   const trail: string[] = [];
-  for (let k = 70; k >= 0; k--) {
-    const j = wrapIndex(i - k, n);
+  for (let k = STEPS; k >= 0; k--) {
+    const at = tb.indexAt(Math.max(0, t - (WINDOW_S * k) / STEPS));
     trail.push(
-      `${geom.X(traceA.lat_accel[j] / 9.81).toFixed(1)},${geom.Y(traceA.long_accel[j] / 9.81).toFixed(1)}`,
+      `${geom.X(sampleAt(traceA.lat_accel, at) / 9.81).toFixed(1)},${geom
+        .Y(sampleAt(traceA.long_accel, at) / 9.81)
+        .toFixed(1)}`,
     );
   }
-  const cx = geom.X(traceA.lat_accel[i] / 9.81);
-  const cy = geom.Y(traceA.long_accel[i] / 9.81);
+  const cx = geom.X(sampleAt(traceA.lat_accel, idx) / 9.81);
+  const cy = geom.Y(sampleAt(traceA.long_accel, idx) / 9.81);
 
   return (
     <Panel
@@ -286,21 +360,25 @@ function GGPanel({ i }: { i: number }) {
   );
 }
 
-function Readouts({ i }: { i: number }) {
+function Readouts({ idx }: { idx: number }) {
   const { traceA } = useProctor();
   if (!traceA) return null;
 
   const maxSteer = Math.max(...traceA.steer.map(Math.abs), 1e-6);
-  const steerPct = (traceA.steer[i] / maxSteer) * 50;
+  const steer = sampleAt(traceA.steer, idx);
+  const steerPct = (steer / maxSteer) * 50;
+  const throttle = sampleAt(traceA.throttle, idx);
+  const brake = sampleAt(traceA.brake, idx);
 
   return (
     <Panel fill padding="var(--space-4)" style={{ minHeight: 0 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3) var(--space-4)" }}>
         {[
-          { l: "speed", v: kmh(traceA.speed[i]), u: "km/h" },
-          { l: "gear", v: String(traceA.gear[i]), u: "" },
-          { l: "engine", v: String(traceA.rpm[i]), u: "rpm" },
-          { l: "lateral", v: toG(traceA.lat_accel[i]), u: "g", c: CH.a },
+          { l: "speed", v: kmh(sampleAt(traceA.speed, idx)), u: "km/h" },
+          // Gear and rpm are stepped, not interpolated: there is no gear 3.4.
+          { l: "gear", v: String(stepAt(traceA.gear, idx)), u: "" },
+          { l: "engine", v: String(Math.round(sampleAt(traceA.rpm, idx))), u: "rpm" },
+          { l: "lateral", v: toG(sampleAt(traceA.lat_accel, idx)), u: "g", c: CH.a },
         ].map((r) => (
           <div key={r.l}>
             <div
@@ -325,8 +403,8 @@ function Readouts({ i }: { i: number }) {
 
       <div style={{ marginTop: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
         {[
-          { l: "throttle", v: traceA.throttle[i], c: CH.gain },
-          { l: "brake", v: traceA.brake[i], c: CH.loss },
+          { l: "throttle", v: throttle, c: CH.gain },
+          { l: "brake", v: brake, c: CH.loss },
         ].map((b) => (
           <div key={b.l}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: dim(45) }}>
@@ -342,7 +420,7 @@ function Readouts({ i }: { i: number }) {
         <div style={{ marginTop: 2 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: dim(45) }}>
             <span>steering</span>
-            <span className="num">{fixed((traceA.steer[i] * 180) / Math.PI, 1)}°</span>
+            <span className="num">{fixed((steer * 180) / Math.PI, 1)}°</span>
           </div>
           <div style={{ position: "relative", height: 8, borderRadius: 4, background: dim(8), marginTop: 2 }}>
             <span style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: dim(20) }} />

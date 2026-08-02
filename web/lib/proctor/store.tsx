@@ -36,11 +36,11 @@ import { DEFAULT_TIER, parseTier, TIER_COOKIE, type Tier } from "@/lib/tier";
 export type Screen =
   | "sessions"
   | "report"
-  | "analyse"
+  | "analyze"
   | "live"
   | "rig"
   | "upload";
-export type AnalysisView = "loss" | "ribbon" | "map";
+export type AnalysisView = "loss" | "ribbon" | "map" | "line";
 
 export interface ProctorState {
   /** Which session the whole surface is reading. "latest" is resolved
@@ -59,6 +59,13 @@ export interface ProctorState {
   tier: Tier;
   speedMul: 1 | 2 | 4 | 8;
   splash: boolean;
+  /** Which slot the lap rail assigns to on the next click.
+   *
+   *  Lap A used to be pinned to the reference lap with no way to move it, so
+   *  two thirds of the comparisons a driver might want could not be asked for:
+   *  lap 7 against lap 12 was unreachable when neither was the fastest. Both
+   *  slots are selectable now, and this is which one is being set. */
+  pick: "A" | "B";
   /** phone only */
   sheet: number | null;
 }
@@ -74,6 +81,7 @@ type Action =
   | { t: "tier"; tier: Tier }
   | { t: "speedMul"; mul: 1 | 2 | 4 | 8 }
   | { t: "splash"; on: boolean }
+  | { t: "pick"; which: "A" | "B" }
   | { t: "sheet"; id: number | null }
   | { t: "initLaps"; a: number; b: number };
 
@@ -83,11 +91,11 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       // A different session shares nothing with the one before it: lap 4 of
       // yesterday's race is not lap 4 of this one, and carrying the selection
       // across would put a stale lap number against a new set of traces.
-      if (a.id === s.sessionId) return { ...s, screen: "analyse" };
+      if (a.id === s.sessionId) return { ...s, screen: "analyze" };
       return {
         ...s,
         sessionId: a.id,
-        screen: "analyse",
+        screen: "analyze",
         lapA: null,
         lapB: null,
         selCorner: null,
@@ -99,12 +107,19 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       // Lap A, lap B, cursor and the selected corner all persist across a view
       // change. Switching how you look at the lap must not lose your place.
       return { ...s, view: a.view };
+    /* Picking a lap that is already in the other slot SWAPS them rather than
+       putting the same lap on both sides. A lap compared against itself is a
+       flat delta trace and an empty ledger, which reads as a bug. */
     case "lapA":
-      return { ...s, lapA: a.lap, selCorner: null };
+      if (a.lap === s.lapB) return { ...s, lapA: a.lap, lapB: s.lapA, selCorner: null, sheet: null };
+      return { ...s, lapA: a.lap, selCorner: null, sheet: null };
     case "lapB":
       // A new comparison lap invalidates the corner selection: the corner that
       // cost the most against the old lap is not the one that costs most now.
+      if (a.lap === s.lapA) return { ...s, lapB: a.lap, lapA: s.lapB, selCorner: null, sheet: null };
       return { ...s, lapB: a.lap, selCorner: null, sheet: null };
+    case "pick":
+      return { ...s, pick: a.which };
     case "cursor":
       return { ...s, cursor: a.cursor };
     case "corner":
@@ -126,7 +141,7 @@ function reducer(s: ProctorState, a: Action): ProctorState {
 
 const INITIAL: ProctorState = {
   sessionId: "latest",
-  screen: "analyse",
+  screen: "analyze",
   view: "loss",
   lapA: null,
   lapB: null,
@@ -135,6 +150,7 @@ const INITIAL: ProctorState = {
   tier: DEFAULT_TIER,
   speedMul: 4,
   splash: true,
+  pick: "B",
   sheet: null,
 };
 
@@ -160,7 +176,7 @@ const ProctorCtx = createContext<Ctx | null>(null);
 export function ProctorProvider({
   sessionId = "latest",
   initialTier = DEFAULT_TIER,
-  initialScreen = "analyse",
+  initialScreen = "analyze",
   initialView = "loss",
   skipSplash = false,
   children,

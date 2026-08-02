@@ -77,7 +77,7 @@ export default function MobileApp() {
           className="scrollpane"
           style={{ flex: 1, minHeight: 0, animation: "fadeIn .25s both" }}
         >
-          {state.screen === "analyse" && <MobileLap />}
+          {state.screen === "analyze" && <MobileLap />}
           {state.screen === "sessions" && <MobileSessions />}
           {state.screen === "live" && <MobileLive />}
           {state.screen === "rig" && <MobileRig />}

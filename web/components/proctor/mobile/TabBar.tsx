@@ -10,7 +10,7 @@ import { useProctor, type Screen } from "@/lib/proctor/store";
    rig. The phone carries the four things you actually want after a session. */
 const TABS: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "sessions", label: "Sessions", Icon: LayoutGrid },
-  { id: "analyse", label: "Lap", Icon: ListOrdered },
+  { id: "analyze", label: "Lap", Icon: ListOrdered },
   { id: "live", label: "Live", Icon: CirclePlay },
   { id: "rig", label: "Rig", Icon: Gauge },
 ];

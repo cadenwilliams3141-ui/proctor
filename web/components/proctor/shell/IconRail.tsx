@@ -24,7 +24,7 @@ import { useProctor, type Screen } from "@/lib/proctor/store";
 const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "sessions", label: "Sessions", Icon: LayoutGrid },
   { id: "report", label: "Session report", Icon: NotebookText },
-  { id: "analyse", label: "Analyse", Icon: ChartLine },
+  { id: "analyze", label: "Analyze", Icon: ChartLine },
   { id: "live", label: "Live trace", Icon: CirclePlay },
   { id: "rig", label: "Rig health", Icon: Gauge },
   { id: "upload", label: "Upload", Icon: Upload },

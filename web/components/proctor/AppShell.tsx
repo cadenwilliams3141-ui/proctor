@@ -19,7 +19,7 @@ import IconRail from "@/components/proctor/shell/IconRail";
 import LaunchScreen from "@/components/proctor/shell/LaunchScreen";
 import TopBar from "@/components/proctor/shell/TopBar";
 
-import AnalyseScreen from "@/components/proctor/screens/AnalyseScreen";
+import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
 import LiveScreen from "@/components/proctor/screens/LiveScreen";
 import ReportScreen from "@/components/proctor/screens/ReportScreen";
 import RigScreen from "@/components/proctor/screens/RigScreen";
@@ -30,7 +30,7 @@ export default function AppShell() {
   const { state, error } = useProctor();
 
   // The lap rail is only meaningful where a lap is being chosen.
-  const showLapRail = state.screen === "analyse" || state.screen === "live";
+  const showLapRail = state.screen === "analyze" || state.screen === "live";
 
   return (
     <div
@@ -89,7 +89,7 @@ export default function AppShell() {
               animation: "fadeIn .25s both",
             }}
           >
-            {state.screen === "analyse" && <AnalyseScreen />}
+            {state.screen === "analyze" && <AnalyzeScreen />}
             {state.screen === "live" && <LiveScreen />}
             {state.screen === "sessions" && <SessionsScreen />}
             {state.screen === "report" && <ReportScreen />}

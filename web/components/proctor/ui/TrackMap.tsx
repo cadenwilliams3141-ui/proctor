@@ -34,7 +34,9 @@ export interface TrackMapProps {
   highlight?: { from: number; to: number; color: string } | null;
   apexes?: Corner[];
   events?: TrackEvent[];
-  /** Sample index of the car. */
+  /** Sample index of the car. May be FRACTIONAL: the Live screen drives the
+   *  playhead from wall-clock time, so it lands between stored samples far more
+   *  often than on one, and rounding would make a fast straight visibly step. */
   car?: number | null;
   /** Trailing path behind the car, in samples. */
   trail?: number;
@@ -106,8 +108,23 @@ export default function TrackMap({
 
   const trailPath = useMemo(() => {
     if (car == null || trail <= 0) return null;
-    return pathFor(geo.p, x, y, car - trail, car, 3);
+    // pathFor walks whole samples, so the ends are floored — the fractional
+    // part matters for the marker, not for a trail 90 samples long.
+    return pathFor(geo.p, x, y, Math.floor(car) - Math.round(trail), Math.floor(car), 3);
   }, [car, trail, geo, x, y]);
+
+  /** The car's position, interpolated between the two samples it sits between. */
+  const carAt = useMemo(() => {
+    if (car == null || n === 0) return null;
+    const wrapped = ((car % n) + n) % n;
+    const lo = Math.floor(wrapped);
+    const hi = (lo + 1) % n;
+    const f = wrapped - lo;
+    return {
+      cx: geo.p.X(x[lo] + (x[hi] - x[lo]) * f),
+      cy: geo.p.Y(y[lo] + (y[hi] - y[lo]) * f),
+    };
+  }, [car, n, geo, x, y]);
 
   return (
     <svg
@@ -261,31 +278,26 @@ export default function TrackMap({
         <path d={trailPath} fill="none" stroke={INK.text} strokeWidth={1.6} opacity={0.6} />
       )}
 
-      {car != null && (
+      {carAt && (
         <g>
           <circle
-            cx={geo.p.X(x[wrapIndex(car, n)])}
-            cy={geo.p.Y(y[wrapIndex(car, n)])}
+            cx={carAt.cx}
+            cy={carAt.cy}
             r={14}
             fill={CH.a}
             opacity={0.2}
             style={{ animation: "glowPulse 1.8s ease-in-out infinite" }}
           />
           <circle
-            cx={geo.p.X(x[wrapIndex(car, n)])}
-            cy={geo.p.Y(y[wrapIndex(car, n)])}
+            cx={carAt.cx}
+            cy={carAt.cy}
             r={12}
             fill="none"
             stroke={INK.text}
             strokeWidth={1}
             opacity={0.35}
           />
-          <circle
-            cx={geo.p.X(x[wrapIndex(car, n)])}
-            cy={geo.p.Y(y[wrapIndex(car, n)])}
-            r={4.4}
-            fill={INK.text}
-          />
+          <circle cx={carAt.cx} cy={carAt.cy} r={4.4} fill={INK.text} />
         </g>
       )}
     </svg>

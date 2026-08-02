@@ -2,7 +2,7 @@ import AppShell from "@/components/proctor/AppShell";
 import { ProctorProvider, type AnalysisView, type Screen } from "@/lib/proctor/store";
 import { readTier } from "@/lib/tier-server";
 
-/* The desktop app. One shell, six screens, three analysis views.
+/* The desktop app. One shell, six screens, four analysis views.
  *
  * The tier is read on the server from its cookie so the first paint is already
  * at the right detail level — no flash of the default tier before the client
@@ -15,8 +15,8 @@ import { readTier } from "@/lib/tier-server";
 
 export const dynamic = "force-dynamic";
 
-const SCREENS: Screen[] = ["sessions", "report", "analyse", "live", "rig", "upload"];
-const VIEWS: AnalysisView[] = ["loss", "ribbon", "map"];
+const SCREENS: Screen[] = ["sessions", "report", "analyze", "live", "rig", "upload"];
+const VIEWS: AnalysisView[] = ["loss", "ribbon", "map", "line"];
 
 export default async function Page({
   searchParams,
@@ -29,7 +29,7 @@ export default async function Page({
 
   const screen = SCREENS.includes(one(q.screen) as Screen)
     ? (one(q.screen) as Screen)
-    : "analyse";
+    : "analyze";
   const view = VIEWS.includes(one(q.view) as AnalysisView)
     ? (one(q.view) as AnalysisView)
     : "loss";

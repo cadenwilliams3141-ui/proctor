@@ -30,17 +30,27 @@ import { norm, tireRamp } from "@/lib/proctor/ramps";
 import { useProctor } from "@/lib/proctor/store";
 
 const VB_W = 968;
-const VB_H = 648;
+const VB_H = 666;
 const X0 = 64; // label gutter ends
 const X1 = 960;
 
+/* Two things live above the lanes and they used to live on top of each other:
+   the cursor's percentage chip (pinned to the top edge) and the corner numbers
+   (drawn at the head of each corner band). Both sat inside the same 15px strip,
+   so the readout covered "T4" whenever the pointer was anywhere near Turn 4 —
+   which is most of the lap, because the corners cover about three quarters of
+   it. They now have a row each, and every lane below is 18px further down to
+   make room. */
+const CURSOR_CHIP = { top: 2, height: 15, baseline: 13 };
+const CORNER_ROW = { baseline: 31, bandTop: 36 };
+
 const LANE = {
-  delta: { top: 30, bottom: 150 },
-  speed: { top: 160, bottom: 320 },
-  pedals: { top: 330, bottom: 450, center: 390 },
-  steer: { top: 460, bottom: 540, center: 500 },
-  tire: { top: 550, bottom: 604 },
-  events: { top: 610, bottom: 628 },
+  delta: { top: 48, bottom: 168 },
+  speed: { top: 178, bottom: 338 },
+  pedals: { top: 348, bottom: 468, center: 408 },
+  steer: { top: 478, bottom: 558, center: 518 },
+  tire: { top: 568, bottom: 622 },
+  events: { top: 628, bottom: 646 },
 };
 
 export default function Ribbon() {
@@ -230,11 +240,17 @@ export default function Ribbon() {
               const inside = activeCorner?.corner.id === c.corner.id;
               return (
                 <g key={c.corner.id}>
-                  <rect x={x} y={20} width={w} height={608} fill={inkA(0.032)} />
-                  <rect x={x} y={20} width={w} height={2} fill={inside ? CH.a : inkA(0.18)} />
+                  <rect
+                    x={x}
+                    y={CORNER_ROW.bandTop}
+                    width={w}
+                    height={VB_H - CORNER_ROW.bandTop - 4}
+                    fill={inkA(0.032)}
+                  />
+                  <rect x={x} y={CORNER_ROW.bandTop} width={w} height={2} fill={inside ? CH.a : inkA(0.18)} />
                   <text
                     x={x + w / 2}
-                    y={14}
+                    y={CORNER_ROW.baseline}
                     fill={inside ? CH.a : inkA(0.34)}
                     fontSize={11.5}
                     fontWeight={500}
@@ -253,7 +269,8 @@ export default function Ribbon() {
               { label: "speed", unit: "km/h", ...LANE.speed },
               { label: "pedals", unit: "%", ...LANE.pedals },
               { label: "steer", unit: "°", ...LANE.steer },
-              { label: "LF temp", unit: "°C", ...LANE.tire },
+              // The tire lane labels its three rows individually below; naming
+              // the lane here as well ran "LF temp" straight into the "L".
             ].map((l, i) => (
               <g
                 key={l.label}
@@ -317,11 +334,18 @@ export default function Ribbon() {
               stroke={inkA(0.14)}
               strokeDasharray="2 3"
             />
-            {["L", "M", "R"].map((t, r) => (
-              <text key={t} x={44} y={LANE.tire.top + r * 18 + 12} fill={inkA(0.4)} fontSize={11}>
+            {/* One label per band, in the gutter, so the reader never has to
+                match a letter against a lane name somewhere else. */}
+            {["LF L", "LF M", "LF R"].map((t, r) => (
+              <text key={t} x={0} y={LANE.tire.top + r * 18 + 12} fill={inkA(0.42)} fontSize={11}>
                 {t}
               </text>
             ))}
+            <text x={0} y={LANE.tire.bottom + 12} fill={inkA(0.26)} fontSize={10}>
+              °C
+            </text>
+            <line x1={X0} y1={LANE.tire.top} x2={X1} y2={LANE.tire.top} stroke={inkA(0.055)} />
+            <line x1={X0} y1={LANE.tire.bottom} x2={X1} y2={LANE.tire.bottom} stroke={inkA(0.055)} />
 
             {/* Event pins. */}
             {bundle.events
@@ -337,10 +361,10 @@ export default function Ribbon() {
                 );
               })}
 
-            <text x={X0} y={645} fill={inkA(0.3)} fontSize={11}>
+            <text x={X0} y={VB_H - 3} fill={inkA(0.3)} fontSize={11}>
               0%
             </text>
-            <text x={X1} y={645} fill={inkA(0.3)} fontSize={11} textAnchor="end">
+            <text x={X1} y={VB_H - 3} fill={inkA(0.3)} fontSize={11} textAnchor="end">
               100% of the lap, by distance
             </text>
 
@@ -353,10 +377,32 @@ export default function Ribbon() {
                 } as React.CSSProperties
               }
             >
-              <line x1={cursorX} y1={20} x2={cursorX} y2={630} stroke={INK.text} strokeWidth={1} opacity={0.55} />
-              <circle cx={cursorX} cy={paths.deltaZeroY} r={0} fill="none" />
-              <rect x={cursorX - 26} y={2} width={52} height={15} rx={4} fill={INK.text} />
-              <text x={cursorX} y={13} fill={INK.bg} fontSize={11} fontWeight={600} textAnchor="middle">
+              <line
+                x1={cursorX}
+                y1={CORNER_ROW.bandTop}
+                x2={cursorX}
+                y2={LANE.events.bottom}
+                stroke={INK.text}
+                strokeWidth={1}
+                opacity={0.55}
+              />
+              {/* Clamped to the plot so the chip never hangs off either edge. */}
+              <rect
+                x={Math.min(Math.max(cursorX - 26, 0), VB_W - 52)}
+                y={CURSOR_CHIP.top}
+                width={52}
+                height={CURSOR_CHIP.height}
+                rx={4}
+                fill={INK.text}
+              />
+              <text
+                x={Math.min(Math.max(cursorX, 26), VB_W - 26)}
+                y={CURSOR_CHIP.baseline}
+                fill={INK.bg}
+                fontSize={11}
+                fontWeight={600}
+                textAnchor="middle"
+              >
                 {(state.cursor * 100).toFixed(1)}%
               </text>
             </g>

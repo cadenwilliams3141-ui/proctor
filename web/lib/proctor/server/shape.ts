@@ -20,10 +20,16 @@
 import type {
   Corner,
   EnvelopePoint,
+  EventPattern,
+  GripData,
+  HardwareData,
+  InputResponseData,
   MetricPayloads,
   ModuleAbsence,
+  StintData,
   TireBands,
   TrackEvent,
+  TrackWidthData,
   TractionData,
 } from "@/lib/proctor/types";
 
@@ -374,7 +380,9 @@ export function tireFrom(metrics: MetricPayloads, gridSize: number): TireBands {
   return { left_c: at("left_c"), middle_c: at("middle_c"), right_c: at("right_c") };
 }
 
-/** Lockups and wheelspin, positioned on the lap for the track map. */
+/** Lockups and wheelspin, positioned on the lap, with the inputs that were on
+ *  the car when each one began. The context block travels with the event so the
+ *  screen can say what was happening rather than only where. */
 export function eventsFrom(metrics: MetricPayloads): TrackEvent[] {
   const lw = block(metrics, "lockup_wheelspin");
   if (!ran(lw)) return [];
@@ -384,13 +392,225 @@ export function eventsFrom(metrics: MetricPayloads): TrackEvent[] {
       ? (lw[key] as Payload[]).flatMap((e) => {
           const pct = Number(e?.start_pct);
           const lap = Number(e?.lap);
-          return Number.isFinite(pct) && Number.isFinite(lap)
-            ? [{ kind, pct, lap_number: lap }]
-            : [];
+          if (!Number.isFinite(pct) || !Number.isFinite(lap)) return [];
+          const event: TrackEvent = { kind, pct, lap_number: lap };
+          if (Array.isArray(e.wheels)) event.wheels = e.wheels.map(String);
+          if (Number.isFinite(Number(e.duration_ms))) {
+            event.duration_ms = Number(e.duration_ms);
+          }
+          if (Number.isFinite(Number(e.peak_slip_ratio))) {
+            event.peak_slip_ratio = Number(e.peak_slip_ratio);
+          }
+          // Passed through as the module wrote it: every field is nullable
+          // there precisely so an absent channel stays absent here.
+          if (e.inputs && typeof e.inputs === "object") {
+            event.inputs = e.inputs as TrackEvent["inputs"];
+          }
+          return [event];
         })
       : [];
 
   return [...take("lockups", "lockup"), ...take("wheelspin", "wheelspin")];
+}
+
+/** What the slip events had in common. Reads `common_ground` if the session was
+ *  ingested since the module gained it; older sessions get an honest absence
+ *  rather than a summary computed from a truncated event list. */
+export function eventPatternsFrom(
+  metrics: MetricPayloads,
+): { lockup: EventPattern; wheelspin: EventPattern } {
+  const lw = block(metrics, "lockup_wheelspin");
+  const missing = (kind: string): EventPattern => ({
+    measured: false,
+    reason: !ran(lw)
+      ? "the lockup and wheelspin module did not run on this session"
+      : `this session was ingested before ${kind} events carried the inputs that were on the car — re-ingest it to compute them`,
+  });
+
+  const pick = (key: string, kind: string): EventPattern => {
+    const cg = ran(lw) ? (lw.common_ground as Payload | undefined) : undefined;
+    const p = cg?.[key];
+    if (!p || typeof p !== "object") return missing(kind);
+    return p as EventPattern;
+  };
+
+  return {
+    lockup: pick("lockups", "lockup"),
+    wheelspin: pick("wheelspin", "wheelspin"),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Grip, response, stint, width, rig
+//
+// These four read close to the module payloads on purpose. The Python side
+// already carries the honesty fields — `measured: false` with its own reason,
+// `insufficient_data` with the module's own words — and re-deriving any of that
+// here would put two sources of truth on screen. So each accessor checks the
+// module ran, then hands the block through with the shape the screen expects.
+// A module that did not run returns null, and `absencesFrom` below carries the
+// reason to the panel that would have shown it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function gripFrom(metrics: MetricPayloads): GripData | null {
+  const g = block(metrics, "grip");
+  if (!ran(g) || !g.session || typeof g.session !== "object") return null;
+
+  const bySpeed = (g.by_speed ?? {}) as Payload;
+  const states = (g.by_input_state ?? {}) as Payload;
+  const corners = (g.corners ?? {}) as Payload;
+
+  return {
+    session: g.session as GripData["session"],
+    bands: Array.isArray(bySpeed.bands) ? (bySpeed.bands as GripData["bands"]) : [],
+    downforce:
+      bySpeed.fastest_vs_slowest && typeof bySpeed.fastest_vs_slowest === "object"
+        ? (bySpeed.fastest_vs_slowest as GripData["downforce"])
+        : null,
+    // The module keys states by name and adds a `note`; only the blocks are rows.
+    states: ["braking", "cornering", "on_power", "combined"]
+      .map((k) => states[k])
+      .filter((s): s is GripData["states"][number] => s != null && typeof s === "object"),
+    laps: Array.isArray(g.laps) ? (g.laps as GripData["laps"]) : [],
+    corners: Array.isArray(corners.corners) ? (corners.corners as GripData["corners"]) : [],
+    stint: (g.stint as GripData["stint"]) ?? { measured: false, reason: "not computed" },
+    finding: String(g.finding ?? ""),
+    method: String(g.method ?? ""),
+    caveat: String(g.caveat ?? ""),
+  };
+}
+
+export function inputResponseFrom(metrics: MetricPayloads): InputResponseData | null {
+  const ir = block(metrics, "input_response");
+  if (!ran(ir)) return null;
+
+  const unmeasured = (what: string) =>
+    ({ measured: false as const, reason: `the ${what} block is not in this session's payload` });
+
+  const take = <K extends keyof InputResponseData>(key: K, label: string) => {
+    const v = ir[key as string];
+    return v && typeof v === "object" ? (v as InputResponseData[K]) : (unmeasured(label) as InputResponseData[K]);
+  };
+
+  return {
+    brake: take("brake", "brake"),
+    throttle: take("throttle", "throttle"),
+    steering: take("steering", "steering"),
+    wheel: take("wheel", "force-feedback"),
+    findings: Array.isArray(ir.findings) ? ir.findings.map(String) : [],
+    caveat: String(ir.caveat ?? ""),
+  };
+}
+
+export function stintFrom(metrics: MetricPayloads): StintData | null {
+  const s = block(metrics, "stint");
+  if (!ran(s) || !Array.isArray(s.laps)) return null;
+
+  return {
+    laps: s.laps as StintData["laps"],
+    clean_lap_count: Number(s.clean_lap_count ?? 0),
+    trends: (s.trends as StintData["trends"]) ?? { measured: false, reason: "not computed" },
+    fuel: (s.fuel as StintData["fuel"]) ?? { measured: false, reason: "not computed" },
+    wear: s.wear as StintData["wear"],
+    findings: Array.isArray(s.findings) ? s.findings.map(String) : [],
+    caveat: String(s.caveat ?? ""),
+  };
+}
+
+export function trackWidthFrom(metrics: MetricPayloads): TrackWidthData | null {
+  const tw = block(metrics, "track_width");
+  if (!ran(tw)) return null;
+
+  const arr = (key: string) => nums(tw[key]);
+  const centre_x_m = arr("centre_x_m");
+  // Without the centreline there is nothing to hang the band on, and a band
+  // drawn against a missing line would sit somewhere arbitrary on the map.
+  if (centre_x_m.length === 0) return null;
+
+  return {
+    source_lap: Number(tw.source_lap ?? 0),
+    laps_used: nums(tw.laps_used),
+    origin: (tw.origin as TrackWidthData["origin"]) ?? { lat: 0, lon: 0 },
+    centre_x_m,
+    centre_y_m: arr("centre_y_m"),
+    normal_x: arr("normal_x"),
+    normal_y: arr("normal_y"),
+    left_m: arr("left_m"),
+    right_m: arr("right_m"),
+    median_m: arr("median_m"),
+    p90_m: arr("p90_m"),
+    p10_m: arr("p10_m"),
+    used_width_m: arr("used_width_m"),
+    summary: (tw.summary as TrackWidthData["summary"]) ?? {
+      measured: false,
+      reason: "the module produced no summary",
+    },
+    caveat: String(tw.caveat ?? ""),
+  };
+}
+
+/** The rig block, flattened to what the Rig screen renders.
+ *
+ *  Every field is nullable, and null reaches the screen as an em dash. The
+ *  screen used to carry these numbers as literals in its own source; it does
+ *  not any more, because a hardcoded 93.4 survives a session change. */
+export function hardwareFrom(metrics: MetricPayloads): HardwareData | null {
+  const h = block(metrics, "hardware");
+  if (!ran(h)) return null;
+
+  const num = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const sub = (key: string): Payload => {
+    const v = h[key];
+    return v && typeof v === "object" ? (v as Payload) : {};
+  };
+
+  const bvr = sub("brake_vs_raw");
+  const abs = sub("abs");
+  const noise = sub("pedal_noise_floor");
+  const ffb = sub("ffb");
+  const bias = sub("brake_bias");
+  const aoc = sub("areas_of_concern");
+
+  return {
+    brake_ceiling_pct: num(bvr.brake_ceiling_pct),
+    max_abs_diff: num(bvr.max_abs_diff),
+    stationary_ticks_excluded: num(bvr.stationary_ticks_excluded),
+    abs: {
+      engaged_pct_of_braking: num(abs.engaged_pct_of_braking),
+      activation_events: num(abs.activation_events),
+      braking_ticks: num(abs.braking_ticks),
+      finding: abs.finding == null ? undefined : String(abs.finding),
+      reason: abs.reason == null ? undefined : String(abs.reason),
+    },
+    pedal_noise: {
+      spike_ticks: num(noise.spike_ticks),
+      max_spike: num(noise.max_spike),
+      qualifying_ticks: num(noise.qualifying_ticks),
+      reason: noise.reason == null ? undefined : String(noise.reason),
+    },
+    ffb: {
+      clipping_pct: num(ffb.clipping_pct),
+      finding: ffb.finding == null ? undefined : String(ffb.finding),
+      reason: ffb.reason == null ? undefined : String(ffb.reason),
+    },
+    brake_bias: {
+      available: bias.available === true,
+      values: Array.isArray(bias.values) ? nums(bias.values) : undefined,
+      changed: bias.changed_during_session === true,
+      reason: bias.reason == null ? undefined : String(bias.reason),
+    },
+    concerns: Array.isArray(aoc.concerns)
+      ? (aoc.concerns as Payload[]).map((c) => ({
+          area: String(c.area ?? ""),
+          observation: String(c.observation ?? ""),
+          watch: String(c.watch ?? ""),
+        }))
+      : [],
+    concerns_finding: aoc.finding == null ? null : String(aoc.finding),
+  };
 }
 
 /** The circuit centreline on the shared grid.
@@ -505,6 +725,10 @@ export function absencesFrom(
     hardware: "Rig and hardware",
     balance: "Balance",
     report_card: "Session report",
+    grip: "Grip between the tires and the road",
+    input_response: "Your inputs against the car's response",
+    stint: "How the run changed",
+    track_width: "The road you used",
   };
 
   for (const [key, title] of Object.entries(TITLES)) {

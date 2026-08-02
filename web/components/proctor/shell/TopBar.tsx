@@ -1,6 +1,6 @@
 "use client";
 
-import { ListOrdered, Map as MapIcon, AudioWaveform } from "lucide-react";
+import { ListOrdered, Map as MapIcon, AudioWaveform, Spline } from "lucide-react";
 
 import { dim } from "@/lib/proctor/channels";
 import { IS_FIXTURE } from "@/lib/proctor/data-source";
@@ -10,8 +10,8 @@ import { TIER_BLURB, TIERS } from "@/lib/tier";
 const TITLE: Record<Screen, { title: string; sub: string }> = {
   sessions: { title: "Sessions", sub: "everything the rig watcher has sent" },
   report: { title: "Session report", sub: "what this session did, module by module" },
-  analyse: { title: "Analyse", sub: "one lap against your own reference" },
-  live: { title: "Live trace", sub: "the reference lap, swept at constant distance" },
+  analyze: { title: "Analyze", sub: "any lap of this session against any other" },
+  live: { title: "Live trace", sub: "your lap played back in the time it actually took" },
   rig: { title: "Rig health", sub: "what your hardware produced this session" },
   upload: { title: "Upload", sub: "add a session by hand" },
 };
@@ -20,6 +20,7 @@ const VIEWS: { id: AnalysisView; label: string; Icon: typeof ListOrdered }[] = [
   { id: "loss", label: "Where it went", Icon: ListOrdered },
   { id: "ribbon", label: "Ribbon", Icon: AudioWaveform },
   { id: "map", label: "Map & delta", Icon: MapIcon },
+  { id: "line", label: "Racing line", Icon: Spline },
 ];
 
 export default function TopBar() {
@@ -68,7 +69,7 @@ export default function TopBar() {
         </span>
       )}
 
-      {state.screen === "analyse" && (
+      {state.screen === "analyze" && (
         <div style={{ display: "flex", gap: 2, flex: "none" }}>
           {VIEWS.map(({ id, label, Icon }) => {
             const active = state.view === id;

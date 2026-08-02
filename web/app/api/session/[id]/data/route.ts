@@ -4,9 +4,15 @@ import { sql } from "@/lib/db";
 import {
   absencesFrom,
   cornersFrom,
+  eventPatternsFrom,
   eventsFrom,
+  gripFrom,
+  hardwareFrom,
+  inputResponseFrom,
   mapFrom,
+  stintFrom,
   tireFrom,
+  trackWidthFrom,
   tractionFrom,
 } from "@/lib/proctor/server/shape";
 import { guarded } from "@/lib/proctor/server/respond";
@@ -90,6 +96,12 @@ export async function GET(
       traction: tractionFrom(metrics),
       tire: tireFrom(metrics, gridSize),
       events: eventsFrom(metrics),
+      eventPatterns: eventPatternsFrom(metrics),
+      grip: gripFrom(metrics),
+      inputResponse: inputResponseFrom(metrics),
+      stint: stintFrom(metrics),
+      trackWidth: trackWidthFrom(metrics),
+      hardware: hardwareFrom(metrics),
       gridSize,
       map,
       absences: absencesFrom(metrics, session),

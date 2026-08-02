@@ -40,7 +40,7 @@ export default async function MobilePage() {
   const tier = await readTier();
 
   return (
-    <ProctorProvider initialTier={tier} initialScreen="analyse">
+    <ProctorProvider initialTier={tier} initialScreen="analyze">
       <MobileApp />
     </ProctorProvider>
   );

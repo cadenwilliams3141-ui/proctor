@@ -8,14 +8,33 @@ GET  /health       — uptime check
 from __future__ import annotations
 
 import hashlib
+import logging
+from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.db import connect
+from app.db import apply_migrations, connect
 from app.ingest import process_file
 
-app = FastAPI(title="proctor-ingest")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Bring the schema up to date before the first request.
+
+    Idempotent: every migration is CREATE ... IF NOT EXISTS. A failure is logged
+    and the service still starts — see db.apply_migrations for why.
+
+    lifespan rather than @app.on_event("startup"): on_event is deprecated as of
+    FastAPI 0.109 and this is the hook that keeps the schema in step with the
+    code, so it should not be resting on an API scheduled for removal.
+    """
+    logging.basicConfig(level=logging.INFO)
+    apply_migrations()
+    yield
+
+
+app = FastAPI(title="proctor-ingest", lifespan=lifespan)
 
 # Single-user product, no auth yet; the UI runs on localhost + vercel.
 app.add_middleware(

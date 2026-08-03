@@ -15,6 +15,8 @@ import {
   hardwareFrom,
   inputResponseFrom,
   stintFrom,
+  trackBoundaryFrom,
+  trackEdgesFrom,
   trackWidthFrom,
   tractionFrom,
 } from "./shape";
@@ -170,5 +172,74 @@ describe("track width", () => {
     expect(tw?.origin).toEqual({ lat: 33.8, lon: -83.8 });
     expect(tw?.normal_x).toHaveLength(3);
     expect(tw?.summary.median_used_width_m).toBe(4);
+  });
+});
+
+describe("track boundary", () => {
+  const row = {
+    track_name: "Road Atlanta",
+    origin_lat: 33.8,
+    origin_lon: -83.8,
+    centre_x_m: [0, 1, 2, 3],
+    centre_y_m: [0, 0, 0, 0],
+    normal_x: [0, 0, 0, 0],
+    normal_y: [1, 1, 1, 1],
+    left_m: [6, null, 5.5, 6.2],
+    right_m: [-6, null, -5.5, -6.1],
+    sessions_contributed: 3,
+    laps_contributed: 41,
+    updated_at: "2026-08-02T12:00:00Z",
+  };
+
+  it("keeps unmeasured bins as null rather than dropping or zeroing them", () => {
+    // This is the whole risk of the shape: nums() filters non-finite values,
+    // which would SHORTEN the array and misalign every bin after the gap. A
+    // zero would be worse still — it draws the track pinching onto the
+    // centreline, which is a claim nothing measured.
+    const tb = trackBoundaryFrom(row);
+    expect(tb?.left_m).toEqual([6, null, 5.5, 6.2]);
+    expect(tb?.right_m).toHaveLength(4);
+    expect(tb?.right_m[1]).toBeNull();
+  });
+
+  it("carries how much driving the boundary is built from", () => {
+    const tb = trackBoundaryFrom(row);
+    expect(tb?.sessions_contributed).toBe(3);
+    expect(tb?.laps_contributed).toBe(41);
+  });
+
+  it("returns null for a track nothing has been measured at", () => {
+    expect(trackBoundaryFrom(null)).toBeNull();
+    expect(trackBoundaryFrom({ ...row, centre_x_m: [] })).toBeNull();
+  });
+});
+
+describe("track edges", () => {
+  it("passes the module's own reason through when it could not run", () => {
+    const te = trackEdgesFrom({
+      track_edges: {
+        insufficient_data: true,
+        reason: "this file does not carry PlayerTrackSurface",
+      },
+    });
+    expect(te?.measured).toBe(false);
+    expect(te?.reason).toMatch(/PlayerTrackSurface/);
+  });
+
+  it("carries the surface findings when it did", () => {
+    const te = trackEdgesFrom({
+      track_edges: {
+        coverage_pct: 87.5,
+        surface: { measured: true, kerb_pct: 3.2, excursion_count: 2 },
+        caveat: "a lower bound",
+      },
+    });
+    expect(te?.measured).toBe(true);
+    expect(te?.coverage_pct).toBe(87.5);
+    expect(te?.surface?.kerb_pct).toBe(3.2);
+  });
+
+  it("is null when the module produced no block at all", () => {
+    expect(trackEdgesFrom({})).toBeNull();
   });
 });

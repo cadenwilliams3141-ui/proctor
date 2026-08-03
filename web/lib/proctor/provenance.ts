@@ -81,6 +81,10 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
     provenance: "derived",
     note: "A drift across the laps of one run, fitted over your clean laps in the order you drove them. It names no cause: tires, brakes, fuel load, track surface and simply learning the lap all move these numbers, and one session cannot separate them.",
   },
+  "track.surface": {
+    provenance: "measured",
+    note: "The road here is the sim's own verdict: PlayerTrackSurface reports, tick by tick, whether the car is on the racing surface, and the edges are the furthest out that flag stayed true — accumulated across every session driven at this circuit, so it improves with use. Read it as a floor rather than an edge: the flag follows the car's reference point, so the asphalt reaches a little further, and road nobody has driven is drawn as a gap rather than guessed at.",
+  },
   "track.width": {
     provenance: "derived",
     note: "The band between your leftmost and rightmost line across the clean laps of this session, measured perpendicular to your reference lap. It is the road YOU used — the .ibt carries no kerbs, white lines or surveyed track edges, so where the band is narrow you were repeatable, not hemmed in.",

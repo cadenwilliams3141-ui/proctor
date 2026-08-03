@@ -481,6 +481,51 @@ export interface TrackWidthData {
   caveat: string;
 }
 
+/** The racing surface, accumulated across every session ever driven here.
+ *
+ *  Unlike everything else in the bundle this is a fact about the TRACK, not
+ *  about the session — it is read from `track_boundaries`, widened by each
+ *  ingest, and shared by every session at the same circuit.
+ *
+ *  It is a LOWER BOUND on the road, not its edge: `PlayerTrackSurface` follows
+ *  the car's reference point, so the asphalt reaches further than the outermost
+ *  sample, and road nobody has driven on is not in here at all. */
+export interface TrackBoundary {
+  track_name: string;
+  origin: { lat: number; lon: number };
+  centre_x_m: number[];
+  centre_y_m: number[];
+  normal_x: number[];
+  normal_y: number[];
+  /** null where no on-track sample has ever landed. NEVER zero — a zero here
+   *  would draw as a track that pinches shut on the centreline. */
+  left_m: (number | null)[];
+  right_m: (number | null)[];
+  sessions_contributed: number;
+  laps_contributed: number;
+  updated_at: string | null;
+}
+
+/** What THIS session saw of the surface: where it left it, and what it rode. */
+export interface TrackEdges {
+  measured: boolean;
+  reason?: string;
+  coverage_pct?: number;
+  surface?: {
+    measured: boolean;
+    reason?: string;
+    on_track_pct?: number;
+    off_track_pct?: number;
+    kerb_pct?: number;
+    kerb_note?: string;
+    materials_pct?: Record<string, number>;
+    excursion_count?: number;
+    finding?: string;
+    excursions?: { lap: number; start_pct: number; duration_ms: number; surface?: string }[];
+  };
+  caveat?: string;
+}
+
 /** Rig-level readings. Every number here is a measurement, never a target. */
 export interface HardwareData {
   brake_ceiling_pct: number | null;
@@ -521,6 +566,11 @@ export interface SessionBundle {
   inputResponse: InputResponseData | null;
   stint: StintData | null;
   trackWidth: TrackWidthData | null;
+  /** The accumulated racing surface for this circuit. Null until a session
+   *  whose .ibt carries PlayerTrackSurface has been ingested here. */
+  trackBoundary: TrackBoundary | null;
+  /** What this session alone saw of the surface. */
+  trackEdges: TrackEdges | null;
   hardware: HardwareData | null;
   /** Sample count on the shared distance grid. */
   gridSize: number;

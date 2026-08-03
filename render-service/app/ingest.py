@@ -7,6 +7,7 @@ left silently unprocessed.
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -17,10 +18,13 @@ from proctor_parser.analysis import compute_all
 from proctor_parser.session import ParsedSession
 
 from app.db import connect
+from app.track_boundary import merge_session
 
 # iRacing filenames end in 'YYYY-MM-DD HH-MM-SS'. This is rig wall-clock
 # time; the .ibt itself carries no reliable absolute timestamp.
 FILENAME_TS = re.compile(r"(\d{4}-\d{2}-\d{2}) (\d{2})-(\d{2})-(\d{2})")
+
+log = logging.getLogger("proctor.ingest")
 
 # Column order matches migrations/001_init.sql lap_traces.
 TRACE_COLUMNS = (
@@ -74,7 +78,8 @@ def _write_session(conn, ingest_id: int, user_id: str, ps: ParsedSession) -> int
                     row.append([float(v) for v in lap.grid[col]])
                 copy.write_row(row)
 
-    for key, payload in compute_all(ps).items():
+    metrics = compute_all(ps)
+    for key, payload in metrics.items():
         conn.execute(
             """
             INSERT INTO session_metrics (session_id, metric_key, payload)
@@ -83,6 +88,22 @@ def _write_session(conn, ingest_id: int, user_id: str, ps: ParsedSession) -> int
             """,
             (session_id, key, Jsonb(payload)),
         )
+
+    # The one thing this session learned that outlives it: everything else here
+    # describes one outing, but the racing surface belongs to the track, so it
+    # is merged into a per-track boundary that every future session at the same
+    # circuit reads and widens.
+    #
+    # In a SAVEPOINT of its own. The laps and traces above are why the file was
+    # uploaded; the boundary is a bonus. If merging it fails the session must
+    # still land, and in Postgres a failed statement poisons the rest of the
+    # transaction unless it is rolled back to a savepoint.
+    try:
+        with conn.transaction():
+            merge_session(conn, user_id, ingest_id, meta.track_name,
+                          meta.track_length_km, metrics.get("track_edges"))
+    except Exception as exc:  # noqa: BLE001 — never sink the telemetry write
+        log.error("track boundary not updated for %s: %s", meta.track_name, exc)
     return session_id
 
 

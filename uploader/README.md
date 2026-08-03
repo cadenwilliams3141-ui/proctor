@@ -35,3 +35,23 @@ Each file replaces that session's rows inside one transaction, so a failure
 leaves the existing data alone rather than half-replacing it. Files written in
 the last two minutes are skipped in case iRacing is still writing them
 (`--include-fresh` overrides).
+
+## Filling in the track surface
+
+The Racing line view draws the road itself, not just your line through it. That
+comes from `PlayerTrackSurface` — the sim reports, at every tick, whether the
+car is on the racing surface, so the furthest out that flag stayed true is a
+measurement of where the track reached.
+
+It builds up on its own: every session you upload at a circuit widens its stored
+boundary, and nothing ever narrows it. No calibration is required.
+
+If you want a track filled in properly in one go, drive **two slow laps: one
+along the left edge, one along the right**. Speed does not matter, staying near
+the edge does. Upload them like any other session. That is the same trick the Z1
+Analyzer asks for, and it takes the measured width from "wherever I happened to
+drive" to within a metre of the real road.
+
+Two things it will never be: it is a floor rather than an edge (the flag follows
+the car's reference point, so real asphalt continues a little past it), and road
+nobody has driven is drawn as a gap rather than guessed at.

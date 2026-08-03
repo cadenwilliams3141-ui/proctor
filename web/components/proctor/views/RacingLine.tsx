@@ -1,24 +1,34 @@
 "use client";
 
-/* View 4 — "Racing line". The circuit with a width to it, and your line on it.
+/* View 4 — "Racing line". The track, and where on it the car went.
  *
- * ┌ WHAT THE BAND IS, AND WHAT IT IS NOT ───────────────────────────────────┐
- * │ A disk .ibt carries GPS and nothing else about the circuit — no kerbs,  │
- * │ no white lines, no surveyed edges. So the road drawn here is not the    │
- * │ track. It is the band between the leftmost and rightmost line YOU took  │
- * │ across the clean laps of this session, measured perpendicular to your   │
- * │ reference lap.                                                          │
+ * ┌ TWO DIFFERENT CLAIMS, AND THE VIEW KEEPS THEM APART ────────────────────┐
+ * │ THE SURFACE (trackBoundary) is the road. It comes from the sim's own    │
+ * │ PlayerTrackSurface flag — at every tick iRacing says whether the car is │
+ * │ on the racing surface, so the furthest out that flag stayed true is a   │
+ * │ measurement of where the track reached. It accumulates across every     │
+ * │ session ever driven at the circuit, so it is a per-TRACK asset that     │
+ * │ gets better with use rather than a per-session snapshot.                │
  * │                                                                         │
- * │ That distinction is not pedantry, it changes how the picture reads. A   │
- * │ corner where the band pinches shut is a corner you drove the same way   │
- * │ every lap — NOT a narrow piece of road. Both facts are useful and they  │
- * │ are not the same fact, so the caption says which one this is.           │
+ * │ It is a FLOOR, not the edge: the flag follows the car's reference       │
+ * │ point, so real asphalt continues past the outermost sample, and road    │
+ * │ nobody has driven on is drawn as a GAP rather than guessed at. Driving  │
+ * │ one slow lap down each side fills it in — the calibration lap other     │
+ * │ analysers require, here an accelerator rather than a prerequisite.      │
+ * │                                                                         │
+ * │ THE BAND (trackWidth) is where the driver put the car this session. A   │
+ * │ corner where the band pinches shut is a corner driven the same way      │
+ * │ every lap, NOT a narrow piece of road. When both exist the band is      │
+ * │ drawn inside the surface, because "what I used" reads against "what     │
+ * │ was there". When only the band exists, it is drawn alone and the copy   │
+ * │ says which of the two it is.                                            │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
- * A whole circuit at panel size puts a 12 m road inside about a pixel, so the
- * band is drawn twice: once round the full lap for the shape of it, and once
- * zoomed into the selected corner, where the metres are actually legible and
- * where the line is worth arguing about anyway. */
+ * A whole circuit at panel size puts a 12 m road inside about a pixel, so it is
+ * drawn twice: once round the full lap with widths exaggerated (by a factor
+ * printed on screen) for the shape of it, and once zoomed into the selected
+ * corner at TRUE scale, where the metres are legible and where the line is
+ * worth arguing about anyway. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -26,12 +36,12 @@ import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Explain from "@/components/proctor/ui/Explain";
 import Panel from "@/components/proctor/ui/Panel";
 import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
-import { explainTrackWidth } from "@/lib/proctor/explain";
+import { explainRoad } from "@/lib/proctor/explain";
 import { fixed, fmtCornerGeometry } from "@/lib/proctor/format";
 import { gpsToLocal, projectAll, wrapIndex } from "@/lib/proctor/geometry";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
-import type { Corner, Trace, TrackWidthData } from "@/lib/proctor/types";
+import type { Corner, Trace, TrackBoundary, TrackWidthData } from "@/lib/proctor/types";
 
 export default function RacingLine() {
   const { bundle, state, dispatch, traceA, traceB, selectedCornerId, ledger } = useProctor();
@@ -41,18 +51,38 @@ export default function RacingLine() {
   if (!bundle) return <Loading />;
 
   const tw = bundle.trackWidth;
-  if (!tw) {
-    /* No band is a finding, not an empty panel. The absence carries the
-       module's own reason, which is the only honest thing to print here. */
-    const absence = bundle.absences.find((a) => a.key === "track_width");
+  /* Two different things can be drawn here, and which one you get changes what
+     the picture MEANS:
+
+       trackBoundary  the racing surface itself, from the sim's own on-track
+                      flag, accumulated across every session ever driven here.
+                      This is the road.
+       trackWidth     the band between your own lines this session. This is
+                      where you put the car, which is not the same claim.
+
+     The surface wins when it exists, because it answers the question the band
+     could only approximate. The band is still drawn inside it. */
+  const tb = bundle.trackBoundary;
+  if (!tb && !tw) {
+    /* Nothing to draw is a finding, not an empty panel. The absences carry the
+       modules' own reasons, which is the only honest thing to print here. */
+    const surfaceWhy = bundle.trackEdges?.reason
+      ?? bundle.absences.find((a) => a.key === "track_edges")?.reason;
+    const bandWhy = bundle.absences.find((a) => a.key === "track_width")?.reason;
     return (
-      <div style={{ padding: "var(--space-8) var(--space-6)", maxWidth: 640 }}>
+      <div style={{ padding: "var(--space-8) var(--space-6)", maxWidth: 660 }}>
         <div style={{ font: "500 15px var(--font-heading)", marginBottom: 8 }}>
-          The road you used could not be measured for this session.
+          Neither the track surface nor your own line could be measured here.
         </div>
+        <p style={{ fontSize: 12.5, color: dim(62), lineHeight: 1.65, margin: "0 0 10px" }}>
+          <strong style={{ fontWeight: 500, color: dim(78) }}>The surface: </strong>
+          {surfaceWhy ??
+            "this session was ingested before the module that reads the sim's on-track flag existed. Re-ingest it and the road appears — nothing about the file needs to change."}
+        </p>
         <p style={{ fontSize: 12.5, color: dim(62), lineHeight: 1.65, margin: 0 }}>
-          {absence?.reason ??
-            "This session was ingested before the module that measures it existed. Re-ingest it and the band appears — nothing about the file needs to change."}
+          <strong style={{ fontWeight: 500, color: dim(78) }}>Your line: </strong>
+          {bandWhy ??
+            "this session was ingested before the module that measures it existed."}
         </p>
       </div>
     );
@@ -63,7 +93,7 @@ export default function RacingLine() {
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "var(--space-4) var(--space-6) var(--space-3)", flex: "none" }}>
-        <Explain items={[explainTrackWidth(tw)]} />
+        <Explain items={explainRoad(tb, tw, bundle.trackEdges)} />
       </div>
 
       <div
@@ -77,8 +107,12 @@ export default function RacingLine() {
         }}
       >
         <Panel
-          title="The road you used"
-          sub={`${tw.laps_used.length} clean laps stacked on each other`}
+          title={tb ? "The track" : "The road you used"}
+          sub={
+            tb
+              ? `measured over ${tb.laps_contributed} laps here · your line on it`
+              : `${tw!.laps_used.length} clean laps stacked on each other`
+          }
           padding="var(--space-3)"
           style={{ minHeight: 0 }}
           right={
@@ -87,12 +121,12 @@ export default function RacingLine() {
                 <span
                   className="tag tag-outline"
                   style={{ fontSize: 10, padding: "2px 8px", whiteSpace: "nowrap" }}
-                  title={`A road a few metres wide is thinner than a hairline on a circuit this long, so the band is drawn ${exaggeration} times wider than life. The corner view is at true scale.`}
+                  title={`A road a few metres wide is thinner than a hairline on a circuit this long, so widths are drawn ${exaggeration} times life size. The corner view is at true scale.`}
                 >
                   width ×{exaggeration}
                 </span>
               )}
-              <WidthKey />
+              <WidthKey surface={tb != null} />
             </div>
           }
           foot={
@@ -100,12 +134,13 @@ export default function RacingLine() {
               {exaggeration > 1
                 ? `Widths on this map are drawn ${exaggeration}× life size — at true scale a road a few metres wide is thinner than a hairline on a circuit this long. The corner view to the right is at true scale. `
                 : ""}
-              {noteFor("track.width")}
+              {noteFor(tb ? "track.surface" : "track.width")}
             </Caveat>
           }
         >
           <div style={{ flex: 1, minHeight: 0 }}>
             <FullCircuit
+              tb={tb}
               tw={tw}
               corners={bundle.corners}
               traceA={traceA}
@@ -126,15 +161,15 @@ export default function RacingLine() {
             style={{ flex: 1, minHeight: 0 }}
             foot={
               <Caveat>
-                Metres here are real metres. Every lap of the session is drawn,
-                with lap A and lap B picked out — the spread between them is how
-                much your line moved through this corner.
+                Metres here are real metres. {tb
+                  ? "The road is where the sim still called the car on track; lap A and lap B are your lines through it."
+                  : "Lap A and lap B are picked out — the spread between them is how much your line moved through this corner."}
               </Caveat>
             }
           >
             <div style={{ flex: 1, minHeight: 0 }}>
               {selected ? (
-                <CornerZoom tw={tw} corner={selected} traceA={traceA} traceB={traceB} />
+                <CornerZoom tb={tb} tw={tw} corner={selected} traceA={traceA} traceB={traceB} />
               ) : (
                 <div style={{ fontSize: 12, color: dim(50), padding: "var(--space-4) 0" }}>
                   No corners were detected in this session, so there is nothing to
@@ -145,12 +180,21 @@ export default function RacingLine() {
           </Panel>
 
           <Panel
-            title="Width used, round the lap"
-            sub="metres between your widest and tightest line"
+            title={tb ? "Track width, round the lap" : "Width used, round the lap"}
+            sub={
+              tb
+                ? "metres of measured surface · gaps are road nobody has driven"
+                : "metres between your widest and tightest line"
+            }
             padding="var(--space-3)"
             style={{ flex: "none" }}
           >
-            <WidthProfile tw={tw} corners={bundle.corners} selectedId={selected?.id ?? null} />
+            <WidthProfile
+              tb={tb}
+              tw={tw}
+              corners={bundle.corners}
+              selectedId={selected?.id ?? null}
+            />
           </Panel>
         </div>
       </div>
@@ -160,10 +204,12 @@ export default function RacingLine() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WidthKey() {
+function WidthKey({ surface = false }: { surface?: boolean }) {
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 10, color: dim(42), whiteSpace: "nowrap" }}>
-      <Key color="rgba(145,132,217,.20)" label="every line" />
+      <Key color={surface ? "rgba(233,233,237,.14)" : "rgba(145,132,217,.20)"}
+           label={surface ? "track" : "every line"} />
+      {surface && <Key color="rgba(145,132,217,.26)" label="where you drove" />}
       <Key color={CH.a} label="lap A" />
       <Key color={CH.b} label="lap B" />
     </div>
@@ -177,6 +223,119 @@ function Key({ color, label }: { color: string; label: string }) {
       {label}
     </span>
   );
+}
+
+/** Edge coordinates for the MEASURED surface. NaN marks an unmeasured bin.
+ *
+ *  The boundary's arrays are deliberately sparse — a null is a stretch of road
+ *  nothing has driven through yet — and that has to survive all the way to the
+ *  path, because filling it in would draw a road narrowing to nothing on the
+ *  centreline. */
+function boundaryEdge(
+  tb: TrackBoundary,
+  key: "left_m" | "right_m",
+  exaggerate = 1,
+) {
+  const n = tb.centre_x_m.length;
+  const x = new Array<number>(n);
+  const y = new Array<number>(n);
+  const off = tb[key];
+  for (let i = 0; i < n; i++) {
+    const d = off[i];
+    if (d == null) {
+      x[i] = NaN;
+      y[i] = NaN;
+      continue;
+    }
+    x[i] = tb.centre_x_m[i] + tb.normal_x[i] * d * exaggerate;
+    y[i] = tb.centre_y_m[i] + tb.normal_y[i] * d * exaggerate;
+  }
+  return { x, y };
+}
+
+/** A filled ribbon that BREAKS at gaps instead of bridging them.
+ *
+ *  One `<path>` with several subpaths: each run of consecutive measured bins
+ *  becomes its own closed shape, so an unmeasured stretch reads as a hole in
+ *  the survey rather than as a piece of track that pinches shut. */
+function surfaceRibbon(
+  p: { X: (v: number) => number; Y: (v: number) => number },
+  outer: { x: number[]; y: number[] },
+  inner: { x: number[]; y: number[] },
+  from = 0,
+  to = -1,
+): string {
+  const n = outer.x.length;
+  const end = to < 0 ? n - 1 : to;
+  const parts: string[] = [];
+  let run: number[] = [];
+
+  const flush = () => {
+    if (run.length >= 2) {
+      const fwd = run.map((k) => `${p.X(outer.x[k]).toFixed(1)} ${p.Y(outer.y[k]).toFixed(1)}`);
+      const back = [...run]
+        .reverse()
+        .map((k) => `${p.X(inner.x[k]).toFixed(1)} ${p.Y(inner.y[k]).toFixed(1)}`);
+      parts.push(`M ${fwd.join(" L ")} L ${back.join(" L ")} Z`);
+    }
+    run = [];
+  };
+
+  for (let i = from; i <= end; i++) {
+    const k = wrapIndex(i, n);
+    if (Number.isFinite(outer.x[k]) && Number.isFinite(inner.x[k])) run.push(k);
+    else flush();
+  }
+  flush();
+  return parts.join(" ");
+}
+
+/** Median of a sparse series, ignoring the gaps. */
+function medianOf(values: (number | null)[]): number {
+  const seen = values.filter((v): v is number => v != null && Number.isFinite(v));
+  if (seen.length === 0) return 0;
+  const sorted = [...seen].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/** The centreline of whichever source is driving the view. */
+function centreOf(tb: TrackBoundary | null, tw: TrackWidthData | null) {
+  return tb
+    ? { x: tb.centre_x_m, y: tb.centre_y_m, origin: tb.origin, n: tb.centre_x_m.length }
+    : { x: tw!.centre_x_m, y: tw!.centre_y_m, origin: tw!.origin, n: tw!.centre_x_m.length };
+}
+
+/** A lap's own line, measured against whichever centreline is in play.
+ *
+ *  Rebuilt from its offset rather than drawn at its raw position: under
+ *  exaggeration the road moves outward, and a line left at its true position
+ *  would drift outside the road it was driven on. */
+function drivenAgainst(
+  trace: Trace | null,
+  centre: { x: number[]; y: number[]; origin: { lat: number; lon: number } },
+  exaggerate = 1,
+) {
+  if (!trace || trace.lat_gps.length === 0) return null;
+  const raw = gpsToLocal(trace.lat_gps, trace.lon_gps, centre.origin);
+  if (exaggerate === 1) return raw;
+
+  const n = Math.min(raw.x.length, centre.x.length);
+  const x = new Array<number>(n);
+  const y = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    // Normal to the centreline here, from a short chord either side.
+    const a = (i - 3 + n) % n;
+    const b = (i + 3) % n;
+    const tx = centre.x[b] - centre.x[a];
+    const ty = centre.y[b] - centre.y[a];
+    const len = Math.hypot(tx, ty) || 1;
+    const nx = -ty / len;
+    const ny = tx / len;
+    const off = (raw.x[i] - centre.x[i]) * nx + (raw.y[i] - centre.y[i]) * ny;
+    x[i] = centre.x[i] + nx * off * exaggerate;
+    y[i] = centre.y[i] + ny * off * exaggerate;
+  }
+  return { x, y };
 }
 
 /** Edge coordinates in metres: centre + normal * offset, both from the module.
@@ -280,6 +439,7 @@ const TARGET_BAND_PX = 9;
 const MAX_EXAGGERATION = 40;
 
 function FullCircuit({
+  tb,
   tw,
   corners,
   traceA,
@@ -289,7 +449,8 @@ function FullCircuit({
   cursor,
   onExaggeration,
 }: {
-  tw: TrackWidthData;
+  tb: TrackBoundary | null;
+  tw: TrackWidthData | null;
   corners: Corner[];
   traceA: Trace | null;
   traceB: Trace | null;
@@ -299,41 +460,54 @@ function FullCircuit({
   onExaggeration: (n: number) => void;
 }) {
   const geo = useMemo(() => {
-    /* Choose the multiplier from the circuit itself: whatever makes the median
-       band about TARGET_BAND_PX wide once projected. A fixed factor would be
+    const centre = centreOf(tb, tw);
+    /* Choose the multiplier from the circuit itself: whatever makes the road
+       about TARGET_BAND_PX wide once projected. A fixed factor would be
        invisible on a long circuit and absurd on a short one. */
     const span = Math.max(
-      Math.max(...tw.centre_x_m) - Math.min(...tw.centre_x_m),
-      Math.max(...tw.centre_y_m) - Math.min(...tw.centre_y_m),
+      Math.max(...centre.x) - Math.min(...centre.x),
+      Math.max(...centre.y) - Math.min(...centre.y),
       1,
     );
-    const median = tw.summary.median_used_width_m ?? 0;
+    const typicalWidth = tb
+      ? medianOf(tb.left_m.map((l, i) => (l == null || tb.right_m[i] == null ? null : l - tb.right_m[i]!)))
+      : tw?.summary.median_used_width_m ?? 0;
     const pxPerMetre = (W - 52) / span;
     const exaggerate =
-      median > 0
-        ? Math.min(MAX_EXAGGERATION, Math.max(1, Math.round(TARGET_BAND_PX / (median * pxPerMetre))))
+      typicalWidth > 0
+        ? Math.min(MAX_EXAGGERATION, Math.max(1, Math.round(TARGET_BAND_PX / (typicalWidth * pxPerMetre))))
         : 1;
 
-    const left = edges(tw, "left_m", exaggerate);
-    const right = edges(tw, "right_m", exaggerate);
-    const p90 = edges(tw, "p90_m", exaggerate);
-    const p10 = edges(tw, "p10_m", exaggerate);
-    const a = drivenLine(traceA, tw, exaggerate);
-    const b = drivenLine(traceB, tw, exaggerate);
-    // Fitted to the OUTER edges, so nothing that hangs off the centreline is
-    // clipped at the frame.
-    const p = projectAll([left, right, a, b].filter(Boolean) as { x: number[]; y: number[] }[], W, H, 26);
+    // The measured road, when there is one.
+    const surfL = tb ? boundaryEdge(tb, "left_m", exaggerate) : null;
+    const surfR = tb ? boundaryEdge(tb, "right_m", exaggerate) : null;
+    // The band between the driver's own lines, when that was computed. Drawn on
+    // top of the road, because "where I went" reads against "what was there".
+    const bandL = tw ? edges(tw, "left_m", exaggerate) : null;
+    const bandR = tw ? edges(tw, "right_m", exaggerate) : null;
+
+    const a = drivenAgainst(traceA, centre, exaggerate);
+    const b = drivenAgainst(traceB, centre, exaggerate);
+
+    // Fitted to the OUTERMOST geometry, so nothing hanging off the centreline
+    // is clipped at the frame.
+    const p = projectAll(
+      [surfL, surfR, bandL, bandR, a, b].filter(Boolean) as { x: number[]; y: number[] }[],
+      W, H, 26,
+    );
     return {
       p,
       exaggerate,
-      full: ribbonPath(p, left, right),
-      typical: ribbonPath(p, p90, p10),
-      centre: linePath(p, { x: tw.centre_x_m, y: tw.centre_y_m }),
+      surface: surfL && surfR ? surfaceRibbon(p, surfL, surfR) : null,
+      band: bandL && bandR ? ribbonPath(p, bandL, bandR) : null,
+      centre: linePath(p, { x: centre.x, y: centre.y }),
+      cx: centre.x,
+      cy: centre.y,
       a: a ? linePath(p, a) : null,
       b: b ? linePath(p, b) : null,
-      n: tw.centre_x_m.length,
+      n: centre.n,
     };
-  }, [tw, traceA, traceB]);
+  }, [tb, tw, traceA, traceB]);
 
   const ci = wrapIndex(Math.round(cursor * (geo.n - 1)), geo.n);
 
@@ -348,10 +522,21 @@ function FullCircuit({
       style={{ width: "100%", height: "100%", display: "block" }}
       aria-hidden
     >
-      {/* The full band — every line the driver took this session. */}
-      <path d={geo.full} fill="rgba(145,132,217,.16)" stroke={inkA(0.1)} strokeWidth={0.6} />
-      {/* Where the line usually sat: 10th to 90th percentile of the laps. */}
-      <path d={geo.typical} fill="rgba(145,132,217,.20)" stroke="none" />
+      {/* The road itself, where the sim still called the car on track. Drawn
+          first and darkest, so everything else reads as being ON it. */}
+      {geo.surface && (
+        <path d={geo.surface} fill="rgba(233,233,237,.11)" stroke={inkA(0.26)} strokeWidth={0.7} />
+      )}
+      {/* The band between the driver's own lines. On its own when there is no
+          measured surface; an overlay showing what was used when there is. */}
+      {geo.band && (
+        <path
+          d={geo.band}
+          fill={geo.surface ? "rgba(145,132,217,.22)" : "rgba(145,132,217,.18)"}
+          stroke={geo.surface ? "none" : inkA(0.1)}
+          strokeWidth={0.6}
+        />
+      )}
       <path d={geo.centre} fill="none" stroke={inkA(0.16)} strokeWidth={0.8} strokeDasharray="3 4" />
 
       {geo.b && <path d={geo.b} fill="none" stroke={CH.b} strokeWidth={1.5} opacity={0.85} />}
@@ -359,8 +544,8 @@ function FullCircuit({
 
       {corners.map((c) => {
         const k = wrapIndex(Math.floor(c.apex_pct * geo.n), geo.n);
-        const cx = geo.p.X(tw.centre_x_m[k]);
-        const cy = geo.p.Y(tw.centre_y_m[k]);
+        const cx = geo.p.X(geo.cx[k]);
+        const cy = geo.p.Y(geo.cy[k]);
         const on = c.id === selectedId;
         return (
           <g key={c.id} onClick={() => onPick(c.id)} style={{ cursor: "pointer" }}>
@@ -380,8 +565,8 @@ function FullCircuit({
       })}
 
       <circle
-        cx={geo.p.X(tw.centre_x_m[ci])}
-        cy={geo.p.Y(tw.centre_y_m[ci])}
+        cx={geo.p.X(geo.cx[ci])}
+        cy={geo.p.Y(geo.cy[ci])}
         r={3.4}
         fill={INK.text}
         opacity={0.8}
@@ -396,56 +581,78 @@ const ZW = 400;
 const ZH = 300;
 
 function CornerZoom({
+  tb,
   tw,
   corner,
   traceA,
   traceB,
 }: {
-  tw: TrackWidthData;
+  tb: TrackBoundary | null;
+  tw: TrackWidthData | null;
   corner: Corner;
   traceA: Trace | null;
   traceB: Trace | null;
 }) {
   const geo = useMemo(() => {
-    const n = tw.centre_x_m.length;
+    const centre = centreOf(tb, tw);
+    const n = centre.n;
     // A little either side of the corner window, so the entry and the exit are
     // both in frame — the line through a corner is decided before it starts.
     const pad = Math.round(n * 0.02);
     const from = Math.floor(corner.start_pct * n) - pad;
     const to = Math.ceil(corner.end_pct * n) + pad;
 
-    const left = edges(tw, "left_m");
-    const right = edges(tw, "right_m");
-    const a = drivenLine(traceA, tw);
-    const b = drivenLine(traceB, tw);
+    // True scale here, always: this is the panel that exists so there is
+    // somewhere to read real metres.
+    const surfL = tb ? boundaryEdge(tb, "left_m") : null;
+    const surfR = tb ? boundaryEdge(tb, "right_m") : null;
+    const bandL = tw ? edges(tw, "left_m") : null;
+    const bandR = tw ? edges(tw, "right_m") : null;
+    const a = drivenAgainst(traceA, centre);
+    const b = drivenAgainst(traceB, centre);
 
-    const slice = (s: { x: number[]; y: number[] }) => {
+    const slice = (src: { x: number[]; y: number[] } | null) => {
+      if (!src) return null;
       const x: number[] = [];
       const y: number[] = [];
       for (let i = from; i <= to; i++) {
         const k = wrapIndex(i, n);
-        x.push(s.x[k]);
-        y.push(s.y[k]);
+        if (!Number.isFinite(src.x[k])) continue;
+        x.push(src.x[k]);
+        y.push(src.y[k]);
       }
-      return { x, y };
+      return x.length ? { x, y } : null;
     };
 
-    const p = projectAll([slice(left), slice(right)], ZW, ZH, 20);
+    const fit = [slice(surfL), slice(surfR), slice(bandL), slice(bandR)].filter(
+      Boolean,
+    ) as { x: number[]; y: number[] }[];
+    const p = projectAll(fit.length ? fit : [{ x: centre.x, y: centre.y }], ZW, ZH, 20);
     // Metres per viewBox unit, for the scale bar. The projection is uniform, so
     // one number covers both axes.
     const dx = Math.abs(p.X(1) - p.X(0)) || 1;
 
+    const apex = wrapIndex(Math.floor(corner.apex_pct * n), n);
+    const surfaceWidth =
+      tb && tb.left_m[apex] != null && tb.right_m[apex] != null
+        ? tb.left_m[apex]! - tb.right_m[apex]!
+        : null;
+
     return {
       p,
       pxPerMetre: dx,
-      band: ribbonPath(p, left, right, from, to, 1),
-      centre: linePath(p, { x: tw.centre_x_m, y: tw.centre_y_m }, from, to, 1),
+      surface: surfL && surfR ? surfaceRibbon(p, surfL, surfR, from, to) : null,
+      band: bandL && bandR ? ribbonPath(p, bandL, bandR, from, to, 1) : null,
+      centre: linePath(p, { x: centre.x, y: centre.y }, from, to, 1),
+      cx: centre.x,
+      cy: centre.y,
       a: a ? linePath(p, a, from, to, 1) : null,
       b: b ? linePath(p, b, from, to, 1) : null,
-      apex: wrapIndex(Math.floor(corner.apex_pct * n), n),
-      widthAtApex: tw.used_width_m[wrapIndex(Math.floor(corner.apex_pct * n), n)] ?? 0,
+      apex,
+      surfaceWidth,
+      usedWidth: tw?.used_width_m[apex] ?? null,
     };
-  }, [tw, corner, traceA, traceB]);
+  }, [tb, tw, corner, traceA, traceB]);
 
   // A 10 m bar, drawn at the projection's own scale.
   const barPx = 10 * geo.pxPerMetre;
@@ -458,14 +665,24 @@ function CornerZoom({
         style={{ width: "100%", flex: 1, minHeight: 0, display: "block" }}
         aria-hidden
       >
-        <path d={geo.band} fill="rgba(145,132,217,.18)" stroke={inkA(0.14)} strokeWidth={0.8} />
+        {geo.surface && (
+          <path d={geo.surface} fill="rgba(233,233,237,.11)" stroke={inkA(0.3)} strokeWidth={1} />
+        )}
+        {geo.band && (
+          <path
+            d={geo.band}
+            fill={geo.surface ? "rgba(145,132,217,.24)" : "rgba(145,132,217,.18)"}
+            stroke={geo.surface ? "none" : inkA(0.14)}
+            strokeWidth={0.8}
+          />
+        )}
         <path d={geo.centre} fill="none" stroke={inkA(0.2)} strokeWidth={1} strokeDasharray="4 5" />
         {geo.b && <path d={geo.b} fill="none" stroke={CH.b} strokeWidth={2.2} opacity={0.9} />}
         {geo.a && <path d={geo.a} fill="none" stroke={CH.a} strokeWidth={2.4} />}
 
         <circle
-          cx={geo.p.X(tw.centre_x_m[geo.apex])}
-          cy={geo.p.Y(tw.centre_y_m[geo.apex])}
+          cx={geo.p.X(geo.cx[geo.apex])}
+          cy={geo.p.Y(geo.cy[geo.apex])}
           r={4}
           fill="none"
           stroke={inkA(0.5)}
@@ -499,12 +716,22 @@ function CornerZoom({
       </svg>
 
       <div style={{ display: "flex", gap: "var(--space-4)", flex: "none", paddingTop: 6 }}>
-        <div>
-          <Eyebrow size={9}>width used at the apex</Eyebrow>
-          <div className="num" style={{ font: "500 15px var(--font-heading)", marginTop: 2 }}>
-            {fixed(geo.widthAtApex, 1)} <span style={{ fontSize: 10, color: dim(38) }}>m</span>
+        {geo.surfaceWidth != null && (
+          <div>
+            <Eyebrow size={9}>track at the apex</Eyebrow>
+            <div className="num" style={{ font: "500 15px var(--font-heading)", marginTop: 2, color: CH.a }}>
+              {fixed(geo.surfaceWidth, 1)} <span style={{ fontSize: 10, color: dim(38) }}>m</span>
+            </div>
           </div>
-        </div>
+        )}
+        {geo.usedWidth != null && (
+          <div>
+            <Eyebrow size={9}>of which you used</Eyebrow>
+            <div className="num" style={{ font: "500 15px var(--font-heading)", marginTop: 2 }}>
+              {fixed(geo.usedWidth, 1)} <span style={{ fontSize: 10, color: dim(38) }}>m</span>
+            </div>
+          </div>
+        )}
         <div>
           <Eyebrow size={9}>corner</Eyebrow>
           <div style={{ fontSize: 12, color: dim(62), marginTop: 4 }}>
@@ -519,11 +746,13 @@ function CornerZoom({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WidthProfile({
+  tb,
   tw,
   corners,
   selectedId,
 }: {
-  tw: TrackWidthData;
+  tb: TrackBoundary | null;
+  tw: TrackWidthData | null;
   corners: Corner[];
   selectedId: number | null;
 }) {
@@ -533,23 +762,44 @@ function WidthProfile({
   const PLOT_BOTTOM = 74;
 
   const geo = useMemo(() => {
-    const w = tw.used_width_m;
+    // The measured track when there is one, else the band the driver used.
+    // Nulls survive as gaps in the plot, the same as they do on the map.
+    const w: (number | null)[] = tb
+      ? tb.left_m.map((l, i) => (l == null || tb.right_m[i] == null ? null : l - tb.right_m[i]!))
+      : (tw?.used_width_m ?? []);
     const n = w.length;
-    const hi = Math.max(1, ...w);
+    const seen = w.filter((v): v is number => v != null);
+    const hi = Math.max(1, ...seen);
     const X = (i: number) => 30 + (i / Math.max(n - 1, 1)) * (VBW - 34);
     const Y = (v: number) => PLOT_BOTTOM - (v / hi) * (PLOT_BOTTOM - PLOT_TOP);
-    const pts: string[] = [];
     // ~200 points is enough for the shape and keeps the path string small.
+    // Runs of measured bins become separate filled shapes, so an unmeasured
+    // stretch is a gap in the plot rather than a dip to zero width.
     const step = Math.max(1, Math.round(n / 200));
-    for (let i = 0; i < n; i += step) pts.push(`${X(i).toFixed(1)} ${Y(w[i]).toFixed(1)}`);
-    return {
-      hi,
-      X,
-      Y,
-      area: `M ${X(0).toFixed(1)} ${PLOT_BOTTOM} L ${pts.join(" L ")} L ${X(n - 1).toFixed(1)} ${PLOT_BOTTOM} Z`,
-      n,
+    const parts: string[] = [];
+    let run: string[] = [];
+    let runStart = 0;
+    const flush = (endIdx: number) => {
+      if (run.length >= 2) {
+        parts.push(
+          `M ${X(runStart).toFixed(1)} ${PLOT_BOTTOM} L ${run.join(" L ")} L ${X(endIdx).toFixed(1)} ${PLOT_BOTTOM} Z`,
+        );
+      }
+      run = [];
     };
-  }, [tw]);
+    for (let i = 0; i < n; i += step) {
+      const v = w[i];
+      if (v == null) {
+        flush(Math.max(0, i - step));
+        continue;
+      }
+      if (run.length === 0) runStart = i;
+      run.push(`${X(i).toFixed(1)} ${Y(v).toFixed(1)}`);
+    }
+    flush(n - 1);
+
+    return { hi, X, Y, area: parts.join(" "), n };
+  }, [tb, tw]);
 
   return (
     <svg viewBox={`0 0 ${VBW} ${VBH}`} style={{ width: "100%", height: VBH, display: "block" }} aria-hidden>

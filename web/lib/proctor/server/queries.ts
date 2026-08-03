@@ -141,3 +141,44 @@ export async function traces(sessionId: string, lapNumbers?: number[]): Promise<
   `;
   return (rows as unknown as TraceRow[]).map(toTrace);
 }
+
+/* The accumulated racing surface for one track.
+ *
+ * The only read in this file that is not scoped to a session. A boundary
+ * belongs to the circuit, is widened by every ingest there, and is shared by
+ * every session at the same place — so it is keyed by track name, and a session
+ * at a track nobody has driven with the surface channel simply gets null.
+ *
+ * Elements of left_m / right_m are NULLABLE and must stay that way: a null is a
+ * bin no on-track sample has ever landed in. Coercing it to 0 would draw the
+ * track pinching shut onto the centreline, which is the one thing this data
+ * must never be able to say by accident. */
+export async function trackBoundary(
+  trackName: string | null,
+): Promise<TrackBoundaryRow | null> {
+  if (!trackName) return null;
+  const rows = await sql`
+    SELECT track_name, origin_lat, origin_lon,
+           centre_x_m, centre_y_m, normal_x, normal_y, left_m, right_m,
+           sessions_contributed, laps_contributed, updated_at
+    FROM track_boundaries
+    WHERE track_name = ${trackName}
+    LIMIT 1
+  `;
+  return (rows as unknown as TrackBoundaryRow[])[0] ?? null;
+}
+
+export interface TrackBoundaryRow {
+  track_name: string;
+  origin_lat: number;
+  origin_lon: number;
+  centre_x_m: number[];
+  centre_y_m: number[];
+  normal_x: number[];
+  normal_y: number[];
+  left_m: (number | null)[];
+  right_m: (number | null)[];
+  sessions_contributed: number;
+  laps_contributed: number;
+  updated_at: string | null;
+}

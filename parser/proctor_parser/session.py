@@ -59,6 +59,27 @@ GRID_CHANNELS = (
     "lat_accel", "long_accel", "lat_gps", "lon_gps", "abs_active",
 )
 
+# Channels that are read WHEN PRESENT and simply absent when not.
+#
+# These are deliberately not in CORE_CHANNELS. A core channel missing fails the
+# whole file with MissingChannelsError, which is right for Speed and wrong for
+# these: they have been in iRacing telemetry for years, but a file recorded by
+# an older build, or a future one that renames them, should still parse into
+# every other module rather than being rejected outright.
+#
+# A module that wants one checks `if "track_surface" in lap.raw` and reports
+# itself unavailable otherwise. Absent stays absent — it never becomes a zero,
+# which for `track_surface` would read as OffTrack for the entire session.
+OPTIONAL_CHANNEL_MAP = {
+    # irsdk_TrkLoc: -1 NotInWorld, 0 OffTrack, 1 InPitStall, 2 AproachingPits,
+    # 3 OnTrack. The sim's own answer to "was the car on the racing surface",
+    # which is the one thing a .ibt can say about where the track ENDS.
+    "track_surface": "PlayerTrackSurface",
+    # irsdk_TrkSurf: 1-4 asphalt, 5-6 concrete, 9-10 paint, 11-14 rumble
+    # (kerbs), 15-18 grass, 19-22 dirt, 23 sand, 24-25 gravel, and so on.
+    "track_surface_material": "PlayerTrackSurfaceMaterial",
+}
+
 
 class MissingChannelsError(ValueError):
     """Core channels absent from the file. Missing ≠ zero: fail loudly."""
@@ -114,6 +135,10 @@ def parse_ibt(data: bytes | IbtFile, recorded_at: datetime | None = None) -> lis
     ymeta = parse_yaml_meta(ibt.session_yaml())
 
     raw_full = {key: ibt.channel(ch) for key, ch in RAW_CHANNEL_MAP.items()}
+    # Present-or-absent, never substituted. See OPTIONAL_CHANNEL_MAP.
+    for key, ch in OPTIONAL_CHANNEL_MAP.items():
+        if ibt.has_channel(ch):
+            raw_full[key] = ibt.channel(ch)
     lap_ch = ibt.channel("Lap").astype(np.int64)
     session_num_ch = ibt.channel("SessionNum").astype(np.int64)
     on_pit = ibt.channel("OnPitRoad").astype(bool)

@@ -28,6 +28,8 @@ import type {
   ModuleAbsence,
   StintData,
   TireBands,
+  TrackBoundary,
+  TrackEdges,
   TrackEvent,
   TrackWidthData,
   TractionData,
@@ -726,6 +728,7 @@ export function absencesFrom(
     balance: "Balance",
     report_card: "Session report",
     grip: "Grip between the tires and the road",
+    track_edges: "The racing surface",
     input_response: "Your inputs against the car's response",
     stint: "How the run changed",
     track_width: "The road you used",
@@ -761,4 +764,76 @@ export function absencesFrom(
   }
 
   return out;
+}
+
+/** The accumulated boundary, shaped for the screen.
+ *
+ *  Nullable elements are preserved element by element rather than run through
+ *  `nums()`, which drops non-finite values and would silently shorten the array
+ *  — misaligning every bin after the first gap. */
+export function trackBoundaryFrom(
+  row: {
+    track_name: string;
+    origin_lat: number;
+    origin_lon: number;
+    centre_x_m: number[];
+    centre_y_m: number[];
+    normal_x: number[];
+    normal_y: number[];
+    left_m: (number | null)[];
+    right_m: (number | null)[];
+    sessions_contributed: number;
+    laps_contributed: number;
+    updated_at: string | null;
+  } | null,
+): TrackBoundary | null {
+  if (!row || !Array.isArray(row.centre_x_m) || row.centre_x_m.length === 0) return null;
+
+  const sparse = (v: unknown): (number | null)[] =>
+    Array.isArray(v)
+      ? v.map((x) => {
+          const n = Number(x);
+          return x == null || !Number.isFinite(n) ? null : n;
+        })
+      : [];
+
+  return {
+    track_name: String(row.track_name),
+    origin: { lat: Number(row.origin_lat), lon: Number(row.origin_lon) },
+    centre_x_m: nums(row.centre_x_m),
+    centre_y_m: nums(row.centre_y_m),
+    normal_x: nums(row.normal_x),
+    normal_y: nums(row.normal_y),
+    left_m: sparse(row.left_m),
+    right_m: sparse(row.right_m),
+    sessions_contributed: Number(row.sessions_contributed ?? 0),
+    laps_contributed: Number(row.laps_contributed ?? 0),
+    updated_at: row.updated_at == null ? null : String(row.updated_at),
+  };
+}
+
+/** What THIS session saw of the surface — kerb time and off-track excursions.
+ *
+ *  Separate from the boundary on purpose: the boundary is the track and grows
+ *  forever, this is one outing and does not. */
+export function trackEdgesFrom(metrics: MetricPayloads): TrackEdges | null {
+  const te = block(metrics, "track_edges");
+  if (te == null) return null;
+  // Checked field by field rather than through `ran()`: that helper is a type
+  // guard, so its negation narrows to `never` and the module's own reason —
+  // the whole point of an unmeasured block — becomes unreachable.
+  if (te.insufficient_data === true || te.error != null) {
+    return {
+      measured: false,
+      reason: String(
+        te.reason ?? te.error ?? "the module did not run on this session",
+      ),
+    };
+  }
+  return {
+    measured: true,
+    coverage_pct: Number(te.coverage_pct ?? 0),
+    surface: (te.surface as TrackEdges["surface"]) ?? undefined,
+    caveat: String(te.caveat ?? ""),
+  };
 }

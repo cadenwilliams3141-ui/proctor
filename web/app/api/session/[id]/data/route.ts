@@ -12,11 +12,18 @@ import {
   mapFrom,
   stintFrom,
   tireFrom,
+  trackBoundaryFrom,
+  trackEdgesFrom,
   trackWidthFrom,
   tractionFrom,
 } from "@/lib/proctor/server/shape";
 import { guarded } from "@/lib/proctor/server/respond";
-import { latestSessionId, sessionSummaries, traces } from "@/lib/proctor/server/queries";
+import {
+  latestSessionId,
+  sessionSummaries,
+  traces,
+  trackBoundary,
+} from "@/lib/proctor/server/queries";
 import type { Lap, MetricPayloads, SessionBundle, Trace } from "@/lib/proctor/types";
 
 /* Everything a session's screens need, in one round trip.
@@ -58,7 +65,9 @@ export async function GET(
     }
     const { pace: _pace, ...session } = summary;
 
-    const [lapRows, metricRows, traceList] = await Promise.all([
+    // The boundary is keyed by TRACK, not by session — it is the one thing in
+    // this bundle that outlives the outing being looked at.
+    const [lapRows, metricRows, traceList, boundaryRow] = await Promise.all([
       sql`
         SELECT lap_number, lap_time_s, is_valid, is_out_lap, incident_delta, is_anomalous
         FROM laps WHERE session_id = ${id}::bigint ORDER BY lap_number
@@ -67,6 +76,7 @@ export async function GET(
         SELECT metric_key, payload FROM session_metrics WHERE session_id = ${id}::bigint
       `,
       traces(id),
+      trackBoundary(session.track_name),
     ]);
 
     const laps = lapRows as unknown as Lap[];
@@ -101,6 +111,8 @@ export async function GET(
       inputResponse: inputResponseFrom(metrics),
       stint: stintFrom(metrics),
       trackWidth: trackWidthFrom(metrics),
+      trackBoundary: trackBoundaryFrom(boundaryRow),
+      trackEdges: trackEdgesFrom(metrics),
       hardware: hardwareFrom(metrics),
       gridSize,
       map,

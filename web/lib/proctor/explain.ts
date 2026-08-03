@@ -31,6 +31,8 @@ import type {
   Lap,
   StintData,
   Trace,
+  TrackBoundary,
+  TrackEdges,
   TrackWidthData,
 } from "@/lib/proctor/types";
 
@@ -573,4 +575,78 @@ export function explainSession(laps: Lap[], clean: Lap[]): Explanation {
 function fmt(s: number): string {
   const m = Math.floor(s / 60);
   return `${m}:${(s - m * 60).toFixed(3).padStart(6, "0")}`;
+}
+
+/** The road, and what was done with it.
+ *
+ *  Two different claims, and the copy keeps them apart because confusing them
+ *  is the whole risk of this view: the SURFACE is where the sim said the track
+ *  was, the BAND is where the driver put the car. */
+export function explainRoad(
+  tb: TrackBoundary | null,
+  tw: TrackWidthData | null,
+  te: TrackEdges | null,
+): Explanation[] {
+  const out: Explanation[] = [];
+
+  if (tb) {
+    const widths = tb.left_m
+      .map((l, i) => (l == null || tb.right_m[i] == null ? null : l - tb.right_m[i]!))
+      .filter((v): v is number => v != null);
+    const measured = widths.length;
+    const coverage = (measured / Math.max(tb.centre_x_m.length, 1)) * 100;
+    const median = measured
+      ? [...widths].sort((a, b) => a - b)[Math.floor(measured / 2)]
+      : 0;
+
+    out.push({
+      headline: `The track measures about ${median.toFixed(1)} m wide through the parts you have driven, from ${tb.sessions_contributed} session${tb.sessions_contributed === 1 ? "" : "s"} and ${tb.laps_contributed} laps here.`,
+      detail: `This is the sim's own answer, not a guess from your line: at every tick it reports whether the car is on the racing surface, and the road drawn here reaches as far out as that flag stayed true. It is a floor rather than the edge — the flag follows the car's centre, so the real asphalt continues a little past it${
+        coverage < 99
+          ? `, and ${(100 - coverage).toFixed(0)}% of the lap has no measurement at all yet and is drawn as a gap`
+          : ""
+      }.`,
+      lookAt:
+        coverage < 90
+          ? "Drive one slow lap along each edge of the track and the gaps fill in."
+          : undefined,
+    });
+  }
+
+  if (tw) {
+    const s = tw.summary;
+    if (s.measured && s.median_used_width_m != null) {
+      out.push({
+        headline: tb
+          ? `Of that, your lines this session covered a band ${s.median_used_width_m.toFixed(1)} m wide on average.`
+          : `Across ${tw.laps_used.length} clean laps your lines covered a band ${s.median_used_width_m.toFixed(1)} m wide on average, opening to ${s.widest_m?.toFixed(1)} m at its widest.`,
+        detail:
+          "Where that band is thin you put the car in the same place every lap; where it opens out, your line moved from lap to lap. Neither is automatically better — repeatable is not the same as fast.",
+      });
+    }
+  }
+
+  const surface = te?.surface;
+  if (surface?.measured) {
+    if (surface.excursion_count) {
+      out.push({
+        headline: `The sim recorded the car off the racing surface ${surface.excursion_count} time${surface.excursion_count === 1 ? "" : "s"} this session.`,
+        detail: `${
+          surface.off_track_pct != null
+            ? `That is ${surface.off_track_pct.toFixed(2)}% of your ticks. `
+            : ""
+        }Each one is marked on the map with the lap it happened on and what was under the car.`,
+      });
+    } else if (surface.finding) {
+      out.push({ headline: surface.finding });
+    }
+    if (surface.kerb_pct != null && surface.kerb_pct > 0) {
+      out.push({
+        headline: `You had a kerb under the car for ${surface.kerb_pct.toFixed(1)}% of the session.`,
+        detail: surface.kerb_note,
+      });
+    }
+  }
+
+  return out;
 }

@@ -100,8 +100,8 @@ def _write_session(conn, ingest_id: int, user_id: str, ps: ParsedSession) -> int
     # transaction unless it is rolled back to a savepoint.
     try:
         with conn.transaction():
-            merge_session(conn, user_id, meta.track_name, meta.track_length_km,
-                          metrics.get("track_edges"))
+            merge_session(conn, user_id, ingest_id, meta.track_name,
+                          meta.track_length_km, metrics.get("track_edges"))
     except Exception as exc:  # noqa: BLE001 — never sink the telemetry write
         log.error("track boundary not updated for %s: %s", meta.track_name, exc)
     return session_id

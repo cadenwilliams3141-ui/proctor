@@ -13,7 +13,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.track_boundary import _offsets_in_frame, _usable, _widen  # noqa: E402
+from app.track_boundary import (  # noqa: E402
+    _offsets_in_frame,
+    _usable,
+    _widen,
+    merge_session,
+)
 
 M_PER_DEG = 111320.0
 
@@ -117,3 +122,121 @@ class TestUsable:
 
     def test_accepts_a_real_payload(self):
         assert _usable(_payload_at(33.0, -84.0, [1.0])) is True
+
+
+class FakeConn:
+    """A connection that records SQL and replays one canned SELECT.
+
+    Enough to drive merge_session's branching without a database, so this suite
+    still runs on a laptop or in CI where there is no Postgres.
+    """
+
+    def __init__(self, existing=None):
+        self.existing = existing
+        self.calls: list[tuple[str, tuple]] = []
+
+    def execute(self, sql, params=None):
+        self.calls.append((" ".join(sql.split()), params or ()))
+        conn = self
+
+        class Result:
+            def fetchone(self_inner):
+                return conn.existing
+
+        return Result()
+
+    def sql_of(self, verb: str) -> tuple[str, tuple] | None:
+        return next((c for c in self.calls if c[0].startswith(verb)), None)
+
+
+def _edges_payload(offset_m: float = 5.0, laps: int = 10) -> dict:
+    n = 4
+    payload = _payload_at(33.0, -84.0, [offset_m] * n)
+    payload.update({
+        "centre_x_m": [0.0] * n,
+        "centre_y_m": [0.0] * n,
+        "normal_x": [0.0] * n,
+        "normal_y": [1.0] * n,
+        "left_m": [offset_m] * n,
+        "right_m": [-offset_m] * n,
+        "laps_used": list(range(1, laps + 1)),
+    })
+    return payload
+
+
+def _stored_row(files: list[int]):
+    n = 4
+    return (
+        33.0, -84.0,                       # origin
+        [0.0] * n, [0.0] * n,              # centre
+        [0.0] * n, [1.0] * n,              # normal
+        [4.0] * n, [-4.0] * n,             # stored edges
+        files,                             # contributing_files
+    )
+
+
+class TestContributionCounters:
+    """Re-ingesting a file must not inflate how much driving a boundary claims.
+
+    Re-ingest is routine — new analysis modules land and every session is
+    replayed — and the EDGES are naturally idempotent under it, because max/min
+    of the same data does not move. The counts are not, and they are shown to
+    the driver as "measured over N laps here".
+    """
+
+    def test_a_new_file_is_counted(self):
+        conn = FakeConn(existing=_stored_row([7]))
+        merge_session(conn, "caden", 9, "Testland", 4.4, _edges_payload(laps=12))
+        _, params = conn.sql_of("UPDATE")
+        # (left, right, session_increment, lap_increment, files, user, track)
+        assert params[2] == 1
+        assert params[3] == 12
+        assert params[4] == [7, 9]
+
+    def test_the_same_file_again_is_not_counted_twice(self):
+        conn = FakeConn(existing=_stored_row([7, 9]))
+        merge_session(conn, "caden", 9, "Testland", 4.4, _edges_payload(laps=12))
+        _, params = conn.sql_of("UPDATE")
+        assert params[2] == 0
+        assert params[3] == 0
+        assert params[4] == [7, 9]
+
+    def test_geometry_still_merges_on_a_repeat(self):
+        # The counts freeze, the edges do not: a re-parse may have improved
+        # them, and a wider measurement must still be taken.
+        conn = FakeConn(existing=_stored_row([9]))
+        merge_session(conn, "caden", 9, "Testland", 4.4, _edges_payload(offset_m=6.0))
+        _, params = conn.sql_of("UPDATE")
+        assert params[0] == pytest.approx([6.0] * 4, abs=0.02)
+
+    def test_a_timid_repeat_never_narrows_the_road(self):
+        conn = FakeConn(existing=_stored_row([9]))
+        merge_session(conn, "caden", 9, "Testland", 4.4, _edges_payload(offset_m=1.0))
+        _, params = conn.sql_of("UPDATE")
+        assert params[0] == pytest.approx([4.0] * 4, abs=0.02)
+
+    def test_the_first_file_at_a_track_seeds_the_list(self):
+        conn = FakeConn(existing=None)
+        merge_session(conn, "caden", 3, "Testland", 4.4, _edges_payload(laps=8))
+        _, params = conn.sql_of("INSERT")
+        assert params[-1] == [3]      # contributing_files
+        assert params[-2] == 8        # laps_contributed
+
+    def test_nothing_is_written_without_a_track_name(self):
+        conn = FakeConn(existing=None)
+        merge_session(conn, "caden", 1, None, 4.4, _edges_payload())
+        assert conn.calls == []
+
+    def test_nothing_is_written_when_the_module_could_not_run(self):
+        conn = FakeConn(existing=None)
+        merge_session(conn, "caden", 1, "Testland", 4.4,
+                      {"insufficient_data": True, "reason": "no surface channel"})
+        assert conn.calls == []
+
+    def test_a_grid_length_mismatch_leaves_the_boundary_alone(self):
+        # Two layouts sharing a track name would misalign every bin.
+        conn = FakeConn(existing=_stored_row([1]))
+        payload = _edges_payload()
+        payload["grid_pct"] = [0.0] * 9
+        merge_session(conn, "caden", 2, "Testland", 4.4, payload)
+        assert conn.sql_of("UPDATE") is None

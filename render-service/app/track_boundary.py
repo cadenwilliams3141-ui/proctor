@@ -93,7 +93,7 @@ def _widen(stored: list, incoming: list, keep: str) -> list[float | None]:
     return out
 
 
-def merge_session(conn, user_id: str, track_name: str | None,
+def merge_session(conn, user_id: str, ingest_id: int, track_name: str | None,
                   track_length_km: float | None, payload: dict | None) -> None:
     """Fold one session's track_edges payload into its track's boundary.
 
@@ -108,7 +108,7 @@ def merge_session(conn, user_id: str, track_name: str | None,
     row = conn.execute(
         """
         SELECT origin_lat, origin_lon, centre_x_m, centre_y_m,
-               normal_x, normal_y, left_m, right_m
+               normal_x, normal_y, left_m, right_m, contributing_files
         FROM track_boundaries WHERE user_id=%s AND track_name=%s
         """,
         (user_id, track_name),
@@ -121,15 +121,16 @@ def merge_session(conn, user_id: str, track_name: str | None,
             INSERT INTO track_boundaries (
                 user_id, track_name, origin_lat, origin_lon, track_length_km,
                 grid_pct, centre_x_m, centre_y_m, normal_x, normal_y,
-                left_m, right_m, sessions_contributed, laps_contributed)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s)
+                left_m, right_m, sessions_contributed, laps_contributed,
+                contributing_files)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s,%s)
             """,
             (
                 user_id, track_name,
                 payload["origin"]["lat"], payload["origin"]["lon"], track_length_km,
                 payload["grid_pct"], payload["centre_x_m"], payload["centre_y_m"],
                 payload["normal_x"], payload["normal_y"],
-                payload["left_m"], payload["right_m"], lap_count,
+                payload["left_m"], payload["right_m"], lap_count, [ingest_id],
             ),
         )
         return
@@ -137,6 +138,11 @@ def merge_session(conn, user_id: str, track_name: str | None,
     origin = (float(row[0]), float(row[1]))
     centre_x, centre_y, normal_x, normal_y = list(row[2]), list(row[3]), list(row[4]), list(row[5])
     stored_left, stored_right = list(row[6]), list(row[7])
+    seen_files = list(row[8] or [])
+
+    # A file already folded in still gets its geometry merged — the parser may
+    # have improved since — but must not be counted a second time.
+    already_counted = ingest_id in seen_files
 
     # A layout change under the same name would misalign every bin. The grid is
     # always 1000 points, so a mismatch means something is wrong; leave the
@@ -156,14 +162,18 @@ def merge_session(conn, user_id: str, track_name: str | None,
         UPDATE track_boundaries
            SET left_m = %s,
                right_m = %s,
-               sessions_contributed = sessions_contributed + 1,
+               sessions_contributed = sessions_contributed + %s,
                laps_contributed = laps_contributed + %s,
+               contributing_files = %s,
                updated_at = now()
          WHERE user_id = %s AND track_name = %s
         """,
         (
             _widen(stored_left, incoming_left, "left"),
             _widen(stored_right, incoming_right, "right"),
-            lap_count, user_id, track_name,
+            0 if already_counted else 1,
+            0 if already_counted else lap_count,
+            seen_files if already_counted else [*seen_files, ingest_id],
+            user_id, track_name,
         ),
     )

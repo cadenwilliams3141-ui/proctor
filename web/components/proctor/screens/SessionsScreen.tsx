@@ -7,7 +7,7 @@ import Caveat from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import { CH, INK, dim } from "@/lib/proctor/channels";
 import { data } from "@/lib/proctor/data-source";
-import { fmtDay, fmtLap } from "@/lib/proctor/format";
+import { fmtAgo, fmtDay, fmtLap } from "@/lib/proctor/format";
 import { useProctor } from "@/lib/proctor/store";
 import type { IngestRow, SessionRow } from "@/lib/proctor/types";
 
@@ -25,12 +25,54 @@ export default function SessionsScreen() {
   // "latest", so this is only known once that session has actually loaded.
   const openId = bundle ? String(bundle.session.id) : null;
 
+  /* What the watcher panel is allowed to say.
+   *
+   * It used to say "Rig watcher connected", under a green dot, above
+   * "last seen 2 min ago · 41 files this month" — and every one of those was a
+   * literal in this file. They described nothing, would have described the
+   * wrong thing forever, and never looked wrong.
+   *
+   * Nothing here can see the watcher. It is a process on a machine this app
+   * has no channel to; the only evidence of it is files ARRIVING. So that is
+   * what gets reported: when one last did, and how many this month, both
+   * counted off the ingest rows already loaded above. */
+  const watcher = (() => {
+    if (ingest == null) return null;
+    const times = ingest
+      .map((f) => Date.parse(f.uploaded_at))
+      .filter((t) => Number.isFinite(t));
+    if (times.length === 0) {
+      return { lastAgo: null, thisMonth: 0, latest: null as string | null };
+    }
+    const latest = Math.max(...times);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return {
+      lastAgo: fmtAgo(new Date(latest).toISOString()),
+      thisMonth: times.filter((t) => t >= monthStart).length,
+      latest: new Date(latest).toISOString(),
+    };
+  })();
+
   return (
     <div className="scrollpane" style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}>
       <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "stretch" }}>
-        <div
+        {/* This whole box used to be a mockup. The button had no onClick, and
+            the words "Drop a .ibt file here" sat on an element with no drop
+            handler — so both affordances it advertised were fiction.
+
+            It is one control now, and it goes to the Upload screen rather than
+            growing a second copy of the picker. A second copy is exactly how
+            this happened: the Upload screen's identical dead button was fixed,
+            and this one was not, because nothing tied them together. */}
+        <button
+          type="button"
+          onClick={() => dispatch({ t: "screen", screen: "upload" })}
           style={{
+            all: "unset",
+            boxSizing: "border-box",
             flex: 1,
+            cursor: "pointer",
             border: "1px dashed var(--color-neutral-700)",
             borderRadius: "var(--radius-md)",
             padding: "var(--space-6)",
@@ -43,38 +85,64 @@ export default function SessionsScreen() {
           }}
         >
           <FileUp size={26} strokeWidth={1.4} color={CH.a} />
-          <div style={{ font: "500 14px var(--font-heading)" }}>Drop a .ibt file here</div>
+          <div style={{ font: "500 14px var(--font-heading)" }}>Add a session by hand</div>
           <div style={{ fontSize: 12, color: dim(50), maxWidth: 420 }}>
             You should not usually need to. The rig watcher sends each file the
             moment you leave the track.
           </div>
-          <button type="button" className="btn btn-primary" style={{ marginTop: 4 }}>
+          <span className="btn btn-primary" style={{ marginTop: 4 }}>
             Choose a file
-          </button>
-        </div>
+          </span>
+        </button>
 
         <Panel style={{ width: 280, flex: "none" }} padding="var(--space-4)">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Amber, not green, and never a claim of "connected": a file
+                arriving is evidence the watcher ran, not evidence it is
+                running now. */}
             <span
               style={{
                 width: 7,
                 height: 7,
                 borderRadius: "50%",
-                background: CH.gain,
-                boxShadow: "0 0 0 3px color-mix(in srgb, #6fbf8f 22%, transparent)",
+                background: watcher?.lastAgo ? CH.gain : dim(28),
+                boxShadow: watcher?.lastAgo
+                  ? "0 0 0 3px color-mix(in srgb, #6fbf8f 22%, transparent)"
+                  : "none",
                 flex: "none",
               }}
             />
-            <span style={{ font: "500 12.5px var(--font-heading)" }}>Rig watcher connected</span>
+            <span style={{ font: "500 12.5px var(--font-heading)" }}>The rig watcher</span>
           </div>
           <div style={{ fontSize: 11.5, color: dim(52), marginTop: "var(--space-3)", lineHeight: 1.55 }}>
-            Watching the iRacing telemetry folder. Files upload once the write has
-            finished — size stable for five seconds — so a half-written file is
-            never sent.
+            Watches the iRacing telemetry folder and sends each file once the
+            write has finished — size stable for five seconds — so a half-written
+            file is never sent.
           </div>
-          <div className="num" style={{ fontSize: 11, color: dim(38), marginTop: "var(--space-3)" }}>
-            last seen 2 min ago · 41 files this month
+          <div style={{ fontSize: 11, color: dim(45), marginTop: "var(--space-3)", lineHeight: 1.6 }}>
+            {watcher == null ? (
+              "Reading the ingest history\u2026"
+            ) : watcher.lastAgo == null ? (
+              "No file has ever arrived, so there is nothing here that could say whether the watcher is running."
+            ) : (
+              <>
+                Last file arrived{" "}
+                <span className="num" style={{ color: dim(66) }}>
+                  {watcher.lastAgo}
+                </span>
+                .{" "}
+                <span className="num" style={{ color: dim(66) }}>
+                  {watcher.thisMonth}
+                </span>{" "}
+                {watcher.thisMonth === 1 ? "file" : "files"} this month.
+              </>
+            )}
           </div>
+          <Caveat>
+            This describes files arriving, not the watcher itself. Nothing here
+            can see whether that process is running on the rig — only what it
+            has sent.
+          </Caveat>
         </Panel>
       </div>
 

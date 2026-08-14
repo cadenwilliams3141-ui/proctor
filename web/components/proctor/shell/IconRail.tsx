@@ -10,7 +10,6 @@ import {
   Gauge,
   LayoutGrid,
   NotebookText,
-  Settings,
   Upload,
 } from "lucide-react";
 
@@ -99,26 +98,11 @@ export default function IconRail() {
         );
       })}
 
-      <span style={{ flex: 1 }} />
-      <button
-        type="button"
-        className="pk"
-        title="Settings"
-        aria-label="Settings"
-        style={{
-          width: 38,
-          height: 38,
-          flex: "none",
-          borderRadius: "var(--radius-md)",
-          border: 0,
-          background: "transparent",
-          display: "grid",
-          placeItems: "center",
-          color: dim(38),
-        }}
-      >
-        <Settings size={19} strokeWidth={1.6} />
-      </button>
+      {/* A Settings button used to sit here with no handler and nowhere to go.
+          There is no settings screen; the one preference the app has — the
+          detail tier — is a control in the top bar. A button that does nothing
+          is the same lie as a number that describes nothing, so it is gone
+          rather than wired to a placeholder. */}
     </nav>
   );
 }

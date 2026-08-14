@@ -70,3 +70,39 @@ export function fmtDay(iso: string | null | undefined): string {
 export function stagger(index: number, from: number, step: number): string {
   return `${(from + index * step).toFixed(2)}s`;
 }
+
+/** "4 minutes ago", "3 days ago" — relative to now, in whole units.
+ *
+ *  Returns null for a missing or unparseable timestamp rather than a string,
+ *  so a caller cannot accidentally render "NaN ago" or, worse, fall back to a
+ *  plausible-looking default. */
+export function fmtAgo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return null;
+
+  const seconds = Math.max(0, (Date.now() - then) / 1000);
+  /* Each row is "divide by THIS to reach THAT unit" — the divisor and the unit
+     it produces. Pairing a divisor with the unit it came FROM instead labelled
+     every result one step too small, so a file from twenty minutes ago
+     reported as twenty seconds and fell through to "just now". */
+  const steps: [number, string][] = [
+    [60, "minute"],
+    [60, "hour"],
+    [24, "day"],
+    [7, "week"],
+    [4.35, "month"],
+    [12, "year"],
+  ];
+
+  let value = seconds;
+  let label = "second";
+  for (const [divisor, unit] of steps) {
+    if (value < divisor) break;
+    value /= divisor;
+    label = unit;
+  }
+  const n = Math.floor(value);
+  if (label === "second" && n < 45) return "just now";
+  return `${n} ${label}${n === 1 ? "" : "s"} ago`;
+}

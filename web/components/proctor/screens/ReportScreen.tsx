@@ -883,9 +883,23 @@ function MeasuredCards({
       value: grip ? grip.session.peak_mu.toFixed(2) : "—",
       unit: "g of grip per g of load",
       color: CH.a,
+      /* Each figure is named only if that state carried enough of the session
+         to take a peak from. Braking on a qualifying run can be a fraction of
+         the ticks, and "0.00 g braking" would be a claim about the driving
+         rather than about the sample. */
       body: grip
         ? [
-            `Peak ${grip.session.peak_combined_g.toFixed(2)} g combined, ${grip.session.peak_lateral_g.toFixed(2)} g lateral, ${grip.session.peak_braking_g.toFixed(2)} g braking.`,
+            [
+              `Peak ${grip.session.peak_combined_g.toFixed(2)} g combined`,
+              grip.session.peak_lateral_g != null
+                ? `${grip.session.peak_lateral_g.toFixed(2)} g lateral`
+                : null,
+              grip.session.peak_braking_g != null
+                ? `${grip.session.peak_braking_g.toFixed(2)} g braking`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(", ") + ".",
             "Horizontal force over vertical load, both measured. It is the grip you used, not the grip the tires had.",
           ]
         : [],

@@ -17,8 +17,11 @@ over force downwards — and it is MEASURED, not modelled. What it is not:
   * It is not per-tire. There is one accelerometer on the car, so this is the
     whole car's combined ratio; it cannot say which corner ran out first.
   * vert_accel carries aerodynamic downforce, kerbs, crests and dips as well as
-    weight, so mu rises with speed on a car with wings. That is a real effect
-    and it is reported by speed band rather than averaged away.
+    weight, so on a winged car the LOAD rises with speed. The ratio does not
+    follow it up: rubber is load sensitive and gives back less force per unit of
+    load the harder it is pressed, so a fast car reads more load, more force and
+    a LOWER mu. Both halves are reported by speed band rather than averaged away,
+    and `by_load` reports the relationship itself.
 
 Everything is self-comparison inside one session: every "high" and "low" here is
 against this driver's own numbers this session, never against a target.
@@ -53,7 +56,22 @@ _MIN_VERT_MS2 = 3.0
 
 # Robust boundary. A single tick at a kerb strike is a bump, not a demonstration
 # of grip, so the "peak" reported everywhere here is a high percentile.
+#
+# CRITICAL: a percentile is only taken over ticks that were DOING the thing.
+# Braking g used to be the 98th percentile of max(-long, 0) across the whole
+# session, and every non-braking tick contributes a structural zero to that
+# array. A driver who brakes for 15% of the lap had their "peak" read off the
+# 87th percentile of their braking; one who brakes for 1.5% got a reported peak
+# of exactly 0.0 g while braking at 1.5 g. The number moved with how much of the
+# lap was spent braking rather than with how hard the car braked, and zero is
+# the one value an absence must never be rendered as.
 _PEAK_PCTILE = 98.0
+
+# A state needs this many ticks before a percentile over it means anything.
+_MIN_STATE_TICKS = 30
+
+# Ticks below this are not in the state at all; they are the structural zeros.
+_IN_STATE_G = 0.05
 
 # Speed bands for the downforce story, in m/s. Bands with fewer ticks than the
 # minimum are reported as unmeasured rather than averaged from nothing.
@@ -62,6 +80,13 @@ _MIN_BAND_TICKS = 60
 
 # Fewer clean laps than this and a stint trend is a line through noise.
 _MIN_LAPS_FOR_TREND = 4
+
+# Load bins for the grip-against-load curve, spanning the 1st-99th percentile of
+# the load the car actually carried. Trimmed at both ends because one airborne
+# tick would otherwise stretch the whole range and leave every real bin crushed
+# into the middle of it.
+_LOAD_BINS = 12
+_MIN_BIN_TICKS = 40
 
 # Pedal/steering gates that split a tick into what the car was being asked for.
 _BRAKING = 0.2
@@ -90,18 +115,25 @@ def _lap_arrays(lap: ParsedLap) -> dict[str, np.ndarray] | None:
     lon = lap.raw["long_accel"].astype(np.float64)
     vert = np.abs(lap.raw["vert_accel"].astype(np.float64))
 
-    keep = (
-        moving_mask(speed)
-        & np.isfinite(lat)
-        & np.isfinite(lon)
-        & np.isfinite(vert)
-        & (vert >= _MIN_VERT_MS2)
-    )
+    moving = moving_mask(speed)
+    finite = np.isfinite(lat) & np.isfinite(lon) & np.isfinite(vert)
+    loaded = vert >= _MIN_VERT_MS2
+    keep = moving & finite & loaded
     if not keep.any():
         return None
 
     horizontal = np.hypot(lat[keep], lon[keep])
     return {
+        # Counted, not silently dropped. The low-load guard removes exactly the
+        # ticks where the ratio would be largest, so a session with many of them
+        # is one where the reported grip is conservative for a reason the reader
+        # is entitled to know about.
+        "_counts": {
+            "stationary_excluded": int(np.count_nonzero(~moving)),
+            "low_load_excluded": int(np.count_nonzero(moving & finite & ~loaded)),
+            "non_finite_excluded": int(np.count_nonzero(moving & ~finite)),
+            "kept": int(np.count_nonzero(keep)),
+        },
         "speed": speed[keep],
         "lat": lat[keep],
         "long": lon[keep],
@@ -138,11 +170,26 @@ def compute(session: ParsedSession) -> dict:
         for key in ("mu", "combined_g", "load_g", "speed", "lat", "long", "brake", "throttle")
     }
 
+    excluded = {
+        key: int(sum(a["_counts"][key] for a in per_lap_arrays.values()))
+        for key in ("stationary_excluded", "low_load_excluded", "non_finite_excluded", "kept")
+    }
+
     payload: dict = {
         "basis": _BASIS,
         "method": _METHOD,
+        "ticks_excluded": {
+            **excluded,
+            "note": (
+                "stationary ticks are excluded because the sim forces the brake on "
+                "when the car is stopped; low-load ticks are excluded because a "
+                "ratio against near-zero vertical load is a divide-by-noise, and "
+                "those are exactly the ticks that would read as the most grip"
+            ),
+        },
         "session": _session_block(everything),
         "by_speed": _by_speed(everything),
+        "by_load": _by_load(everything),
         "by_input_state": _by_input_state(everything),
         "laps": _by_lap(session, per_lap_arrays),
         "corners": _by_corner(session, per_lap_arrays),
@@ -153,25 +200,49 @@ def compute(session: ParsedSession) -> dict:
     return payload
 
 
+def _directional_peak(values_g: np.ndarray) -> tuple[float | None, int, str | None]:
+    """Peak of a one-sided quantity, over the ticks that were doing it.
+
+    `values_g` has already been clipped at zero, so every tick that was not in
+    the state reads exactly 0. Those are excluded before the percentile rather
+    than counted as small values — including them measures the SHARE of the lap
+    spent in the state, not the force reached while in it.
+    """
+    in_state = values_g > _IN_STATE_G
+    n = int(np.count_nonzero(in_state))
+    if n < _MIN_STATE_TICKS:
+        return None, n, f"only {n} ticks above {_IN_STATE_G} g — too few to take a peak from"
+    return round(float(np.percentile(values_g[in_state], _PEAK_PCTILE)), 3), n, None
+
+
 def _session_block(a: dict[str, np.ndarray]) -> dict:
     """The whole session's demonstrated grip, in one block."""
+    braking_g, braking_n, braking_why = _directional_peak(np.maximum(-a["long"], 0.0) / _G)
+    traction_g, traction_n, traction_why = _directional_peak(np.maximum(a["long"], 0.0) / _G)
+    lateral_g, lateral_n, lateral_why = _directional_peak(np.abs(a["lat"]) / _G)
+
     return {
         "peak_mu": round(float(np.percentile(a["mu"], _PEAK_PCTILE)), 3),
         "median_mu": round(float(np.median(a["mu"])), 3),
         "peak_combined_g": round(float(np.percentile(a["combined_g"], _PEAK_PCTILE)), 3),
-        "peak_lateral_g": round(float(np.percentile(np.abs(a["lat"]) / _G, _PEAK_PCTILE)), 3),
-        "peak_braking_g": round(
-            float(np.percentile(np.maximum(-a["long"], 0.0) / _G, _PEAK_PCTILE)), 3
-        ),
-        "peak_traction_g": round(
-            float(np.percentile(np.maximum(a["long"], 0.0) / _G, _PEAK_PCTILE)), 3
-        ),
+        # Null, never 0, when the state was too rare to take a peak from. A zero
+        # here would read as "the car never braked hard", which is a claim.
+        "peak_lateral_g": lateral_g,
+        "lateral_ticks": lateral_n,
+        "lateral_reason": lateral_why,
+        "peak_braking_g": braking_g,
+        "braking_ticks": braking_n,
+        "braking_reason": braking_why,
+        "peak_traction_g": traction_g,
+        "traction_ticks": traction_n,
+        "traction_reason": traction_why,
         "median_vertical_load_g": round(float(np.median(a["load_g"])), 3),
         "peak_vertical_load_g": round(float(np.percentile(a["load_g"], _PEAK_PCTILE)), 3),
         "ticks": int(a["mu"].size),
         "note": (
-            "peak figures are the 98th percentile, not the single highest tick — "
-            "one kerb strike is a bump, not a demonstration of grip"
+            "peak figures are the 98th percentile of the ticks that were doing "
+            "the thing — one kerb strike is a bump, and a lap spent mostly not "
+            "braking must not drag the braking figure down"
         ),
     }
 
@@ -206,20 +277,160 @@ def _by_speed(a: dict[str, np.ndarray]) -> dict:
     out: dict = {"bands": bands}
     if len(measured) >= 2:
         low, high = measured[0], measured[-1]
-        change = high["peak_mu"] - low["peak_mu"]
+        load_change = high["median_vertical_load_g"] - low["median_vertical_load_g"]
+        mu_change = high["peak_mu"] - low["peak_mu"]
+
+        # Downforce is read off the LOAD column, not the mu column.
+        #
+        # This used to conclude "downforce" from mu rising with speed, which is
+        # the wrong signature and usually the opposite of what happens. Downforce
+        # presses the car down: it shows up as VERTICAL LOAD rising with speed.
+        # The tire's mu then FALLS as that load rises, because rubber is load
+        # sensitive — so a winged car reads more load, more cornering force, and
+        # LESS mu at speed, and the old test called that "no downforce".
+        #
+        # Median load per band is also the least confounded column here: peak mu
+        # and peak force both depend on whether the driver was cornering hard in
+        # that band, and the top band is mostly straight-line running.
         out["fastest_vs_slowest"] = {
             "slowest_band": low["band"],
             "fastest_band": high["band"],
-            "peak_mu_change": round(change, 3),
-            "note": (
-                "more grip at speed than at low speed, which is what aerodynamic "
-                "downforce looks like in these channels"
-                if change > 0.05
-                else "grip did not rise with speed in this session's data"
+            "load_change_g": round(load_change, 3),
+            "peak_mu_change": round(mu_change, 3),
+            "downforce_note": (
+                f"vertical load rose {load_change:.2f} g from the slowest band to "
+                "the fastest, which is what aerodynamic downforce looks like in "
+                "these channels"
+                if load_change > 0.05
+                else "vertical load did not rise with speed in this session's data"
+            ),
+            "mu_note": (
+                f"the grip ratio fell {abs(mu_change):.2f} as load rose — rubber "
+                "gives back less force per unit of load the harder it is pressed, "
+                "so more downforce and a lower ratio are the same story"
+                if mu_change < -0.05
+                else (
+                    f"the grip ratio rose {mu_change:.2f} with speed"
+                    if mu_change > 0.05
+                    else "the grip ratio held roughly level across the speed range"
+                )
             ),
         }
     else:
         out["finding"] = "too few populated speed bands to compare high speed against low"
+    return out
+
+
+def _by_load(a: dict[str, np.ndarray]) -> dict:
+    """Horizontal force against the vertical load that produced it.
+
+    This is the measurement the rest of the module is a summary of, and the one
+    a single `peak_mu` cannot carry. mu = horizontal / vertical is a RATIO, so
+    its highest values come from the ticks where the denominator was smallest —
+    a crest, a light moment over a kerb. Ranking ticks by that ratio therefore
+    finds the car at its lightest rather than at its most planted, and calling
+    the result "peak grip" reads as a claim about the tires.
+
+    Binning by load instead asks the question that has an answer: at THIS much
+    load, how much force came back. Three things fall out of the shape:
+
+      * how far right the bins reach   — how much load the car ever carried,
+                                          which is weight plus downforce
+      * whether the envelope bends     — rubber is load sensitive, so force per
+        below a straight line             unit of load falls as load rises
+      * how far the cloud sits below   — how much of the available grip went
+        the envelope                      unused, which is commitment, not tire
+
+    Still demonstrated grip, not tire capability: a bin the driver never pushed
+    in reads low because nothing asked for more.
+    """
+    load = a["load_g"]
+    if load.size == 0:
+        return {"measured": False, "reason": "no ticks with a usable vertical load"}
+
+    lo = float(np.percentile(load, 1))
+    hi = float(np.percentile(load, 99))
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi - lo < 0.05:
+        return {
+            "measured": False,
+            "reason": (
+                f"vertical load barely moved in this session (spread {hi - lo:.3f} g), "
+                "so there is no load range to describe grip across"
+            ),
+        }
+
+    edges = np.linspace(lo, hi, _LOAD_BINS + 1)
+    bins: list[dict] = []
+    for i in range(_LOAD_BINS):
+        in_bin = (load >= edges[i]) & (load < edges[i + 1] if i < _LOAD_BINS - 1 else load <= edges[i + 1])
+        n = int(np.count_nonzero(in_bin))
+        centre = round(float((edges[i] + edges[i + 1]) / 2), 3)
+        if n < _MIN_BIN_TICKS:
+            bins.append({
+                "load_g": centre,
+                "ticks": n,
+                "measured": False,
+                "reason": f"only {n} ticks at this load",
+            })
+            continue
+        peak_h = float(np.percentile(a["combined_g"][in_bin], _PEAK_PCTILE))
+        bins.append({
+            "load_g": centre,
+            "ticks": n,
+            "measured": True,
+            "peak_horizontal_g": round(peak_h, 3),
+            "median_horizontal_g": round(float(np.median(a["combined_g"][in_bin])), 3),
+            # The ratio at the bin's own load, so it is comparable across bins.
+            "peak_mu": round(peak_h / centre, 3) if centre > 0 else None,
+        })
+
+    measured = [b for b in bins if b.get("measured")]
+    out: dict = {
+        "measured": len(measured) >= 2,
+        "bins": bins,
+        "load_range_g": [round(lo, 3), round(hi, 3)],
+    }
+    if len(measured) < 2:
+        out["reason"] = "fewer than two load bins carried enough ticks to compare"
+        return out
+
+    first, last = measured[0], measured[-1]
+    out["lightest_bin"] = {"load_g": first["load_g"], "peak_mu": first["peak_mu"]}
+    out["heaviest_bin"] = {"load_g": last["load_g"], "peak_mu": last["peak_mu"]}
+
+    # The slope across ALL measured bins, weighted by how many ticks each bin
+    # holds — not first bin against last.
+    #
+    # Comparing the endpoints is what the speed-band block used to do and it is
+    # wrong here for a specific reason: the lightest bins are crest and kerb
+    # moments, where the car is unloaded AND the driver is not asking for
+    # anything, so they read low on commitment rather than on grip. On real data
+    # they sit at a few dozen ticks against a few thousand in the middle. Taking
+    # the endpoints let those bins set the sign of the finding, and they
+    # reported "grip rose with load" for a tire that plainly lost 0.4 of ratio
+    # across the range. Weighting by ticks lets the populated middle decide it.
+    loads = np.array([b["load_g"] for b in measured], dtype=np.float64)
+    mus = np.array([b["peak_mu"] for b in measured], dtype=np.float64)
+    weights = np.array([b["ticks"] for b in measured], dtype=np.float64)
+    slope = float(np.polyfit(loads, mus, 1, w=np.sqrt(weights))[0])
+    span = float(loads[-1] - loads[0])
+    mu_change = slope * span
+
+    out["mu_per_g_of_load"] = round(slope, 3)
+    out["mu_change_across_load"] = round(mu_change, 3)
+    mu_drop = -mu_change
+    out["load_sensitivity_note"] = (
+        f"force per unit of load fell {mu_drop:.2f} across the {span:.2f} g of load "
+        "this session covered — the signature of load-sensitive rubber"
+        if mu_drop > 0.05
+        else (
+            f"force per unit of load rose {abs(mu_drop):.2f} as load increased, which "
+            "is not the usual direction for a tire and is worth a second session "
+            "before reading anything into it"
+            if mu_drop < -0.05
+            else "force per unit of load held roughly level across the load range"
+        )
+    )
     return out
 
 

@@ -80,6 +80,149 @@ def test_grip_by_speed_marks_empty_bands_unmeasured():
     assert all("too few" in b["reason"] for b in empty)
 
 
+def _physical_session(*, load_sens: float = 0.13, brake_share: float = 0.04):
+    """A session whose vertical load actually moves, and moves for reasons.
+
+    make_core_channels holds VertAccel flat at 9.8, so mu collapses to
+    horizontal/1g and every question grip exists to answer is degenerate — which
+    is how four measurement bugs lived in this module under a green suite. Here
+    the car gains downforce with speed, and the rubber is load sensitive: the
+    force it returns per unit of load FALLS as the load rises. Braking is
+    deliberately confined to `brake_share` of the lap so the dilution bug has
+    something to bite on.
+    """
+    ch = make_core_channels(n_laps=8, ticks_per_lap=TICKS_PER_LAP, slow_lap=None,
+                            incident_lap=None)
+    n = len(ch["Speed"])
+    dist = ch["LapDistPct"]
+    g = 9.81
+
+    # Speed: one long straight and one slow corner per lap.
+    v = 25.0 + 45.0 * (0.5 + 0.5 * np.cos(dist * 2 * np.pi))
+    v[ch["Speed"] == 0.0] = 0.0
+    moving = v > 5.0
+
+    load_g = np.where(moving, 1.0 + 0.55 * (v / 70.0) ** 2, 1.0)
+    mu_avail = 1.62 * np.power(np.maximum(load_g, 0.05), -load_sens)
+
+    # Braking sits on the approach to the corner, which is both where a driver
+    # actually brakes and where they are committed — a braking zone parked on a
+    # coasting straight would test the dilution bug with a force too small to
+    # tell apart from the bug.
+    brake_start = 0.42 - brake_share
+    braking = (dist >= brake_start) & (dist < 0.42)
+
+    # Committed in the corner and under braking, coasting on the straight.
+    corner = np.exp(-0.5 * (((dist - 0.5) / 0.10) ** 2))
+    commitment = np.clip(0.15 + 0.85 * np.maximum(corner, braking.astype(float)), 0.0, 1.0)
+    horizontal_g = mu_avail * load_g * commitment
+
+    lat_g = np.where(braking, 0.0, horizontal_g)
+    long_g = np.where(braking, -horizontal_g, 0.0)
+
+    ch["Speed"] = v
+    ch["LatAccel"] = lat_g * g
+    ch["LongAccel"] = long_g * g
+    ch["VertAccel"] = -load_g * g
+    ch["BrakeRaw"] = np.where(braking, 0.9, 0.0)
+    ch["Brake"] = ch["BrakeRaw"].copy()
+    ch["Throttle"] = np.where(braking, 0.0, 0.8)
+    return parse_ibt(build_ibt(ch))[0]
+
+
+def test_grip_peak_braking_is_not_diluted_by_ticks_that_were_not_braking():
+    """The bug: percentiles taken over the whole session, zeros included.
+
+    max(-long, 0) is exactly 0 on every tick that was not braking. Taking the
+    98th percentile of THAT array measures the share of the lap spent braking,
+    not the force reached while braking — and when braking is rarer than 2% of
+    ticks the reported peak is exactly 0.0 g for a car that braked hard.
+    """
+    session = _physical_session(brake_share=0.015)
+    block = grip.compute(session)["session"]
+
+    assert block["braking_ticks"] > 0, "the fixture does brake"
+    assert block["peak_braking_g"] is not None
+    # The fixture brakes at well over 1 g; a diluted percentile reported 0.0.
+    assert block["peak_braking_g"] > 0.8, block["peak_braking_g"]
+    assert block["peak_braking_g"] != 0.0
+
+
+def test_grip_reports_null_not_zero_when_a_state_is_too_rare():
+    """Missing is not zero — least of all for a force."""
+    session = _physical_session(brake_share=0.0)
+    block = grip.compute(session)["session"]
+
+    assert block["peak_braking_g"] is None
+    assert block["braking_ticks"] == 0
+    assert "too few" in block["braking_reason"]
+
+
+def test_grip_reads_downforce_off_the_load_column_not_the_ratio():
+    """Downforce presses the car DOWN; it does not raise the friction ratio.
+
+    The old test for it was `peak_mu` rising with speed, which is the opposite
+    of what a load-sensitive tire does under downforce: load rises, force rises,
+    and the ratio falls. A winged car was therefore reported as having no
+    downforce.
+    """
+    payload = grip.compute(_physical_session())
+    fvs = payload["by_speed"]["fastest_vs_slowest"]
+
+    assert fvs["load_change_g"] > 0.05, "the fixture gains load with speed"
+    assert "downforce" in fvs["downforce_note"]
+    # The ratio falls while the load rises, and both are stated.
+    assert fvs["peak_mu_change"] < 0
+    assert "load sensitive" in fvs["mu_note"] or "less force" in fvs["mu_note"]
+
+
+def test_grip_load_curve_recovers_the_direction_of_load_sensitivity():
+    payload = grip.compute(_physical_session(load_sens=0.13))
+    by_load = payload["by_load"]
+
+    assert by_load["measured"] is True
+    assert len(by_load["bins"]) > 2
+    # Rubber that is load sensitive returns less per unit of load as load rises.
+    assert by_load["mu_per_g_of_load"] < 0, by_load["mu_per_g_of_load"]
+    assert "fell" in by_load["load_sensitivity_note"]
+
+
+def test_grip_load_slope_is_not_set_by_the_sparsest_bins():
+    """The slope is a tick-weighted fit, not first-bin against last-bin.
+
+    The lightest bins are crest and kerb moments where the driver is not asking
+    for anything, so they read low on commitment rather than on grip. Comparing
+    endpoints let a bin holding a few dozen ticks set the sign of the finding
+    against thousands in the populated middle.
+    """
+    by_load = grip.compute(_physical_session())["by_load"]
+    measured = [b for b in by_load["bins"] if b["measured"]]
+
+    endpoint_change = measured[-1]["peak_mu"] - measured[0]["peak_mu"]
+    weighted_change = by_load["mu_change_across_load"]
+
+    # Whatever the endpoints happen to say, the reported figure is the fit.
+    assert weighted_change == pytest.approx(
+        by_load["mu_per_g_of_load"] * (measured[-1]["load_g"] - measured[0]["load_g"]),
+        abs=1e-3,
+    )
+    assert weighted_change < 0
+    # And the fit is genuinely doing work rather than echoing the endpoints.
+    assert endpoint_change != pytest.approx(weighted_change, abs=1e-6)
+
+
+def test_grip_counts_the_ticks_it_threw_away():
+    """The low-load guard drops exactly the ticks that would read as most grip."""
+    payload = grip.compute(_physical_session())
+    excluded = payload["ticks_excluded"]
+
+    assert excluded["kept"] == payload["session"]["ticks"]
+    assert excluded["stationary_excluded"] > 0, "the out lap starts stationary"
+    for key in ("low_load_excluded", "non_finite_excluded"):
+        assert isinstance(excluded[key], int)
+    assert json.loads(json.dumps(payload))
+
+
 # --- input_response -------------------------------------------------------
 
 def test_input_response_brake_pedal_against_applied():

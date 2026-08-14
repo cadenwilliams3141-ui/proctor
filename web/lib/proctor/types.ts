@@ -308,26 +308,78 @@ export interface GripCorner {
 
 /** Demonstrated grip: horizontal force over vertical load, both measured.
  *  It is the grip that was USED, never the grip the tires had. */
+/** One bin of the grip-against-load curve.
+ *
+ *  The curve is the measurement the rest of the grip block summarises. A single
+ *  `peak_mu` cannot carry it: mu is a RATIO, so its largest values come from the
+ *  ticks with the smallest denominator — the car at its lightest, over a crest.
+ *  Binning by load asks the question that has an answer instead: at this much
+ *  load, how much force came back. */
+export interface GripLoadBin {
+  load_g: number;
+  ticks: number;
+  measured: boolean;
+  reason?: string;
+  peak_horizontal_g?: number;
+  median_horizontal_g?: number;
+  peak_mu?: number | null;
+}
+
+export interface GripLoadCurve {
+  measured: boolean;
+  reason?: string;
+  bins: GripLoadBin[];
+  load_range_g?: [number, number];
+  lightest_bin?: { load_g: number; peak_mu: number };
+  heaviest_bin?: { load_g: number; peak_mu: number };
+  /** Tick-weighted slope of mu against load. Negative = load-sensitive rubber. */
+  mu_per_g_of_load?: number;
+  mu_change_across_load?: number;
+  load_sensitivity_note?: string;
+}
+
 export interface GripData {
   session: {
     peak_mu: number;
     median_mu: number;
     peak_combined_g: number;
-    peak_lateral_g: number;
-    peak_braking_g: number;
-    peak_traction_g: number;
+    /* Null, never 0, when the car spent too little of the session in that state
+       to take a peak from. A zero would read as "never braked hard", which is a
+       claim about the driving rather than about the sample. */
+    peak_lateral_g: number | null;
+    lateral_ticks: number;
+    lateral_reason: string | null;
+    peak_braking_g: number | null;
+    braking_ticks: number;
+    braking_reason: string | null;
+    peak_traction_g: number | null;
+    traction_ticks: number;
+    traction_reason: string | null;
     median_vertical_load_g: number;
     peak_vertical_load_g: number;
     ticks: number;
     note: string;
   };
+  /** What the guards removed, so a conservative figure says why it is one. */
+  ticksExcluded: {
+    stationary_excluded: number;
+    low_load_excluded: number;
+    non_finite_excluded: number;
+    kept: number;
+    note: string;
+  } | null;
+  byLoad: GripLoadCurve | null;
   bands: GripBand[];
   /** Grip rising with speed is what downforce looks like in these channels. */
   downforce: {
     slowest_band: string;
     fastest_band: string;
+    /** Load rising with speed IS the downforce signature. mu falling is the
+     *  tire's load sensitivity answering it, not an absence of downforce. */
+    load_change_g: number;
     peak_mu_change: number;
-    note: string;
+    downforce_note: string;
+    mu_note: string;
   } | null;
   states: GripState[];
   laps: GripLap[];

@@ -27,6 +27,7 @@ import { Ban, CircleAlert, Gauge, TriangleAlert } from "lucide-react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Explain from "@/components/proctor/ui/Explain";
+import GripLoadCurve from "@/components/proctor/views/GripLoadCurve";
 import Panel from "@/components/proctor/ui/Panel";
 import { CH, dim, inkA } from "@/lib/proctor/channels";
 import { explainEvent, explainGrip, explainPattern, wheelName } from "@/lib/proctor/explain";
@@ -305,10 +306,25 @@ function GripSection({ grip }: { grip: GripData }) {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)" }}>
           <Figure label="peak grip" value={grip.session.peak_mu.toFixed(2)} unit="g per g" accent />
-          <Figure label="peak lateral" value={grip.session.peak_lateral_g.toFixed(2)} unit="g" />
-          <Figure label="peak braking" value={grip.session.peak_braking_g.toFixed(2)} unit="g" />
+          <GripFigure
+            label="peak lateral"
+            g={grip.session.peak_lateral_g}
+            ticks={grip.session.lateral_ticks}
+            why={grip.session.lateral_reason}
+          />
+          <GripFigure
+            label="peak braking"
+            g={grip.session.peak_braking_g}
+            ticks={grip.session.braking_ticks}
+            why={grip.session.braking_reason}
+          />
           <Figure label="median grip used" value={grip.session.median_mu.toFixed(2)} unit="g per g" />
-          <Figure label="peak traction" value={grip.session.peak_traction_g.toFixed(2)} unit="g" />
+          <GripFigure
+            label="peak traction"
+            g={grip.session.peak_traction_g}
+            ticks={grip.session.traction_ticks}
+            why={grip.session.traction_reason}
+          />
           <Figure
             label="load at its peak"
             value={grip.session.peak_vertical_load_g.toFixed(2)}
@@ -325,6 +341,8 @@ function GripSection({ grip }: { grip: GripData }) {
       </Panel>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", minWidth: 0 }}>
+        <GripLoadCurve grip={grip} />
+
         <Panel title="In plain English" padding="var(--space-4)">
           <Explain items={explainGrip(grip)} max={5} />
         </Panel>
@@ -350,6 +368,50 @@ function GripSection({ grip }: { grip: GripData }) {
   );
 }
 
+/** A directional peak that the session may simply not contain enough of.
+ *
+ *  Renders the module's own reason instead of a number when the state was too
+ *  rare to take a peak from — the figure it replaces used to be a hard 0.00,
+ *  which reads as "the car never braked hard" rather than "you barely braked". */
+function GripFigure({
+  label,
+  g,
+  ticks,
+  why,
+}: {
+  label: string;
+  g: number | null;
+  ticks: number;
+  why: string | null;
+}) {
+  if (g == null) {
+    return (
+      <div>
+        <Eyebrow size={9.5}>{label}</Eyebrow>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 2 }}>
+          <span style={{ font: "500 18px var(--font-heading)", color: dim(30) }}>&mdash;</span>
+        </div>
+        <div style={{ fontSize: 10, color: dim(38), lineHeight: 1.45, marginTop: 1 }}>
+          {why ?? `only ${ticks} ticks`}
+        </div>
+      </div>
+    );
+  }
+  return <Figure label={label} value={g.toFixed(2)} unit="g" />;
+}
+
+/* Grip against speed, in two columns rather than one.
+ *
+ * This used to plot the ratio alone, and the ratio FALLS with speed on any
+ * winged car — so a reader saw "grip drops the faster I go" and had no way to
+ * see the other half. Downforce does not raise the ratio; it raises the LOAD,
+ * and load-sensitive rubber then returns a little less per unit of it. Both
+ * columns together are the story; either one alone misleads.
+ *
+ * Two scales, so two sets of bars side by side with their own headers — never
+ * one plot with two axes, which would invent a relationship between a ratio and
+ * a force by whatever alignment the scales happened to land on.
+ */
 function SpeedBands({ grip }: { grip: GripData }) {
   const measured = grip.bands.filter((b) => b.measured && b.peak_mu != null);
   if (measured.length === 0) {
@@ -359,38 +421,96 @@ function SpeedBands({ grip }: { grip: GripData }) {
       </div>
     );
   }
-  const hi = Math.max(...measured.map((b) => b.peak_mu as number), 0.1);
+  const muHi = Math.max(...measured.map((b) => b.peak_mu as number), 0.1);
+  const loadHi = Math.max(
+    ...measured.map((b) => b.median_vertical_load_g ?? 0),
+    0.1,
+  );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-      {grip.bands.map((b) => (
-        <div key={b.band} style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-          <span style={{ width: 88, fontSize: 10.5, color: dim(50), textAlign: "right" }}>{b.band}</span>
-          <span style={{ flex: 1, height: 9, borderRadius: 5, background: dim(7), overflow: "hidden" }}>
-            {b.measured && b.peak_mu != null && (
-              <span
-                style={{
-                  display: "block",
-                  height: "100%",
-                  width: `${((b.peak_mu / hi) * 100).toFixed(1)}%`,
-                  borderRadius: 5,
-                  background: CH.a,
-                  transformOrigin: "left",
-                  animation: "growX .55s cubic-bezier(.2,.8,.2,1) both",
-                }}
-              />
-            )}
-          </span>
-          <span
-            className={b.measured ? "num" : undefined}
-            style={{ width: 74, textAlign: "right", fontSize: 10.5, color: b.measured ? dim(62) : dim(32) }}
-            title={b.reason}
-          >
-            {b.measured && b.peak_mu != null ? b.peak_mu.toFixed(2) : "too few ticks"}
-          </span>
-        </div>
-      ))}
+    <div>
+      <div style={{ display: "flex", gap: "var(--space-3)", marginBottom: 5 }}>
+        <span style={{ width: 88 }} />
+        <Eyebrow size={9} style={{ flex: 1, color: dim(38) }}>
+          load pressing down
+        </Eyebrow>
+        <Eyebrow size={9} style={{ flex: 1, color: dim(38) }}>
+          force back per g of load
+        </Eyebrow>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        {grip.bands.map((b) => (
+          <div key={b.band} style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+            <span style={{ width: 88, fontSize: 10.5, color: dim(50), textAlign: "right" }}>
+              {b.band}
+            </span>
+            <BandBar
+              value={b.measured ? b.median_vertical_load_g ?? null : null}
+              max={loadHi}
+              color={CH.b}
+              reason={b.reason}
+            />
+            <BandBar
+              value={b.measured ? b.peak_mu ?? null : null}
+              max={muHi}
+              color={CH.a}
+              reason={b.reason}
+            />
+          </div>
+        ))}
+      </div>
+
+      {grip.downforce && (
+        <p style={{ margin: "var(--space-3) 0 0", fontSize: 11, lineHeight: 1.55, color: dim(50) }}>
+          {grip.downforce.downforce_note}. {grip.downforce.mu_note}.
+        </p>
+      )}
     </div>
+  );
+}
+
+function BandBar({
+  value,
+  max,
+  color,
+  reason,
+}: {
+  value: number | null;
+  max: number;
+  color: string;
+  reason?: string;
+}) {
+  return (
+    <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+      <span style={{ flex: 1, height: 9, borderRadius: 5, background: dim(7), overflow: "hidden" }}>
+        {value != null && (
+          <span
+            style={{
+              display: "block",
+              height: "100%",
+              width: `${((value / max) * 100).toFixed(1)}%`,
+              borderRadius: 5,
+              background: color,
+              transformOrigin: "left",
+              animation: "growX .55s cubic-bezier(.2,.8,.2,1) both",
+            }}
+          />
+        )}
+      </span>
+      <span
+        className={value != null ? "num" : undefined}
+        style={{
+          width: 46,
+          textAlign: "right",
+          fontSize: 10.5,
+          color: value != null ? dim(62) : dim(32),
+        }}
+        title={reason}
+      >
+        {value != null ? value.toFixed(2) : "—"}
+      </span>
+    </span>
   );
 }
 

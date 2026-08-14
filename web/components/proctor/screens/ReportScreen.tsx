@@ -24,6 +24,7 @@
 import { useMemo, useState } from "react";
 import { Ban, Fuel, Gauge, ShieldCheck, Thermometer, TrendingDown, Waves } from "lucide-react";
 
+import Absences from "@/components/proctor/ui/Absences";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Explain, { Lede } from "@/components/proctor/ui/Explain";
 import Panel from "@/components/proctor/ui/Panel";
@@ -35,6 +36,25 @@ import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
 import { isUsable, type Lap, type StintSeries } from "@/lib/proctor/types";
 import { atLeast } from "@/lib/tier";
+
+/* Absences this screen states in its own words, where the reader went looking
+   for the number. The summary block at the bottom skips them so that one
+   missing measurement is reported once rather than twice.
+ *
+ * Tier-dependent on purpose: a card that a lower detail level does not render
+ * is not voicing anything, so its absence has to fall back through to the
+ * summary block. Absences are never tier-gated — hiding a negative result at a
+ * lower detail level would leave a gap the reader has to notice themselves. */
+function voicedHere(deep: boolean): ReadonlySet<string> {
+  const keys = [
+    "stint", // → StintSection (always) and the "Fuel used" card
+    "input_response", // → ResponseSection (always)
+    "grip", // → the "Grip you demonstrated" card (always)
+  ];
+  // The tire card is deep-only.
+  if (deep) keys.push("tire_temp_curve", "tire_temps");
+  return new Set(keys);
+}
 
 export default function ReportScreen() {
   const { bundle, state } = useProctor();
@@ -81,7 +101,7 @@ export default function ReportScreen() {
             }}
           >
             <span>
-              {[session.car_name, session.session_type, fmtDay(session.recorded_at), `${session.lap_count} laps`]
+              {[session.car_name, session.session_type, fmtDay(session.recorded_at), `${session.lap_count} ${session.lap_count === 1 ? "lap" : "laps"}`]
                 .filter(Boolean)
                 .join(" · ")}
             </span>
@@ -124,20 +144,10 @@ export default function ReportScreen() {
       </section>
 
       {/* ── How the run changed ──────────────────────────────────────────── */}
-      <section style={{ marginTop: "var(--space-8)" }}>
-        <h2 style={{ fontSize: 13, marginBottom: "var(--space-3)" }}>
-          How the run changed, first lap to last
-        </h2>
-        <StintSection />
-      </section>
+      <StintSection />
 
       {/* ── Inputs against response ──────────────────────────────────────── */}
-      <section style={{ marginTop: "var(--space-8)" }}>
-        <h2 style={{ fontSize: 13, marginBottom: "var(--space-3)" }}>
-          What you asked for, and what the car did with it
-        </h2>
-        <ResponseSection />
-      </section>
+      <ResponseSection />
 
       {/* ── The measured cards ───────────────────────────────────────────── */}
       <section
@@ -149,22 +159,15 @@ export default function ReportScreen() {
         }}
       >
         <MeasuredCards deep={deep} stats={stats} />
+      </section>
 
-        {/* Absent modules are findings too. */}
-        {bundle.absences.map((a) => (
-          <Panel key={a.key} padding="var(--space-4)">
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <Ban size={15} strokeWidth={1.7} color={dim(45)} />
-              <span style={{ font: "500 13px var(--font-heading)", color: dim(72) }}>{a.title}</span>
-            </div>
-            <div style={{ fontSize: 12, color: dim(55), lineHeight: 1.55 }}>{a.reason}</div>
-            <div style={{ fontSize: 10.5, color: dim(36), marginTop: "var(--space-3)" }}>
-              {a.permanent
-                ? "Permanently unavailable from disk telemetry — not a gap that a future upload will fill."
-                : "Unavailable for this session."}
-            </div>
-          </Panel>
-        ))}
+      {/* ── What is not here ─────────────────────────────────────────────────
+          One block, below the measurements, grouped by why. Absences that a
+          section above already voiced in its own words are dropped: the reader
+          met them where they went looking for the number, and repeating them
+          here turned one missing thing into two. */}
+      <section style={{ marginTop: "var(--space-8)" }}>
+        <Absences absences={bundle.absences} exclude={voicedHere(deep)} />
       </section>
     </div>
   );
@@ -429,6 +432,57 @@ const TREND_ROWS: { key: string; label: string; good: "down" | "up" | "neither" 
   { key: "abs_engaged_pct", label: "Braking with the ABS in", good: "neither" },
 ];
 
+/* A section heading. Sections own their own heading now, so a section with
+   nothing to show can render as one quiet line instead of a full-weight
+   heading above an empty box — the empty box being the thing that made a
+   session with plenty to say look broken. */
+function SectionHead({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 style={{ fontSize: 13, margin: "0 0 var(--space-3)" }}>{children}</h2>
+  );
+}
+
+/** A section that has nothing to show: the heading, dimmed, and the reason on
+ *  the same line. No panel — a panel drawn around nothing is exactly the blank
+ *  box this screen had too many of. The sentence is still the module's own. */
+function Unmeasured({ heading, reason }: { heading: string; reason: string }) {
+  return (
+    <section style={{ marginTop: "var(--space-6)" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <h2 style={{ fontSize: 13, margin: 0, color: dim(52), fontWeight: 500 }}>{heading}</h2>
+        <span
+          style={{
+            font: "500 9.5px var(--font-heading)",
+            letterSpacing: ".1em",
+            textTransform: "uppercase",
+            color: dim(38),
+            padding: "2px 6px",
+            borderRadius: "var(--radius-sm)",
+            boxShadow: `inset 0 0 0 1px ${dim(10)}`,
+          }}
+        >
+          not measured
+        </span>
+      </div>
+      <p
+        style={{
+          margin: "5px 0 0",
+          fontSize: 11.5,
+          lineHeight: 1.6,
+          color: dim(44),
+          maxWidth: 680,
+          textWrap: "pretty",
+        }}
+      >
+        {reason}
+      </p>
+    </section>
+  );
+}
+
+const STINT_HEADING = "How the run changed, first lap to last";
+const RESPONSE_HEADING = "What you asked for, and what the car did with it";
+
 function StintSection() {
   const { bundle } = useProctor();
   const stint = bundle?.stint ?? null;
@@ -436,18 +490,21 @@ function StintSection() {
   if (!stint) {
     const absence = bundle?.absences.find((a) => a.key === "stint");
     return (
-      <Panel padding="var(--space-4)">
-        <div style={{ fontSize: 12.5, color: dim(62), lineHeight: 1.65, maxWidth: 640 }}>
-          {absence?.reason ??
-            "This session was ingested before the module that measures how a run changes existed. Re-ingest it and this section fills in — nothing about the file needs to change."}
-        </div>
-      </Panel>
+      <Unmeasured
+        heading={STINT_HEADING}
+        reason={
+          absence?.reason ??
+          "This session was ingested before the module that measures how a run changes existed. Re-ingest it from the rig and this section fills in — nothing about the file needs to change."
+        }
+      />
     );
   }
 
   const series = stint.trends.series ?? {};
 
   return (
+    <section style={{ marginTop: "var(--space-8)" }}>
+    <SectionHead>{STINT_HEADING}</SectionHead>
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)", gap: "var(--space-4)" }}>
       <Panel
         title="What drifted"
@@ -505,6 +562,7 @@ function StintSection() {
         )}
       </div>
     </div>
+    </section>
   );
 }
 
@@ -576,12 +634,13 @@ function ResponseSection() {
   if (!ir) {
     const absence = bundle?.absences.find((a) => a.key === "input_response");
     return (
-      <Panel padding="var(--space-4)">
-        <div style={{ fontSize: 12.5, color: dim(62), lineHeight: 1.65, maxWidth: 640 }}>
-          {absence?.reason ??
-            "This session was ingested before the module that compares your inputs against the car's response existed. Re-ingest it and this section fills in."}
-        </div>
-      </Panel>
+      <Unmeasured
+        heading={RESPONSE_HEADING}
+        reason={
+          absence?.reason ??
+          "This session was ingested before the module that compares your inputs against the car's response existed. Re-ingest it from the rig and this section fills in."
+        }
+      />
     );
   }
 
@@ -589,6 +648,8 @@ function ResponseSection() {
   const throttle = ir.throttle;
 
   return (
+    <section style={{ marginTop: "var(--space-8)" }}>
+    <SectionHead>{RESPONSE_HEADING}</SectionHead>
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.1fr)", gap: "var(--space-4)" }}>
       <Panel
         title="The gap between your controls and the car"
@@ -667,6 +728,7 @@ function ResponseSection() {
         <Explain items={explainInputResponse(ir)} max={5} />
       </Panel>
     </div>
+    </section>
   );
 }
 
@@ -734,6 +796,15 @@ function MeasuredCards({
   const flagged = bundle.laps.filter((l) => l.is_anomalous).length;
   const firstClean = stats.times[0];
 
+  /* The module's own words for a card that has no number. The SHORT form: a
+     card tile is a tight space, and the same forty-word sentence repeated
+     across three tiles and two section notes is the clutter this screen was
+     being cleaned of. The full reason stays one scroll away, in the summary
+     block, which is what keeps the short form from becoming the only thing the
+     reader is ever told. */
+  const why = (key: string, fallback: string) =>
+    bundle.absences.find((a) => a.key === key)?.short ?? fallback;
+
   /* Every value here comes off the bundle. This screen used to carry a brake
      ceiling of "93.4", a fuel figure of "31.4" and an anomalous-lap count of
      "1" as literals in its own source — numbers that survived a change of
@@ -747,6 +818,10 @@ function MeasuredCards({
     body: string[];
     caveat: string;
     show: boolean;
+    /* Set when there is no number. The card then renders as a compact tile
+       carrying this sentence, instead of a full-size card built around an em
+       dash with two paragraphs explaining a measurement that is not there. */
+    unmeasured?: string;
   }[] = [
     {
       title: "Pace over the run",
@@ -761,6 +836,10 @@ function MeasuredCards({
       ],
       caveat: "Compares your own laps within one session. Nothing outside it is used.",
       show: true,
+      unmeasured:
+        firstClean != null && stats.best != null
+          ? undefined
+          : "No lap in this session was clean enough to time, so there is no first-to-best gap to state.",
     },
     {
       title: "Consistency",
@@ -774,6 +853,15 @@ function MeasuredCards({
       caveat:
         "A spread, not a grade. There is no target value here, because the right spread depends on the run you were doing.",
       show: true,
+      /* One clean lap has a standard deviation of zero, which would read as
+         perfect consistency. It is not a measurement of anything — a spread
+         needs at least two laps to be a spread. */
+      unmeasured:
+        stats.times.length >= 2
+          ? undefined
+          : stats.times.length === 1
+            ? "Only one clean lap in this session. A spread needs at least two."
+            : "No clean laps in this session to take a spread across.",
     },
     {
       title: "Reference lap",
@@ -784,6 +872,10 @@ function MeasuredCards({
       body: ["Your own fastest clean lap. Everything on the Analyze screen is measured against it."],
       caveat: noteFor("lap.reference"),
       show: true,
+      unmeasured:
+        stats.best != null
+          ? undefined
+          : "No lap was clean enough to serve as a reference, so nothing on Analyze has a baseline.",
     },
     {
       title: "Grip you demonstrated",
@@ -796,9 +888,12 @@ function MeasuredCards({
             `Peak ${grip.session.peak_combined_g.toFixed(2)} g combined, ${grip.session.peak_lateral_g.toFixed(2)} g lateral, ${grip.session.peak_braking_g.toFixed(2)} g braking.`,
             "Horizontal force over vertical load, both measured. It is the grip you used, not the grip the tires had.",
           ]
-        : ["Not computed for this session."],
+        : [],
       caveat: noteFor("grip.mu"),
       show: true,
+      unmeasured: grip
+        ? undefined
+        : why("grip", "Not computed for this session."),
     },
     {
       title: "Brake ceiling",
@@ -811,6 +906,12 @@ function MeasuredCards({
       ],
       caveat: noteFor("brake.ceiling"),
       show: deep,
+      unmeasured:
+        hw?.brake_ceiling_pct != null
+          ? undefined
+          : hw
+            ? (hw.brake_reason ?? "The brake channels carried nothing measurable while moving.")
+            : why("hardware", "The hardware module produced nothing for this session."),
     },
     {
       title: "Left-front surface temp",
@@ -819,13 +920,24 @@ function MeasuredCards({
         bundle.tire.middle_c.length > 0
           ? `${Math.round(median(bundle.tire.middle_c))}`
           : "—",
-      unit: bundle.tire.middle_c.length > 0 ? "°C, middle band median" : "no curve stored",
+      unit: "°C, middle band median",
       body: [
         "Left-front is the only tire-temperature channel in the file, split into inner, middle and outer bands.",
         "The full curve against track position is on the Map & delta view.",
       ],
       caveat: noteFor("tire.other_corners"),
       show: deep,
+      /* An empty strip means either "the module ran but stored no across-lap
+         curve" or "the module did not run at all", and those carry different
+         absence keys. Whichever is present is the one that describes this
+         session; only one of them can be. */
+      unmeasured:
+        bundle.tire.middle_c.length > 0
+          ? undefined
+          : (bundle.absences.find(
+              (a) => a.key === "tire_temp_curve" || a.key === "tire_temps",
+            )?.short ??
+            "No across-lap tire-temperature curve is stored for this session."),
     },
     {
       title: "Fuel used",
@@ -839,6 +951,19 @@ function MeasuredCards({
       caveat:
         "Fuel level is a measured channel, so this is a reading rather than an estimate. It says nothing about what a race stint would need.",
       show: deep,
+      /* Two different absences wear the same em dash here: the stint module
+         never ran, or it ran and the fuel channel had nothing to say. Only the
+         first has an absence entry, so the second uses the module's own note —
+         reaching for `why("stint")` there would report a missing module that
+         is in fact present. */
+      unmeasured:
+        stint?.fuel.measured && stint.fuel.total_used_l != null
+          ? undefined
+          : stint
+            ? (stint.fuel.reason ??
+              stint.fuel.note ??
+              "The fuel-level channel carried nothing measurable across this session.")
+            : why("stint", "Not computed for this session."),
     },
     {
       title: "Flagged laps",
@@ -856,34 +981,63 @@ function MeasuredCards({
     },
   ];
 
+  /* Cards that have a number keep their full weight. Cards that do not are
+     demoted rather than dropped: the reader still learns the measurement
+     exists and why it is not here, but it no longer takes the same room as a
+     measurement that landed. Sorting them after the measured ones keeps the
+     grid reading numbers-first. */
+  const visible = cards.filter((c) => c.show);
+  const measured = visible.filter((c) => !c.unmeasured);
+  const missing = visible.filter((c) => c.unmeasured);
+
   return (
     <>
-      {cards
-        .filter((c) => c.show)
-        .map((c, i) => (
-          <Panel
-            key={c.title}
-            padding="var(--space-4)"
-            style={{ animation: "fadeUp .45s both", animationDelay: `${(i * 0.05).toFixed(2)}s` }}
-            foot={<Caveat>{c.caveat}</Caveat>}
+      {measured.map((c, i) => (
+        <Panel
+          key={c.title}
+          padding="var(--space-4)"
+          style={{ animation: "fadeUp .45s both", animationDelay: `${(i * 0.05).toFixed(2)}s` }}
+          foot={<Caveat>{c.caveat}</Caveat>}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <c.Icon size={15} strokeWidth={1.7} color={CH.a} />
+            <span style={{ font: "500 13px var(--font-heading)" }}>{c.title}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+            <span className="num" style={{ font: "500 22px var(--font-heading)", color: c.color }}>
+              {c.value}
+            </span>
+            <span style={{ fontSize: 11, color: dim(40) }}>{c.unit}</span>
+          </div>
+          {c.body.map((line) => (
+            <p key={line} style={{ fontSize: 12, color: dim(72), margin: "6px 0 0", lineHeight: 1.5 }}>
+              {line}
+            </p>
+          ))}
+        </Panel>
+      ))}
+
+      {missing.map((c) => (
+        <Panel key={c.title} padding="var(--space-4)" style={{ justifyContent: "flex-start" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <c.Icon size={14} strokeWidth={1.7} color={dim(38)} />
+            <span style={{ font: "500 12.5px var(--font-heading)", color: dim(58) }}>{c.title}</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: dim(34) }}>not measured</span>
+          </div>
+          <p
+            style={{
+              margin: "6px 0 0",
+              fontSize: 11,
+              lineHeight: 1.55,
+              color: dim(44),
+              textWrap: "pretty",
+            }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <c.Icon size={15} strokeWidth={1.7} color={CH.a} />
-              <span style={{ font: "500 13px var(--font-heading)" }}>{c.title}</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-              <span className="num" style={{ font: "500 22px var(--font-heading)", color: c.color }}>
-                {c.value}
-              </span>
-              <span style={{ fontSize: 11, color: dim(40) }}>{c.unit}</span>
-            </div>
-            {c.body.map((line) => (
-              <p key={line} style={{ fontSize: 12, color: dim(72), margin: "6px 0 0", lineHeight: 1.5 }}>
-                {line}
-              </p>
-            ))}
-          </Panel>
-        ))}
+            {c.unmeasured}
+          </p>
+        </Panel>
+      ))}
     </>
   );
 }

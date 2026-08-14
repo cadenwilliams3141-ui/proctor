@@ -580,6 +580,7 @@ export function hardwareFrom(metrics: MetricPayloads): HardwareData | null {
     brake_ceiling_pct: num(bvr.brake_ceiling_pct),
     max_abs_diff: num(bvr.max_abs_diff),
     stationary_ticks_excluded: num(bvr.stationary_ticks_excluded),
+    brake_reason: bvr.reason == null ? undefined : String(bvr.reason),
     abs: {
       engaged_pct_of_braking: num(abs.engaged_pct_of_braking),
       activation_events: num(abs.activation_events),
@@ -661,6 +662,8 @@ export function absencesFrom(
       reason:
         "The .ibt carries no brake-temperature channel — only line pressure. Nothing is estimated in its place.",
       permanent: true,
+      kind: "permanent",
+      short: "No brake-temperature channel in the file.",
     },
     {
       key: "racecraft",
@@ -668,6 +671,8 @@ export function absencesFrom(
       reason:
         "Other-car channels (CarIdx) are not written to disk .ibt files, so nothing can be said about traffic, position or intent.",
       permanent: true,
+      kind: "permanent",
+      short: "Disk .ibt files carry no other-car channels.",
     },
   ];
 
@@ -683,6 +688,8 @@ export function absencesFrom(
         other.reason ?? "other corners not carried",
       )}). The other three corners are absent, not zero.`,
       permanent: true,
+      kind: "permanent",
+      short: "Only the left front is in the file.",
     });
   }
 
@@ -693,6 +700,8 @@ export function absencesFrom(
       reason:
         "This session reports wear_masked — iRacing froze wear, so no wear trend is claimed from it.",
       permanent: false,
+      kind: "this_run",
+      short: "iRacing froze tire wear for this session.",
     });
   }
 
@@ -708,6 +717,8 @@ export function absencesFrom(
       reason:
         "This session's tire-temperature block carries per-lap averages but no across-lap curve, so there is nothing to draw against track position. The left-front channel is in the file — re-ingest the session to compute the curve from it.",
       permanent: false,
+      kind: "stale",
+      short: "Stored before the across-lap curve existed; a re-ingest computes it.",
     });
   }
 
@@ -737,12 +748,19 @@ export function absencesFrom(
   for (const [key, title] of Object.entries(TITLES)) {
     const p = block(metrics, key);
     if (p == null) {
+      /* No block at all. The module did not decline to measure — it never ran,
+         because it did not exist when this file was ingested. That is a fact
+         about the INGEST, not about the driving, and it is the one kind of
+         absence with a specific remedy, so it says the remedy rather than
+         describing the hole. */
       out.push({
         key,
         title,
         reason:
-          "This module was not computed for this session — it produced no block at ingest, so nothing is shown for it.",
+          "This session was ingested before this measurement existed, so no block was ever written for it. Nothing about the file is missing — re-ingesting it from the rig computes this from the same bytes.",
         permanent: false,
+        kind: "stale",
+        short: "Ingested before this measurement existed; a re-ingest fills it in.",
       });
       continue;
     }
@@ -752,6 +770,8 @@ export function absencesFrom(
         title,
         reason: String(p.reason ?? "the module reported insufficient data and gave no reason"),
         permanent: false,
+        kind: "this_run",
+        short: String(p.reason ?? "The module reported insufficient data."),
       });
     } else if (p.error != null) {
       out.push({
@@ -759,12 +779,15 @@ export function absencesFrom(
         title,
         reason: `The module failed on this session: ${String(p.error)}. Nothing was fabricated in its place.`,
         permanent: false,
+        kind: "this_run",
+        short: "The module failed on this session.",
       });
     }
   }
 
   return out;
 }
+
 
 /** The accumulated boundary, shaped for the screen.
  *

@@ -67,7 +67,7 @@ export default function MobileLap() {
           {bundle.session.track_name}
         </h1>
         <div style={{ fontSize: 12, color: dim(45), marginTop: 3 }}>
-          {[bundle.session.car_name, bundle.session.session_type, `${bundle.session.lap_count} laps`]
+          {[bundle.session.car_name, bundle.session.session_type, `${bundle.session.lap_count} ${bundle.session.lap_count === 1 ? "lap" : "laps"}`]
             .filter(Boolean)
             .join(" · ")}
         </div>

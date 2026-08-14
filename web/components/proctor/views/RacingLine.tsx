@@ -35,6 +35,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Explain from "@/components/proctor/ui/Explain";
 import Panel from "@/components/proctor/ui/Panel";
+import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
 import { explainRoad } from "@/lib/proctor/explain";
 import { fixed, fmtCornerGeometry } from "@/lib/proctor/format";
@@ -44,11 +45,14 @@ import { useProctor } from "@/lib/proctor/store";
 import type { Corner, Trace, TrackBoundary, TrackWidthData } from "@/lib/proctor/types";
 
 export default function RacingLine() {
-  const { bundle, state, dispatch, traceA, traceB, selectedCornerId, ledger } = useProctor();
+  const { bundle, state, dispatch, traceA, traceB, selectedCornerId, ledger, readiness } =
+    useProctor();
   const [exaggeration, setExaggeration] = useState(1);
   const onExaggeration = useCallback((n: number) => setExaggeration(n), []);
 
-  if (!bundle) return <Loading />;
+  if (readiness.state === "loading" || readiness.state === "error" || !bundle) {
+    return <NotDrawable readiness={bundle ? readiness : { state: "loading" }} />;
+  }
 
   const tw = bundle.trackWidth;
   /* Two different things can be drawn here, and which one you get changes what
@@ -843,10 +847,3 @@ function WidthProfile({
   );
 }
 
-function Loading() {
-  return (
-    <div style={{ padding: "var(--space-8) var(--space-6)", color: dim(45), fontSize: 12 }}>
-      Reading the session…
-    </div>
-  );
-}

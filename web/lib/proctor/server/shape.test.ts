@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  absencesFrom,
   eventPatternsFrom,
   eventsFrom,
   gripFrom,
@@ -241,5 +242,86 @@ describe("track edges", () => {
 
   it("is null when the module produced no block at all", () => {
     expect(trackEdgesFrom({})).toBeNull();
+  });
+});
+
+/* The three kinds of absence.
+ *
+ * Every absence used to render identically, so "the .ibt will never carry
+ * this" and "re-ingest this file and it appears" were the same sentence to a
+ * reader. They are not the same fact and only one of them is a dead end. */
+describe("absences are classified by what would fix them", () => {
+  const NO_METRICS = {};
+
+  it("a channel the file format lacks is permanent", () => {
+    const a = absencesFrom(NO_METRICS, { wear_masked: false });
+    const brake = a.find((x) => x.key === "brake_temp");
+    expect(brake?.kind).toBe("permanent");
+    expect(brake?.permanent).toBe(true);
+
+    const racecraft = a.find((x) => x.key === "racecraft");
+    expect(racecraft?.kind).toBe("permanent");
+  });
+
+  it("a module that wrote no block at all is stale, and says a re-ingest fixes it", () => {
+    const a = absencesFrom(NO_METRICS, { wear_masked: false });
+    const grip = a.find((x) => x.key === "grip");
+    expect(grip?.kind).toBe("stale");
+    expect(grip?.permanent).toBe(false);
+    // The remedy has to be in the sentence: this is the only kind with one.
+    expect(grip?.reason).toMatch(/re-ingest/i);
+  });
+
+  it("a module that ran and declined to measure is about this run, not the ingest", () => {
+    const a = absencesFrom({ grip: NOT_RUN }, { wear_masked: false });
+    const grip = a.find((x) => x.key === "grip");
+    expect(grip?.kind).toBe("this_run");
+    // The module's own words survive verbatim — not replaced by a guess.
+    expect(grip?.reason).toBe(NOT_RUN.reason);
+  });
+
+  it("a module that threw is reported as a failure, and nothing is fabricated", () => {
+    const a = absencesFrom({ stint: FAILED }, { wear_masked: false });
+    const stint = a.find((x) => x.key === "stint");
+    expect(stint?.kind).toBe("this_run");
+    expect(stint?.reason).toContain("ValueError: boom");
+    expect(stint?.reason).toMatch(/nothing was fabricated/i);
+  });
+
+  it("masked wear is a fact about this run, not a missing channel", () => {
+    const a = absencesFrom(NO_METRICS, { wear_masked: true });
+    expect(a.find((x) => x.key === "tire_wear")?.kind).toBe("this_run");
+  });
+
+  it("every absence carries a kind and a non-empty reason", () => {
+    for (const metrics of [NO_METRICS, { grip: NOT_RUN }, { stint: FAILED }]) {
+      for (const a of absencesFrom(metrics, { wear_masked: true })) {
+        expect(["permanent", "stale", "this_run"]).toContain(a.kind);
+        expect(a.reason.trim().length).toBeGreaterThan(0);
+        expect(a.title.trim().length).toBeGreaterThan(0);
+        // The short form is what tight spots render; an empty one would put a
+        // blank line where a reason belongs, which is the bug being fixed.
+        expect(a.short.trim().length).toBeGreaterThan(0);
+        expect(a.short.length).toBeLessThanOrEqual(a.reason.length);
+        // `permanent` and `kind` must never disagree.
+        expect(a.permanent).toBe(a.kind === "permanent");
+      }
+    }
+  });
+
+  it("a session that ran everything reports only the permanent walls", () => {
+    // Every registered module present and healthy.
+    const ok = { basis: "self-comparison within this session" };
+    const metrics = Object.fromEntries(
+      [
+        "corner_sections", "corner_context", "delta_time", "input_overlay",
+        "track_map", "traction_circle", "tire_temps", "lockup_wheelspin",
+        "shift_analysis", "hardware", "balance", "report_card", "grip",
+        "track_edges", "input_response", "stint", "track_width",
+      ].map((k) => [k, k === "tire_temps" ? { ...ok, curve: [1, 2] } : ok]),
+    );
+    const a = absencesFrom(metrics, { wear_masked: false });
+    expect(a.every((x) => x.kind === "permanent")).toBe(true);
+    expect(a.map((x) => x.key).sort()).toEqual(["brake_temp", "racecraft"]);
   });
 });

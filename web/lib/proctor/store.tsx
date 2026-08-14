@@ -29,6 +29,7 @@ import {
 
 import { data } from "@/lib/proctor/data-source";
 import { buildLedger } from "@/lib/proctor/ledger";
+import { deriveReadiness, type Readiness } from "@/lib/proctor/readiness";
 import type { CornerLedger, SessionBundle, Trace } from "@/lib/proctor/types";
 import { isUsable } from "@/lib/proctor/types";
 import { DEFAULT_TIER, parseTier, TIER_COOKIE, type Tier } from "@/lib/tier";
@@ -83,7 +84,7 @@ type Action =
   | { t: "splash"; on: boolean }
   | { t: "pick"; which: "A" | "B" }
   | { t: "sheet"; id: number | null }
-  | { t: "initLaps"; a: number; b: number };
+  | { t: "initLaps"; a: number; b: number | null };
 
 function reducer(s: ProctorState, a: Action): ProctorState {
   switch (a.t) {
@@ -166,6 +167,8 @@ interface Ctx {
   traceA: Trace | null;
   traceB: Trace | null;
   ledger: CornerLedger | null;
+  /** Whether a comparison view can draw, and if not, why not. */
+  readiness: Readiness;
   /** The selected corner, falling back to the biggest single loss. */
   selectedCornerId: number | null;
   setTier: (t: Tier) => void;
@@ -238,11 +241,21 @@ export function ProctorProvider({
   useEffect(() => {
     if (!bundle || referenceLap == null || state.lapA != null) return;
     const others = cleanLaps.filter((n) => n !== referenceLap);
+    /* With one clean lap there is no second lap to open against. This used to
+       fall back to `referenceLap` itself, putting the same lap in both slots —
+       a lap compared against itself gives a flat delta trace and an empty
+       ledger, which the reducer's own guard calls out as reading like a bug.
+       Better to seat the reference and let the view say there is nothing to
+       compare it with. */
+    if (others.length === 0) {
+      dispatch({ t: "initLaps", a: referenceLap, b: null });
+      return;
+    }
     const worst = others.reduce((w, n) => {
       const t = bundle.laps.find((l) => l.lap_number === n)?.lap_time_s ?? 0;
       const wt = bundle.laps.find((l) => l.lap_number === w)?.lap_time_s ?? 0;
       return t > wt ? n : w;
-    }, others[0] ?? referenceLap);
+    }, others[0]);
     dispatch({ t: "initLaps", a: referenceLap, b: worst });
   }, [bundle, referenceLap, cleanLaps, state.lapA]);
 
@@ -255,6 +268,24 @@ export function ProctorProvider({
     if (!bundle || !traceA || !traceB) return null;
     return buildLedger(bundle.corners, traceA, traceB);
   }, [bundle, traceA, traceB]);
+
+  /* One place decides whether a comparison view can draw, so every view gives
+     the same answer and none of them can drift back into showing a spinner for
+     a session that will never produce a ledger. The rule itself lives in
+     lib/proctor/readiness.ts as a pure function, where it is unit-tested. */
+  const readiness = useMemo<Readiness>(
+    () =>
+      deriveReadiness({
+        error,
+        lapCount: bundle ? bundle.laps.length : null,
+        referenceLap,
+        lapA: state.lapA,
+        lapB: state.lapB,
+        traceA,
+        traceB,
+      }),
+    [error, bundle, referenceLap, state.lapA, state.lapB, traceA, traceB],
+  );
 
   const selectedCornerId = useMemo(() => {
     if (state.selCorner != null) return state.selCorner;
@@ -290,6 +321,7 @@ export function ProctorProvider({
       traceA,
       traceB,
       ledger,
+      readiness,
       selectedCornerId,
       setTier,
     }),
@@ -302,6 +334,7 @@ export function ProctorProvider({
       traceA,
       traceB,
       ledger,
+      readiness,
       selectedCornerId,
       setTier,
     ],

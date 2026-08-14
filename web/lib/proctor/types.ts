@@ -203,14 +203,34 @@ export interface TireBands {
   right_c: number[];
 }
 
+/** Why a thing is not on screen. Three kinds, because they are three different
+ *  facts about the world and only one of them is a dead end:
+ *
+ *   - `permanent`  — the .ibt will never carry it. Nothing fills this in, ever.
+ *   - `stale`      — the module exists but this session was ingested before it
+ *                    did, so no block was ever written. A re-ingest fills it in.
+ *   - `this_run`   — the module ran and honestly reported it could not measure
+ *                    (no valid laps, too few upshifts). More driving fills it in.
+ *
+ *  Collapsing these into one "not available" is the difference between a reader
+ *  concluding the app is broken and a reader knowing what to do next. */
+export type AbsenceKind = "permanent" | "stale" | "this_run";
+
 /** A module that could not run says why. An empty panel must never be able to
  *  mean "no data" — that is the confusion the honesty rules exist to prevent. */
 export interface ModuleAbsence {
   key: string;
   title: string;
   reason: string;
-  /** true when the channel does not exist at all, vs. merely not computed. */
+  /** true when the channel does not exist at all, vs. merely not computed.
+   *  Kept alongside `kind` because it is the coarse question most callers ask. */
   permanent: boolean;
+  kind: AbsenceKind;
+  /** A one-line form for places too tight for the full reason — a card tile in
+   *  a grid, say. It never replaces `reason`: the full sentence is always
+   *  reachable in the summary block, which is what keeps the short form from
+   *  quietly becoming the only thing the reader is told. */
+  short: string;
 }
 
 /** A row on the Sessions list: the session plus its clean-lap times, which
@@ -531,6 +551,10 @@ export interface HardwareData {
   brake_ceiling_pct: number | null;
   max_abs_diff: number | null;
   stationary_ticks_excluded: number | null;
+  /** Why the brake comparison produced nothing, in the module's own words.
+   *  Without it a null ceiling reaches the screen as a bare em dash, which is
+   *  the one thing an absence is never allowed to look like. */
+  brake_reason?: string;
   abs: {
     engaged_pct_of_braking: number | null;
     activation_events: number | null;

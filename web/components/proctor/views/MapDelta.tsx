@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
+import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import { CH, dim, inkA } from "@/lib/proctor/channels";
 import { fmtDelta, fmtLap, kmh } from "@/lib/proctor/format";
@@ -20,7 +21,8 @@ import { isUsable } from "@/lib/proctor/types";
 import { atLeast } from "@/lib/tier";
 
 export default function MapDelta() {
-  const { bundle, state, dispatch, ledger, traceA, traceB, referenceLap } = useProctor();
+  const { bundle, state, dispatch, ledger, traceA, traceB, referenceLap, readiness } =
+    useProctor();
 
   const kpis = useMemo(() => {
     if (!bundle || !ledger || !traceA) return null;
@@ -75,8 +77,8 @@ export default function MapDelta() {
     ];
   }, [bundle, ledger, traceA, referenceLap, state.lapA, state.lapB]);
 
-  if (!bundle || !ledger || !traceA || !traceB || !kpis) {
-    return <div style={{ padding: "var(--space-8) var(--space-6)", color: dim(45) }}>Reading…</div>;
+  if (readiness.state !== "ready" || !bundle || !ledger || !traceA || !traceB || !kpis) {
+    return <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />;
   }
 
   const n = traceA.speed.length;

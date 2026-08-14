@@ -67,7 +67,7 @@ export default function LapRail() {
         </div>
         <div style={{ display: "flex", gap: 5, marginTop: 9, flexWrap: "wrap" }}>
           <span className="tag tag-neutral" style={{ fontSize: 10, padding: "2px 8px" }}>
-            {session.lap_count} laps
+            {session.lap_count} {session.lap_count === 1 ? "lap" : "laps"}
           </span>
           {/* Wear masked travels with the session onto every view of it. */}
           {session.wear_masked && (

@@ -11,6 +11,7 @@ import { useMemo } from "react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
+import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import { CH, deltaColor, deltaSense, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtCornerGeometry, fmtDelta, fmtLap, kmh, toG } from "@/lib/proctor/format";
@@ -22,7 +23,8 @@ import type { CornerDelta } from "@/lib/proctor/types";
 import { atLeast } from "@/lib/tier";
 
 export default function WhereItWent() {
-  const { bundle, state, dispatch, ledger, traceA, traceB, selectedCornerId } = useProctor();
+  const { bundle, state, dispatch, ledger, traceA, traceB, selectedCornerId, readiness } =
+    useProctor();
 
   const rows = useMemo(() => (ledger ? ranked(ledger) : []), [ledger]);
 
@@ -36,8 +38,11 @@ export default function WhereItWent() {
     return { losses, totalLoss, rest, stackTotal: totalLoss + rest || 1 };
   }, [ledger]);
 
-  if (!bundle || !ledger || !traceA || !traceB || !stack) {
-    return <Loading />;
+  /* `readiness` distinguishes "still fetching" from "this session will never
+     produce a ledger". `stack` is derived from the ledger, so it is checked
+     alongside rather than folded into the loading case. */
+  if (readiness.state !== "ready" || !bundle || !ledger || !traceA || !traceB || !stack) {
+    return <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />;
   }
 
   const selected = rows.find((c) => c.corner.id === selectedCornerId) ?? rows[0];
@@ -533,10 +538,3 @@ function CarState({ selected }: { selected: CornerDelta }) {
   );
 }
 
-function Loading() {
-  return (
-    <div style={{ padding: "var(--space-8) var(--space-6)", color: dim(45), fontSize: 12 }}>
-      Reading the session…
-    </div>
-  );
-}

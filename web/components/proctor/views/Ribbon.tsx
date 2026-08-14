@@ -15,6 +15,7 @@ import { useCallback, useMemo, useRef } from "react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
+import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtDelta, fmtLap, kmh, pct, toG } from "@/lib/proctor/format";
 import {
@@ -54,7 +55,7 @@ const LANE = {
 };
 
 export default function Ribbon() {
-  const { bundle, state, dispatch, ledger, traceA, traceB } = useProctor();
+  const { bundle, state, dispatch, ledger, traceA, traceB, readiness } = useProctor();
   const plotRef = useRef<HTMLDivElement>(null);
 
   const px = useCallback((i: number, n: number) => X0 + (i / (n - 1)) * (X1 - X0), []);
@@ -132,8 +133,8 @@ export default function Ribbon() {
     [dispatch],
   );
 
-  if (!bundle || !paths || !traceA || !traceB || !ledger) {
-    return <div style={{ padding: "var(--space-8) var(--space-6)", color: dim(45) }}>Reading…</div>;
+  if (readiness.state !== "ready" || !bundle || !paths || !traceA || !traceB || !ledger) {
+    return <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />;
   }
 
   const n = paths.n;

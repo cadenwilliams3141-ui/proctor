@@ -11,7 +11,7 @@
  * Designed for >= 1440x900. The phone gets its own app at /m, not this one
  * squeezed: a shared-axis lane stack needs a pointer and a wide viewport. */
 
-import { dim } from "@/lib/proctor/channels";
+import { CH, dim } from "@/lib/proctor/channels";
 import { useProctor } from "@/lib/proctor/store";
 
 import LapRail from "@/components/proctor/shell/LapRail";
@@ -26,11 +26,22 @@ import RigScreen from "@/components/proctor/screens/RigScreen";
 import SessionsScreen from "@/components/proctor/screens/SessionsScreen";
 import UploadScreen from "@/components/proctor/screens/UploadScreen";
 
+/* Screens that do not read a session bundle.
+ *
+ * Everything else is a view OF a session, so a failed load has to replace it.
+ * These two are not: Sessions lists what exists, and Upload is how a session
+ * comes to exist in the first place. Blanking them on a load failure locked the
+ * driver out of the only screen that could fix the failure — and with an empty
+ * database it locked them out permanently, because "latest" has nothing to
+ * resolve to until something has been uploaded. */
+const SCREENS_WITHOUT_A_SESSION = new Set(["upload", "sessions"]);
+
 export default function AppShell() {
   const { state, error } = useProctor();
 
   // The lap rail is only meaningful where a lap is being chosen.
   const showLapRail = state.screen === "analyze" || state.screen === "live";
+  const needsSession = !SCREENS_WITHOUT_A_SESSION.has(state.screen);
 
   return (
     <div
@@ -49,7 +60,7 @@ export default function AppShell() {
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <TopBar />
 
-        {error ? (
+        {error && needsSession ? (
           /* A failure is a finding. It says what went wrong, in the words the
              system actually produced — never an empty panel. */
           <div style={{ padding: "var(--space-8) var(--space-6)", maxWidth: 620 }}>
@@ -89,6 +100,35 @@ export default function AppShell() {
               animation: "fadeIn .25s both",
             }}
           >
+            {/* The load still failed even though this screen can render without
+                it. Said quietly at the top rather than dropped — a driver on the
+                Upload screen after a failed load should know the app is not
+                reading their sessions, and this is the screen they came to in
+                order to do something about it. */}
+            {error && (
+              <div
+                style={{
+                  flex: "none",
+                  margin: "var(--space-3) var(--space-6) 0",
+                  padding: "8px 11px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "rgba(224,104,94,.08)",
+                  boxShadow: "inset 0 0 0 1px rgba(224,104,94,.22)",
+                  fontSize: 11.5,
+                  lineHeight: 1.55,
+                  color: dim(70),
+                }}
+              >
+                <strong style={{ fontWeight: 500, color: CH.loss }}>
+                  The current session could not be read.
+                </strong>{" "}
+                This screen does not need one, so it is still here.{" "}
+                <span className="mono" style={{ fontSize: 10.5, color: dim(50) }}>
+                  {error}
+                </span>
+              </div>
+            )}
+
             {state.screen === "analyze" && <AnalyzeScreen />}
             {state.screen === "live" && <LiveScreen />}
             {state.screen === "sessions" && <SessionsScreen />}

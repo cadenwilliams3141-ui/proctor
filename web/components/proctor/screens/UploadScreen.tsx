@@ -55,9 +55,70 @@ type Job = {
   state: "uploading" | "queued" | "duplicate" | "failed";
   detail?: string;
   ingestId?: number;
+  /** 0..1 of bytes sent. A 136 MB file over a home connection is minutes of
+   *  silence otherwise, and silence is indistinguishable from a hang. */
+  progress?: number;
 };
 
 const POLL_MS = 4000;
+
+export function fmtBytes(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)} kB`;
+  return `${n} B`;
+}
+
+/* Send one file straight to the ingest service.
+ *
+ * XHR rather than fetch, for the one thing fetch still cannot do: report upload
+ * progress. These files are tens of megabytes and the queue below cannot show
+ * anything until the bytes have landed, so without this the screen is blank for
+ * minutes and looks broken — which is how this path was described when it was
+ * reported. */
+function postFile(
+  url: string,
+  file: File,
+  onProgress: (fraction: number) => void,
+): Promise<{ ingest_file_id?: number; duplicate?: boolean }> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.set("file", file, file.name);
+    form.set("user_id", "caden");
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          "The ingest service could not be reached. Nothing was uploaded, so nothing was lost — it may be asleep; try again in a moment.",
+        ),
+      );
+    xhr.ontimeout = () => reject(new Error("The upload timed out before it finished."));
+    xhr.onload = () => {
+      let body: Record<string, unknown> = {};
+      try {
+        body = JSON.parse(xhr.responseText) as Record<string, unknown>;
+      } catch {
+        // Falls through to the status check, which produces a better message
+        // than a parse error ever did.
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body as { ingest_file_id?: number; duplicate?: boolean });
+        return;
+      }
+      const detail =
+        typeof body.detail === "string"
+          ? body.detail
+          : xhr.responseText.slice(0, 300) || `${xhr.status}`;
+      reject(new Error(`The ingest service rejected ${file.name}: ${detail}`));
+    };
+    xhr.send(form);
+  });
+}
 
 export default function UploadScreen() {
   const { dispatch } = useProctor();
@@ -120,42 +181,55 @@ export default function UploadScreen() {
 
   const upload = useCallback(
     async (files: File[]) => {
+      /* The address comes from the server so PROCTOR_INGEST_URL still works,
+         but the FILE never travels through this app — see app/api/ingest-url. */
+      let target: string;
+      try {
+        const res = await fetch("/api/ingest-url");
+        target = ((await res.json()) as { url: string }).url;
+      } catch (e) {
+        setJobs((j) => [
+          {
+            name: files[0]?.name ?? "that file",
+            size: files[0]?.size ?? 0,
+            state: "failed",
+            detail: `Could not work out where to send it: ${String((e as Error)?.message ?? e)}`,
+          },
+          ...j,
+        ]);
+        return;
+      }
+
       for (const file of files) {
-        setJobs((j) => [{ name: file.name, size: file.size, state: "uploading" }, ...j]);
-        const form = new FormData();
-        form.set("file", file);
+        const key = `${file.name}:${file.size}`;
+        setJobs((j) => [
+          { name: file.name, size: file.size, state: "uploading", progress: 0 }, ...j,
+        ]);
+        const patch = (fn: (job: Job) => Job) =>
+          setJobs((j) =>
+            j.map((job) =>
+              `${job.name}:${job.size}` === key && job.state === "uploading" ? fn(job) : job,
+            ),
+          );
+
         try {
-          const res = await fetch("/api/upload", { method: "POST", body: form });
-          const body = (await res.json()) as {
-            error?: string;
-            ingest_file_id?: number;
-            duplicate?: boolean;
-          };
-          setJobs((j) =>
-            j.map((job) =>
-              job.name === file.name && job.state === "uploading"
-                ? res.ok
-                  ? {
-                      ...job,
-                      state: body.duplicate ? "duplicate" : "queued",
-                      ingestId: body.ingest_file_id,
-                      detail: body.duplicate
-                        ? "These exact bytes are already in the database — nothing was re-parsed."
-                        : "Sent. The parser picks it up from here; watch the queue below.",
-                    }
-                  : { ...job, state: "failed", detail: body.error ?? `${res.status}` }
-                : job,
-            ),
-          );
-          if (res.ok) refreshQueue();
+          const body = await postFile(target, file, (p) => patch((job) => ({ ...job, progress: p })));
+          patch((job) => ({
+            ...job,
+            state: body.duplicate ? "duplicate" : "queued",
+            progress: 1,
+            ingestId: body.ingest_file_id,
+            detail: body.duplicate
+              ? "These exact bytes are already in the database — nothing was re-parsed."
+              : "Sent. The parser picks it up from here; watch the queue below.",
+          }));
+          refreshQueue();
         } catch (e) {
-          setJobs((j) =>
-            j.map((job) =>
-              job.name === file.name && job.state === "uploading"
-                ? { ...job, state: "failed", detail: String((e as Error)?.message ?? e) }
-                : job,
-            ),
-          );
+          patch((job) => ({
+            ...job,
+            state: "failed",
+            detail: String((e as Error)?.message ?? e),
+          }));
         }
       }
     },
@@ -422,10 +496,48 @@ export default function UploadScreen() {
                       <span className="mono" style={{ fontSize: 11.5 }}>{job.name}</span>
                       {job.size > 0 && (
                         <span style={{ fontSize: 10.5, color: dim(38) }}>
-                          {(job.size / 1_048_576).toFixed(1)} MB
+                          {fmtBytes(job.size)}
+                        </span>
+                      )}
+                      {job.state === "uploading" && job.progress != null && (
+                        <span className="num" style={{ fontSize: 10.5, color: CH.a }}>
+                          {Math.round(job.progress * 100)}%
+                          {job.size > 0 && (
+                            <span style={{ color: dim(38) }}>
+                              {" "}· {fmtBytes(job.progress * job.size)} sent
+                            </span>
+                          )}
                         </span>
                       )}
                     </div>
+
+                    {/* These files are tens of megabytes. Without a bar the
+                        screen sits silent for minutes, which is exactly what
+                        "it will not take my file" looked like. */}
+                    {job.state === "uploading" && (
+                      <div
+                        style={{
+                          height: 4,
+                          borderRadius: 2,
+                          background: dim(9),
+                          overflow: "hidden",
+                          marginTop: 5,
+                          width: 260,
+                          maxWidth: "100%",
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: "100%",
+                            borderRadius: 2,
+                            background: CH.a,
+                            width: `${Math.round((job.progress ?? 0) * 100)}%`,
+                            transition: "width .2s linear",
+                          }}
+                        />
+                      </div>
+                    )}
+
                     {job.detail && (
                       <div style={{ fontSize: 11.5, color: job.state === "failed" ? CH.loss : dim(55), lineHeight: 1.5, marginTop: 2 }}>
                         {job.detail}

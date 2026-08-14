@@ -462,8 +462,17 @@ export function gripFrom(metrics: MetricPayloads): GripData | null {
   const states = (g.by_input_state ?? {}) as Payload;
   const corners = (g.corners ?? {}) as Payload;
 
+  const byLoad = (g.by_load ?? null) as Payload | null;
+
   return {
     session: g.session as GripData["session"],
+    ticksExcluded:
+      g.ticks_excluded && typeof g.ticks_excluded === "object"
+        ? (g.ticks_excluded as GripData["ticksExcluded"])
+        : null,
+    // The curve is passed through only when the module said it measured one;
+    // an unmeasured block keeps its own reason for the panel to render.
+    byLoad: byLoad ? (byLoad as unknown as GripData["byLoad"]) : null,
     bands: Array.isArray(bySpeed.bands) ? (bySpeed.bands as GripData["bands"]) : [],
     downforce:
       bySpeed.fastest_vs_slowest && typeof bySpeed.fastest_vs_slowest === "object"

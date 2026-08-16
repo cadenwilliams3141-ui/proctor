@@ -82,6 +82,69 @@ _MAX_PLAUSIBLE_OFFSET_M = 60.0
 _MIN_EXCURSION_TICKS = 3
 _EXCURSION_CAP = 40
 
+# ── Edges that leap off the road ─────────────────────────────────────────────
+#
+# _MAX_PLAUSIBLE_OFFSET_M above is an absolute gate, and it is a loose one: 60 m
+# from the centreline is nowhere near any circuit, but a tow dragging the car
+# across the infield produces samples well inside it. Those survive as bins
+# claiming the road reaches tens of metres past everything around them, and
+# because the per-track boundary only ever WIDENS they are permanent once
+# stored.
+#
+# So there is a second, local test: an edge has to be consistent with the road
+# its neighbours describe. A real change in the road — a runoff opening up, an
+# apron — runs over many bins and carries the local median with it. A tow or a
+# dropout is a handful of bins, and the neighbourhood disagrees.
+#
+# The test is ONE-SIDED, and that is the point. This measurement is a lower
+# bound: a bin where only a middle-of-road sample ever landed reads narrow, and
+# that is the module doing exactly what it says it does. Only OUTWARD leaps are
+# discarded.
+#
+# The same rule, for the same reasons, is applied to what comes back out of the
+# database in web/lib/proctor/server/shape.ts (`plausibleEdge`) — stated twice
+# because Python and TypeScript only talk through Neon.
+_EDGE_WINDOW_PCT = 0.025
+_EDGE_FLOOR_M = 6.0
+_EDGE_MAD_K = 6.0
+_EDGE_MIN_NEIGHBOURS = 8
+
+
+def discard_outward_spikes(offsets: np.ndarray, side: str) -> np.ndarray:
+    """NaN out bins whose edge reaches implausibly further out than its neighbours.
+
+    `side` is "left" (offsets run positive) or "right" (negative); outward means
+    away from the centreline on whichever side this is. Returns a new array —
+    the input is not modified.
+    """
+    values = np.asarray(offsets, dtype=np.float64)
+    n = values.size
+    out = values.copy()
+    if n == 0 or np.count_nonzero(np.isfinite(values)) <= _EDGE_MIN_NEIGHBOURS:
+        return out
+
+    half = max(4, int(round(n * _EDGE_WINDOW_PCT)))
+    # Wrap the lap, so a window sitting on the start/finish line sees both sides
+    # of it rather than half a neighbourhood.
+    padded = np.concatenate([values[-half:], values, values[:half]])
+
+    for i in np.flatnonzero(np.isfinite(values)):
+        # Everything within half a window, minus the bin under test — a spike
+        # must not get to vote for its own plausibility.
+        window = np.concatenate(
+            [padded[i:i + half], padded[i + half + 1:i + 2 * half + 1]]
+        )
+        near = window[np.isfinite(window)]
+        if near.size < _EDGE_MIN_NEIGHBOURS:
+            continue
+        mid = float(np.median(near))
+        mad = float(np.median(np.abs(near - mid)))
+        tolerance = max(_EDGE_FLOOR_M, _EDGE_MAD_K * mad)
+        outward = values[i] - mid if side == "left" else mid - values[i]
+        if outward > tolerance:
+            out[i] = np.nan
+    return out
+
 
 def material_name(code: int) -> str:
     for name, lo, hi in _MATERIALS:
@@ -241,6 +304,23 @@ def compute(session: ParsedSession) -> dict:
 
         laps_used.append(int(lap.lap_number))
 
+    # An edge that leapt clear of the road either side of it is a tow, a GPS
+    # dropout or a lap on a layout sharing this track's name. The winning
+    # POSITION is dropped with the offset: leaving the lat/lon behind would let
+    # the cross-session merge re-import the same spike from the other end.
+    discarded = 0
+    for offsets, lat_store, lon_store, side in (
+        (left, left_lat, left_lon, "left"),
+        (right, right_lat, right_lon, "right"),
+    ):
+        dropped = np.isfinite(offsets) & ~np.isfinite(
+            discard_outward_spikes(offsets, side)
+        )
+        discarded += int(np.count_nonzero(dropped))
+        offsets[dropped] = np.nan
+        lat_store[dropped] = np.nan
+        lon_store[dropped] = np.nan
+
     observed = np.isfinite(left) | np.isfinite(right)
     if not observed.any():
         return _insufficient(
@@ -279,6 +359,14 @@ def compute(session: ParsedSession) -> dict:
         "coverage_note": (
             "share of the lap where at least one on-track position was seen; "
             "the rest is unmeasured and is drawn as a gap, not as zero width"
+        ),
+        "discarded_bins": discarded,
+        "discarded_note": (
+            "bins where the outermost on-track sample sat far outside the road "
+            "the surrounding bins describe — a tow, a GPS dropout, or a lap on "
+            "another layout sharing this track's name. They are dropped to "
+            "unmeasured rather than kept, because the per-track boundary only "
+            "ever widens and would carry them forever"
         ),
         "surface": _surface_block(
             on_ticks, off_ticks, total_ticks, material_counts, excursions

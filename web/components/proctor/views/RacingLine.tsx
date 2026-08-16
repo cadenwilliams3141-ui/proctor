@@ -138,6 +138,9 @@ export default function RacingLine() {
               {exaggeration > 1
                 ? `Widths on this map are drawn ${exaggeration}× life size — at true scale a road a few metres wide is thinner than a hairline on a circuit this long. The corner view to the right is at true scale. `
                 : ""}
+              {tb && tb.discarded_bins > 0
+                ? `${tb.discarded_bins} of ${tb.centre_x_m.length} bins are drawn as gaps rather than as road: the stored edge there reached clear of the track either side of it, which is a tow or a dropout being recorded rather than a piece of circuit. `
+                : ""}
               {noteFor(tb ? "track.surface" : "track.width")}
             </Caveat>
           }
@@ -467,16 +470,32 @@ function FullCircuit({
     const centre = centreOf(tb, tw);
     /* Choose the multiplier from the circuit itself: whatever makes the road
        about TARGET_BAND_PX wide once projected. A fixed factor would be
-       invisible on a long circuit and absurd on a short one. */
-    const span = Math.max(
-      Math.max(...centre.x) - Math.min(...centre.x),
-      Math.max(...centre.y) - Math.min(...centre.y),
-      1,
-    );
+       invisible on a long circuit and absurd on a short one.
+
+       It takes two passes, because the answer depends on itself: the multiplier
+       has to know how many viewBox units a metre gets, and that comes from a
+       projection fitted to the geometry the multiplier produces. So the circuit
+       is fitted once at TRUE scale to settle the scale, and the drawn geometry
+       is built and fitted afterwards. Measuring the span off the centreline
+       alone instead — the earlier shortcut — ignored the band and the driven
+       lines hanging off it, and so drew the road thinner than it asked for. */
+    const atTrueScale = [
+      { x: centre.x, y: centre.y },
+      tb ? boundaryEdge(tb, "left_m") : null,
+      tb ? boundaryEdge(tb, "right_m") : null,
+      tw ? edges(tw, "left_m") : null,
+      tw ? edges(tw, "right_m") : null,
+      drivenAgainst(traceA, centre),
+      drivenAgainst(traceB, centre),
+    ].filter(Boolean) as { x: number[]; y: number[] }[];
+    const pxPerMetre = (() => {
+      const fit = projectAll(atTrueScale, W, H, 26);
+      return Math.abs(fit.X(1) - fit.X(0)) || 1;
+    })();
+
     const typicalWidth = tb
       ? medianOf(tb.left_m.map((l, i) => (l == null || tb.right_m[i] == null ? null : l - tb.right_m[i]!)))
       : tw?.summary.median_used_width_m ?? 0;
-    const pxPerMetre = (W - 52) / span;
     const exaggerate =
       typicalWidth > 0
         ? Math.min(MAX_EXAGGERATION, Math.max(1, Math.round(TARGET_BAND_PX / (typicalWidth * pxPerMetre))))

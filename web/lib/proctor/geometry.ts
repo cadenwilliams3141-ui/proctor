@@ -6,7 +6,15 @@ export interface Projection {
   Y: (metresY: number) => number;
 }
 
-/** Fit the circuit into a viewBox, preserving aspect ratio and centring it. */
+/** Fit the circuit into a viewBox, preserving aspect ratio and centring it.
+ *
+ *  Non-finite samples are skipped. They are not stray values — they are the
+ *  survey's own gaps, arriving as NaN pairs from the edge builders wherever no
+ *  on-track sample has ever landed. Handing them to `Math.min` would answer NaN
+ *  for the whole set and turn every projected coordinate into NaN, so a single
+ *  unmeasured bin anywhere on the lap would blank the entire panel. Looping
+ *  rather than spreading also keeps a few thousand samples off the argument
+ *  list. */
 export function project(
   xs: number[],
   ys: number[],
@@ -14,10 +22,28 @@ export function project(
   h: number,
   pad: number,
 ): Projection {
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const n = Math.min(xs.length, ys.length);
+  for (let i = 0; i < n; i++) {
+    const x = xs[i];
+    const y = ys[i];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  // Nothing finite to fit to. A unit box keeps the projection callable and the
+  // panel empty, which is the honest outcome and not a crash.
+  if (minX > maxX) {
+    minX = 0;
+    maxX = 1;
+    minY = 0;
+    maxY = 1;
+  }
   const s = Math.min(
     (w - 2 * pad) / Math.max(maxX - minX, 1e-6),
     (h - 2 * pad) / Math.max(maxY - minY, 1e-6),

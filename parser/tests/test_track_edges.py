@@ -29,7 +29,7 @@ def _circuit(u: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _session(lap_offsets: dict[int, float] | None = None, *, with_surface: bool = True,
-             excursion_lap: int | None = None):
+             excursion_lap: int | None = None, tow_lap: int | None = None):
     """Build a session where each lap sits at a chosen lateral offset, in metres.
 
     Offsets past HALF_WIDTH_M put the car off the racing surface, which is what
@@ -54,6 +54,14 @@ def _session(lap_offsets: dict[int, float] | None = None, *, with_surface: bool 
     if excursion_lap is not None:
         off[(lap == excursion_lap) & (in_lap > 300) & (in_lap < 360)] = HALF_WIDTH_M + 3.0
 
+    # A tow: the car dragged 38 m across the infield with the sim STILL calling
+    # it on track. Inside the absolute 60 m gate, so only the local test catches
+    # it — which is the whole reason the local test exists.
+    tow = np.zeros(off.size, dtype=bool)
+    if tow_lap is not None:
+        tow = (lap == tow_lap) & (in_lap > 500) & (in_lap < 508)
+        off[tow] = 38.0
+
     gx, gy = x1 + nx * off, y1 + ny * off
     scale_x = 111320.0 * math.cos(math.radians(33.0))
 
@@ -66,6 +74,7 @@ def _session(lap_offsets: dict[int, float] | None = None, *, with_surface: bool 
         surface = np.where(np.abs(off) <= HALF_WIDTH_M, 3.0, 0.0)
         # The out lap starts in the pit stall, which must never widen the track.
         surface[(lap == 0) & (in_lap < 10)] = 1.0
+        surface[tow] = 3.0
         ch["PlayerTrackSurface"] = surface
         ch["PlayerTrackSurfaceMaterial"] = np.where(
             np.abs(off) > HALF_WIDTH_M, 15.0,                      # grass
@@ -193,3 +202,75 @@ def test_material_names_only_where_the_code_is_known():
 
 def test_payload_is_json_serializable():
     assert json.loads(json.dumps(track_edges.compute(_session({1: -5.0, 2: 5.0}))))
+
+
+# --- edges that leap off the road ----------------------------------------
+
+def _flat(value: float, n: int = 400) -> np.ndarray:
+    return np.full(n, value, dtype=np.float64)
+
+
+def test_a_spike_is_discarded_but_a_real_widening_is_not():
+    # A runoff opening up carries the local median with it; a tow does not.
+    offsets = _flat(6.0)
+    offsets[150:210] = 15.0
+    offsets[300] = 45.0
+    cleaned = track_edges.discard_outward_spikes(offsets, "left")
+    assert np.isfinite(cleaned[180])
+    assert cleaned[180] == 15.0
+    assert not np.isfinite(cleaned[300])
+
+
+def test_a_narrow_bin_survives_because_this_is_a_lower_bound():
+    # Nothing but a middle-of-road sample landed here. That is the module doing
+    # what it says on the tin, and discarding it would throw away a real reading
+    # to tidy the picture.
+    offsets = _flat(6.0)
+    offsets[100] = 0.4
+    assert track_edges.discard_outward_spikes(offsets, "left")[100] == 0.4
+
+
+def test_outward_on_the_right_edge_means_more_negative():
+    wide = _flat(-6.0)
+    wide[200] = -45.0
+    assert not np.isfinite(track_edges.discard_outward_spikes(wide, "right")[200])
+
+    narrow = _flat(-6.0)
+    narrow[200] = -0.4
+    assert track_edges.discard_outward_spikes(narrow, "right")[200] == -0.4
+
+
+def test_the_window_wraps_the_start_finish_line():
+    # Bin 0's neighbours run backwards into the end of the lap. Judged against
+    # half a window it would survive.
+    offsets = _flat(6.0)
+    offsets[0] = 45.0
+    assert not np.isfinite(track_edges.discard_outward_spikes(offsets, "left")[0])
+
+
+def test_too_little_around_a_bin_to_call_it_wrong_leaves_it_alone():
+    offsets = np.array([6.0, 45.0, 6.0, np.nan, 6.0])
+    assert np.isfinite(track_edges.discard_outward_spikes(offsets, "left")[1])
+
+
+def test_a_tow_across_the_infield_does_not_become_track():
+    # The sim still says OnTrack, and 38 m is inside the absolute gate, so this
+    # is the case the neighbourhood test is here for.
+    payload = track_edges.compute(_session({1: -5.9, 2: 5.9}, tow_lap=4))
+    assert payload["discarded_bins"] > 0
+    assert max(_widths(payload)) <= 2 * HALF_WIDTH_M + 0.5
+
+
+def test_a_discarded_bin_drops_its_position_with_it():
+    # Leaving the lat/lon behind would let the cross-session merge re-import the
+    # very spike this just threw away.
+    payload = track_edges.compute(_session({1: -5.9, 2: 5.9}, tow_lap=4))
+    for i, off in enumerate(payload["left_m"]):
+        if off is None:
+            assert payload["left_lat"][i] is None
+            assert payload["left_lon"][i] is None
+
+
+def test_a_clean_session_discards_nothing():
+    payload = track_edges.compute(_session({1: -5.9, 2: 5.9}))
+    assert payload["discarded_bins"] == 0

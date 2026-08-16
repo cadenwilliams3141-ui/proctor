@@ -29,6 +29,10 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
+from proctor_parser.analysis.track_edges import discard_outward_spikes
+
 # Same projection constant as the parser's track_map, corners and track_edges.
 _M_PER_DEG = 111320.0
 
@@ -75,6 +79,23 @@ def _offsets_in_frame(
         if abs(offset) <= _MAX_PLAUSIBLE_OFFSET_M:
             out[i] = round(offset, 2)
     return out
+
+
+def _plausible(offsets: list[float | None], side: str) -> list[float | None]:
+    """Drop re-projected edges that leap off the road either side of them.
+
+    track_edges already applies this test in its own frame, but re-projecting
+    into the frame the track was FIRST stored in can manufacture a spike that
+    was not in the source payload: the two reference laps differ, so a bin's
+    normal here is not the normal the offset was measured against. Since the
+    merge below only ever widens, anything that gets through is permanent — so
+    the test is repeated on this side of the translation.
+    """
+    arr = np.array(
+        [np.nan if v is None else float(v) for v in offsets], dtype=np.float64
+    )
+    cleaned = discard_outward_spikes(arr, side)
+    return [None if not np.isfinite(v) else round(float(v), 2) for v in cleaned]
 
 
 def _widen(stored: list, incoming: list, keep: str) -> list[float | None]:
@@ -150,11 +171,17 @@ def merge_session(conn, user_id: str, ingest_id: int, track_name: str | None,
     if len(payload["grid_pct"]) != len(centre_x):
         return
 
-    incoming_left = _offsets_in_frame(
-        payload, origin, centre_x, centre_y, normal_x, normal_y, "left"
+    incoming_left = _plausible(
+        _offsets_in_frame(
+            payload, origin, centre_x, centre_y, normal_x, normal_y, "left"
+        ),
+        "left",
     )
-    incoming_right = _offsets_in_frame(
-        payload, origin, centre_x, centre_y, normal_x, normal_y, "right"
+    incoming_right = _plausible(
+        _offsets_in_frame(
+            payload, origin, centre_x, centre_y, normal_x, normal_y, "right"
+        ),
+        "right",
     )
 
     conn.execute(

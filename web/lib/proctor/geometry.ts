@@ -231,4 +231,43 @@ export function windowExtent(
   return [lo === Infinity ? 0 : lo, hi === -Infinity ? 1 : hi];
 }
 
+/** Centred moving average over a lap-periodic series, in metres.
+ *
+ *  For OFFSETS, never for positions — the difference matters. The .ibt carries
+ *  Lat/Lon as float32, which puts a floor of about 0.43 m on latitude and 0.71 m
+ *  on longitude at typical circuit coordinates. An offset is the difference of
+ *  two such positions, so it arrives with roughly 0.65 m of bin-to-bin noise
+ *  that is quantisation, not driving. Drawn at true scale that is invisible.
+ *  Multiplied by a width exaggeration it becomes several metres of sawtooth on
+ *  every line and every road edge on the map.
+ *
+ *  So when the map magnifies the road it averages the offsets over a window
+ *  that grows with the magnification, and the panel says it is doing so. A
+ *  window of 1 is the identity, which is what the true-scale views use.
+ *
+ *  Non-finite entries are gaps in the survey: they are neither averaged into
+ *  their neighbours nor filled in, so a hole stays exactly as wide as it was. */
+export function smoothRing(values: (number | null)[], window: number): (number | null)[] {
+  const n = values.length;
+  if (window <= 1 || n === 0) return values.slice();
+  const half = Math.floor(window / 2);
+  const out: (number | null)[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (values[i] == null || !Number.isFinite(values[i] as number)) {
+      out[i] = null;
+      continue;
+    }
+    let sum = 0;
+    let seen = 0;
+    for (let d = -half; d <= half; d++) {
+      const v = values[wrapAt(i + d, n)];
+      if (v == null || !Number.isFinite(v)) continue;
+      sum += v;
+      seen++;
+    }
+    out[i] = seen ? sum / seen : values[i];
+  }
+  return out;
+}
+
 export const wrapIndex = wrapAt;

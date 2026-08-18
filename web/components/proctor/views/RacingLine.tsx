@@ -39,7 +39,7 @@ import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
 import { explainRoad } from "@/lib/proctor/explain";
 import { fixed, fmtCornerGeometry } from "@/lib/proctor/format";
-import { gpsToLocal, projectAll, wrapIndex } from "@/lib/proctor/geometry";
+import { gpsToLocal, projectAll, smoothRing, wrapIndex } from "@/lib/proctor/geometry";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
 import type { Corner, Trace, TrackBoundary, TrackWidthData } from "@/lib/proctor/types";
@@ -67,6 +67,7 @@ export default function RacingLine() {
      The surface wins when it exists, because it answers the question the band
      could only approximate. The band is still drawn inside it. */
   const tb = bundle.trackBoundary;
+  const geoBins = tb?.centre_x_m.length ?? tw?.centre_x_m.length ?? 1000;
   if (!tb && !tw) {
     /* Nothing to draw is a finding, not an empty panel. The absences carry the
        modules' own reasons, which is the only honest thing to print here. */
@@ -94,6 +95,16 @@ export default function RacingLine() {
 
   const selected = ledger?.corners.find((c) => c.corner.id === selectedCornerId)?.corner ?? bundle.corners[0] ?? null;
 
+  /* How much road the survey has actually found, median over the lap. Worth
+     printing: the surface is a lower bound, so a driver who takes the same line
+     every lap measures a road barely wider than their car, and the map draws it
+     as a thin ribbon that reads as broken rather than as unmeasured. */
+  const surfaceWidth = tb
+    ? medianOf(
+        tb.left_m.map((l, i) => (l == null || tb.right_m[i] == null ? null : l - tb.right_m[i]!)),
+      )
+    : 0;
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "var(--space-4) var(--space-6) var(--space-3)", flex: "none" }}>
@@ -114,7 +125,7 @@ export default function RacingLine() {
           title={tb ? "The track" : "The road you used"}
           sub={
             tb
-              ? `measured over ${tb.laps_contributed} laps here · your line on it`
+              ? `${tb.laps_contributed} laps here · ${fixed(surfaceWidth, 1)} m of road found so far`
               : `${tw!.laps_used.length} clean laps stacked on each other`
           }
           padding="var(--space-3)"
@@ -137,6 +148,12 @@ export default function RacingLine() {
             <Caveat>
               {exaggeration > 1
                 ? `Widths on this map are drawn ${exaggeration}× life size — at true scale a road a few metres wide is thinner than a hairline on a circuit this long. The corner view to the right is at true scale. `
+                : ""}
+              {exaggeration > 1 && offsetWindow(exaggeration) > 1
+                ? `Offsets are averaged over ${offsetWindow(exaggeration)} of the lap's ${geoBins} bins before being magnified: the file stores Lat/Lon as float32, which lands every position on a grid about half a metre across, and magnifying that alongside the road would draw the rounding as sawtooth. `
+                : ""}
+              {tb && surfaceWidth > 0 && surfaceWidth < 8
+                ? `Only ${fixed(surfaceWidth, 1)} m of road has been measured here on average, which is why much of the map is a thin ribbon. The surface is the furthest out the sim still called you on track, so where you took the same line every lap there is nothing wider to find — that is a fact about the driving, not about the circuit. One slow lap down each edge fills it in. `
                 : ""}
               {tb && tb.discarded_bins > 0
                 ? `${tb.discarded_bins} of ${tb.centre_x_m.length} bins are drawn as gaps rather than as road: the stored edge there reached clear of the track either side of it, which is a tow or a dropout being recorded rather than a piece of circuit. `
@@ -242,11 +259,12 @@ function boundaryEdge(
   tb: TrackBoundary,
   key: "left_m" | "right_m",
   exaggerate = 1,
+  window = 1,
 ) {
   const n = tb.centre_x_m.length;
   const x = new Array<number>(n);
   const y = new Array<number>(n);
-  const off = tb[key];
+  const off = smoothRing(tb[key], window);
   for (let i = 0; i < n; i++) {
     const d = off[i];
     if (d == null) {
@@ -321,26 +339,40 @@ function drivenAgainst(
   trace: Trace | null,
   centre: { x: number[]; y: number[]; origin: { lat: number; lon: number } },
   exaggerate = 1,
+  window = 1,
 ) {
   if (!trace || trace.lat_gps.length === 0) return null;
   const raw = gpsToLocal(trace.lat_gps, trace.lon_gps, centre.origin);
   if (exaggerate === 1) return raw;
 
   const n = Math.min(raw.x.length, centre.x.length);
-  const x = new Array<number>(n);
-  const y = new Array<number>(n);
+  const nx = new Array<number>(n);
+  const ny = new Array<number>(n);
+  const off: (number | null)[] = new Array(n);
   for (let i = 0; i < n; i++) {
-    // Normal to the centreline here, from a short chord either side.
-    const a = (i - 3 + n) % n;
-    const b = (i + 3) % n;
+    /* Normal to the centreline here, over the same chord the parser uses for
+       its own (track_edges._TANGENT_HALF_CHORD), so the two agree about which
+       way sideways points. Measured against real geometry this is the small
+       term — widening the chord alone barely moves the sawtooth. What the eye
+       is seeing comes from the offset below. */
+    const a = (i - 6 + n) % n;
+    const b = (i + 6) % n;
     const tx = centre.x[b] - centre.x[a];
     const ty = centre.y[b] - centre.y[a];
     const len = Math.hypot(tx, ty) || 1;
-    const nx = -ty / len;
-    const ny = tx / len;
-    const off = (raw.x[i] - centre.x[i]) * nx + (raw.y[i] - centre.y[i]) * ny;
-    x[i] = centre.x[i] + nx * off * exaggerate;
-    y[i] = centre.y[i] + ny * off * exaggerate;
+    nx[i] = -ty / len;
+    ny[i] = tx / len;
+    off[i] = (raw.x[i] - centre.x[i]) * nx[i] + (raw.y[i] - centre.y[i]) * ny[i];
+  }
+
+  // Averaged before it is magnified, never after: see smoothRing.
+  const settled = smoothRing(off, window);
+  const x = new Array<number>(n);
+  const y = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    const d = (settled[i] ?? 0) * exaggerate;
+    x[i] = centre.x[i] + nx[i] * d;
+    y[i] = centre.y[i] + ny[i] * d;
   }
   return { x, y };
 }
@@ -357,11 +389,12 @@ function edges(
   tw: TrackWidthData,
   key: "left_m" | "right_m" | "p90_m" | "p10_m",
   exaggerate = 1,
+  window = 1,
 ) {
   const n = tw.centre_x_m.length;
   const x = new Array<number>(n);
   const y = new Array<number>(n);
-  const off = tw[key];
+  const off = smoothRing(tw[key], window);
   for (let i = 0; i < n; i++) {
     const d = (off[i] ?? 0) * exaggerate;
     x[i] = tw.centre_x_m[i] + tw.normal_x[i] * d;
@@ -445,6 +478,23 @@ const TARGET_BAND_PX = 9;
 /** Past this the picture stops being a circuit and becomes a decoration. */
 const MAX_EXAGGERATION = 40;
 
+/** How many bins to average an offset over, given how much widths are magnified.
+ *
+ *  The .ibt carries Lat/Lon as float32, so every position lands on a grid about
+ *  0.43 m apart in latitude and 0.71 m in longitude. An offset is a difference
+ *  of two of those, and arrives with roughly 0.65 m of bin-to-bin noise. At true
+ *  scale that is a fraction of a pixel. At x8 it is about 5 m of sawtooth on
+ *  every line and every road edge — the file's rounding, drawn as if it were
+ *  driving.
+ *
+ *  A centred mean over w bins cuts white noise by sqrt(w), so the window tracks
+ *  the square root of the exaggeration: enough to put the noise back under a
+ *  viewBox unit, and far too short to touch anything the driver did, which
+ *  happens over hundreds of metres rather than bin to bin. At true scale the
+ *  window is 1 and nothing is averaged at all. */
+const offsetWindow = (exaggerate: number) =>
+  exaggerate <= 1 ? 1 : Math.min(11, 2 * Math.round(Math.sqrt(exaggerate)) - 1);
+
 function FullCircuit({
   tb,
   tw,
@@ -501,16 +551,19 @@ function FullCircuit({
         ? Math.min(MAX_EXAGGERATION, Math.max(1, Math.round(TARGET_BAND_PX / (typicalWidth * pxPerMetre))))
         : 1;
 
+    // Magnifying the road must not also magnify the file's position rounding.
+    const window = offsetWindow(exaggerate);
+
     // The measured road, when there is one.
-    const surfL = tb ? boundaryEdge(tb, "left_m", exaggerate) : null;
-    const surfR = tb ? boundaryEdge(tb, "right_m", exaggerate) : null;
+    const surfL = tb ? boundaryEdge(tb, "left_m", exaggerate, window) : null;
+    const surfR = tb ? boundaryEdge(tb, "right_m", exaggerate, window) : null;
     // The band between the driver's own lines, when that was computed. Drawn on
     // top of the road, because "where I went" reads against "what was there".
-    const bandL = tw ? edges(tw, "left_m", exaggerate) : null;
-    const bandR = tw ? edges(tw, "right_m", exaggerate) : null;
+    const bandL = tw ? edges(tw, "left_m", exaggerate, window) : null;
+    const bandR = tw ? edges(tw, "right_m", exaggerate, window) : null;
 
-    const a = drivenAgainst(traceA, centre, exaggerate);
-    const b = drivenAgainst(traceB, centre, exaggerate);
+    const a = drivenAgainst(traceA, centre, exaggerate, window);
+    const b = drivenAgainst(traceB, centre, exaggerate, window);
 
     // Fitted to the OUTERMOST geometry, so nothing hanging off the centreline
     // is clipped at the frame.

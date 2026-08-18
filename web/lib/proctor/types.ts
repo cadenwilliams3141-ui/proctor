@@ -576,6 +576,11 @@ export interface TrackBoundary {
   sessions_contributed: number;
   laps_contributed: number;
   updated_at: string | null;
+  /** Bins dropped on the way out of the database because the edge they claimed
+   *  leapt outward from the road either side of it — a tow, a GPS dropout, a
+   *  layout change under the same name. Reported so the screen can say the road
+   *  it is drawing is missing pieces on purpose. */
+  discarded_bins: number;
 }
 
 /** What THIS session saw of the surface: where it left it, and what it rode. */

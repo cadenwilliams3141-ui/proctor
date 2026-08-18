@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.track_boundary import (  # noqa: E402
     _offsets_in_frame,
+    _plausible,
     _usable,
     _widen,
     merge_session,
@@ -84,6 +85,40 @@ class TestOffsetsInFrame:
         out = _offsets_in_frame(payload, (33.0, -84.0), cx, cy, nx, ny, "left")
         assert out[0] is None
         assert out[1] == pytest.approx(4.0, abs=0.02)
+
+
+class TestPlausible:
+    """The second gate, after the absolute one.
+
+    `_offsets_in_frame` rejects anything past 60 m, which catches a dropout but
+    not a tow: 35 m across the infield is well inside it. Since the merge below
+    only ever widens, whatever gets through here is permanent.
+    """
+
+    def test_a_spike_that_cleared_the_absolute_gate_is_still_dropped(self):
+        offsets = [6.0] * 400
+        offsets[200] = 35.0
+        assert _plausible(offsets, "left")[200] is None
+        assert _plausible(offsets, "left")[199] == 6.0
+
+    def test_a_road_that_genuinely_widens_survives(self):
+        offsets = [6.0] * 400
+        for i in range(150, 210):
+            offsets[i] = 15.0
+        assert _plausible(offsets, "left")[180] == 15.0
+
+    def test_a_narrow_reading_survives(self):
+        # The stored boundary is a lower bound; a timid bin is a real reading.
+        offsets = [6.0] * 400
+        offsets[200] = 0.5
+        assert _plausible(offsets, "left")[200] == 0.5
+
+    def test_gaps_stay_gaps_and_the_length_is_kept(self):
+        offsets: list[float | None] = [6.0] * 400
+        offsets[10] = None
+        out = _plausible(offsets, "left")
+        assert out[10] is None
+        assert len(out) == 400
 
 
 class TestWiden:

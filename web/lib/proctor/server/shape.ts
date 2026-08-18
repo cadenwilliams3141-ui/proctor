@@ -798,6 +798,86 @@ export function absencesFrom(
 }
 
 
+/* ── Edges that leap off the road ──────────────────────────────────────────
+ *
+ * The stored boundary only ever WIDENS (render-service/app/track_boundary.py):
+ * `max` on the left, `min` on the right, forever. That is the right rule for a
+ * measurement that grows with use, but it means a single bad sample is
+ * permanent. A tow dragging the car across the infield, a GPS dropout, two
+ * layouts sharing a track name — any of them lands one bin's edge tens of
+ * metres off the circuit, and nothing later can pull it back in.
+ *
+ * On screen that bin becomes a wedge fanning out of the track, and it does more
+ * damage than its own area: the racing-line view picks its width exaggeration
+ * from the MEDIAN width and then fits the frame to the OUTERMOST geometry, so
+ * one spike is first multiplied and then shrinks the real circuit to make room
+ * for itself.
+ *
+ * The test below is deliberately ONE-SIDED. This measurement is a lower bound
+ * on the road: a bin where only a middle-of-road sample ever landed reads
+ * narrow, and that is the module doing exactly what it claims, not an error.
+ * Only OUTWARD leaps are discarded — an edge insisting the road reaches far
+ * past everything on either side of it.
+ *
+ * A discarded bin becomes null, which is already drawn as a gap in the survey,
+ * and the count travels with the boundary so the screen can say the road has
+ * holes in it on purpose rather than quietly showing a tidier track than was
+ * measured. */
+
+/** Half-window for the local comparison, as a share of the lap. A real change
+ *  in the road runs over many bins; a glitch is a handful. */
+const EDGE_WINDOW_PCT = 0.025;
+/** Nothing on a real road moves an edge this far from its neighbours over a few
+ *  metres of track. Roughly half a road width. */
+const EDGE_FLOOR_M = 6;
+/** …unless the neighbourhood itself is that ragged, in which case the spread
+ *  sets the bar instead of the floor. */
+const EDGE_MAD_K = 6;
+/** Below this many measured neighbours there is no neighbourhood to argue with,
+ *  so nothing is thrown away. */
+const EDGE_MIN_NEIGHBOURS = 8;
+
+/** Drop bins whose edge reaches implausibly further out than the road around
+ *  them. Returns the cleaned series and how much was dropped. */
+export function plausibleEdge(
+  offsets: (number | null)[],
+  side: "left" | "right",
+): { cleaned: (number | null)[]; discarded: number } {
+  const n = offsets.length;
+  const half = Math.max(4, Math.round(n * EDGE_WINDOW_PCT));
+  const cleaned = offsets.slice();
+  let discarded = 0;
+
+  for (let i = 0; i < n; i++) {
+    const v = offsets[i];
+    if (v == null) continue;
+
+    // The neighbourhood, excluding the bin under test so a spike cannot vote
+    // for its own plausibility. A lap is a loop, so the window wraps.
+    const near: number[] = [];
+    for (let d = -half; d <= half; d++) {
+      if (d === 0) continue;
+      const w = offsets[(((i + d) % n) + n) % n];
+      if (w != null) near.push(w);
+    }
+    if (near.length < EDGE_MIN_NEIGHBOURS) continue;
+
+    const mid = median(near);
+    const mad = median(near.map((w) => Math.abs(w - mid)));
+    const tolerance = Math.max(EDGE_FLOOR_M, EDGE_MAD_K * mad);
+
+    // Left offsets run positive, right offsets negative; "outward" is away from
+    // the centreline on whichever side this is.
+    const outward = side === "left" ? v - mid : mid - v;
+    if (outward > tolerance) {
+      cleaned[i] = null;
+      discarded++;
+    }
+  }
+
+  return { cleaned, discarded };
+}
+
 /** The accumulated boundary, shaped for the screen.
  *
  *  Nullable elements are preserved element by element rather than run through
@@ -829,6 +909,9 @@ export function trackBoundaryFrom(
         })
       : [];
 
+  const left = plausibleEdge(sparse(row.left_m), "left");
+  const right = plausibleEdge(sparse(row.right_m), "right");
+
   return {
     track_name: String(row.track_name),
     origin: { lat: Number(row.origin_lat), lon: Number(row.origin_lon) },
@@ -836,11 +919,12 @@ export function trackBoundaryFrom(
     centre_y_m: nums(row.centre_y_m),
     normal_x: nums(row.normal_x),
     normal_y: nums(row.normal_y),
-    left_m: sparse(row.left_m),
-    right_m: sparse(row.right_m),
+    left_m: left.cleaned,
+    right_m: right.cleaned,
     sessions_contributed: Number(row.sessions_contributed ?? 0),
     laps_contributed: Number(row.laps_contributed ?? 0),
     updated_at: row.updated_at == null ? null : String(row.updated_at),
+    discarded_bins: left.discarded + right.discarded,
   };
 }
 

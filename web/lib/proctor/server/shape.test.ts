@@ -213,6 +213,87 @@ describe("track boundary", () => {
     expect(trackBoundaryFrom(null)).toBeNull();
     expect(trackBoundaryFrom({ ...row, centre_x_m: [] })).toBeNull();
   });
+
+  it("leaves a short boundary alone — too few neighbours to call anything wrong", () => {
+    // The 4-bin row above has nothing like a neighbourhood. Throwing a bin away
+    // on that evidence would be guessing, so nothing is thrown away.
+    expect(trackBoundaryFrom(row)?.discarded_bins).toBe(0);
+  });
+});
+
+describe("an edge that leaps off the road", () => {
+  /* The stored boundary only ever widens, so one bad sample is permanent: it
+     draws as a wedge fanning out of the circuit, and because the view fits its
+     frame to the outermost geometry it shrinks the real track to make room. */
+  const N = 400;
+  const circuit = (over: Record<number, number> = {}) => ({
+    track_name: "Long Beach",
+    origin_lat: 33.76,
+    origin_lon: -118.19,
+    centre_x_m: Array.from({ length: N }, (_, i) => i * 8),
+    centre_y_m: Array(N).fill(0),
+    normal_x: Array(N).fill(0),
+    normal_y: Array(N).fill(1),
+    left_m: Array.from({ length: N }, (_, i) => over[i] ?? 6),
+    right_m: Array.from({ length: N }, (_, i) => -(over[-i - 1] ?? 6)),
+    sessions_contributed: 5,
+    laps_contributed: 80,
+    updated_at: "2026-08-14T12:00:00Z",
+  });
+
+  it("discards a bin whose edge reaches far past the road either side of it", () => {
+    const tb = trackBoundaryFrom(circuit({ 120: 52, 121: 47 }));
+    expect(tb?.left_m[120]).toBeNull();
+    expect(tb?.left_m[121]).toBeNull();
+    expect(tb?.discarded_bins).toBe(2);
+    // …and leaves the road it was sitting on untouched.
+    expect(tb?.left_m[119]).toBe(6);
+    expect(tb?.left_m[122]).toBe(6);
+  });
+
+  it("discards outward on the right edge too, where outward means negative", () => {
+    const tb = trackBoundaryFrom({
+      ...circuit(),
+      right_m: Array.from({ length: N }, (_, i) => (i === 200 ? -48 : -6)),
+    });
+    expect(tb?.right_m[200]).toBeNull();
+    expect(tb?.discarded_bins).toBe(1);
+  });
+
+  it("keeps a bin that reads NARROW — a lower bound is allowed to be low", () => {
+    // Nothing but a middle-of-road sample ever landed here. That is this
+    // measurement doing exactly what it says on the tin, not an artifact, and
+    // discarding it would throw away a real reading to tidy the picture.
+    const tb = trackBoundaryFrom(circuit({ 300: 0.5 }));
+    expect(tb?.left_m[300]).toBe(0.5);
+    expect(tb?.discarded_bins).toBe(0);
+  });
+
+  it("keeps a widening that the road actually does — a runoff, not a glitch", () => {
+    // 60 bins of genuinely wider road: the local median moves with it, so the
+    // neighbourhood agrees and none of it is discarded.
+    const wide: Record<number, number> = {};
+    for (let i = 150; i < 210; i++) wide[i] = 14;
+    const tb = trackBoundaryFrom(circuit(wide));
+    expect(tb?.discarded_bins).toBe(0);
+    expect(tb?.left_m[180]).toBe(14);
+  });
+
+  it("wraps the window across the start/finish line", () => {
+    // Bin 0's neighbours run backwards into the end of the lap. Without the
+    // wrap it would be judged against half a window and survive.
+    const tb = trackBoundaryFrom(circuit({ 0: 50 }));
+    expect(tb?.left_m[0]).toBeNull();
+  });
+
+  it("does not invent edges where the survey has none", () => {
+    const holed = circuit();
+    holed.left_m = holed.left_m.map((v, i) => (i > 40 && i < 380 ? v : null)) as number[];
+    const tb = trackBoundaryFrom(holed);
+    expect(tb?.left_m[10]).toBeNull();
+    expect(tb?.left_m[100]).toBe(6);
+    expect(tb?.left_m).toHaveLength(N);
+  });
 });
 
 describe("track edges", () => {

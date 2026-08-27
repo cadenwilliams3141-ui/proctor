@@ -12,7 +12,10 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
   report: { title: "Session report", sub: "what this session did, module by module" },
   analyze: { title: "Analyze", sub: "any lap of this session against any other" },
   live: { title: "Live trace", sub: "your lap played back in the time it actually took" },
-  rig: { title: "Rig health", sub: "what your hardware produced this session" },
+  rig: {
+    title: "Forces",
+    sub: "from your foot to the ground, in the order it happened",
+  },
   upload: { title: "Upload", sub: "add a session by hand" },
 };
 

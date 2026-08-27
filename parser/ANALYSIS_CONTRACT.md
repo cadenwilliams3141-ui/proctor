@@ -44,12 +44,16 @@ ParsedLap:
 | rpm | RPM | rev/min |
 | lat_accel, long_accel, vert_accel | *Accel | m/s² |
 | yaw_rate | YawRate | rad/s |
+| yaw | Yaw | rad (heading) |
+| vel_x, vel_y | VelocityX/Y | m/s, car frame (forward, lateral) |
 | lat_gps, lon_gps | Lat/Lon | deg |
+| alt | Alt | m |
 | lf_speed, rf_speed, lr_speed, rr_speed | ??speed | m/s (wheel) |
 | abs_active | BrakeABSactive | bool |
 | abs_cut | BrakeABScutPct | % |
 | ffb_stops | SteeringWheelPctTorqueSignStops | 0..1 (FFB saturation) |
 | ffb_pct | SteeringWheelPctTorque | 0..1 |
+| steer_torque | SteeringWheelTorque | N·m (absolute, comparable across sessions) |
 | fuel | FuelLevel | liters |
 | lf_temp_l/m/r | LFtempL/M/R | °C |
 | brake_bias | dcBrakeBias | % front |

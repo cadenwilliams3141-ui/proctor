@@ -35,8 +35,20 @@ RAW_CHANNEL_MAP = {
     "long_accel": "LongAccel",
     "vert_accel": "VertAccel",
     "yaw_rate": "YawRate",
+    # Heading and velocity in the car's own frame. These are core channels
+    # (every file is rejected without them) that v1 validated and then threw
+    # away. vel_x/vel_y are what make chassis slip angle a MEASUREMENT --
+    # atan2(vel_y, vel_x) is the angle between where the car points and where
+    # it is actually going -- rather than something fitted from a model.
+    "yaw": "Yaw",
+    "vel_x": "VelocityX",
+    "vel_y": "VelocityY",
     "lat_gps": "Lat",
     "lon_gps": "Lon",
+    # Elevation, for the road grade under the car. LongAccel carries the
+    # component of gravity along a slope, so braking g at an elevation-changing
+    # circuit is wrong by g*sin(theta) until this is subtracted.
+    "alt": "Alt",
     "lf_speed": "LFspeed",
     "rf_speed": "RFspeed",
     "lr_speed": "LRspeed",
@@ -45,6 +57,11 @@ RAW_CHANNEL_MAP = {
     "abs_cut": "BrakeABScutPct",
     "ffb_stops": "SteeringWheelPctTorqueSignStops",
     "ffb_pct": "SteeringWheelPctTorque",
+    # Absolute self-aligning torque at the column, in Nm. ffb_pct is the same
+    # force normalised to the rig's own range and so cannot be compared across
+    # sessions or settings; this one can, and it is the physical quantity the
+    # front tires actually send back to the driver's hands.
+    "steer_torque": "SteeringWheelTorque",
     "fuel": "FuelLevel",
     "lf_temp_l": "LFtempL",
     "lf_temp_m": "LFtempM",

@@ -61,6 +61,7 @@ def compute(session: ParsedSession) -> dict:
     throttle = _concat(session, "throttle")
     abs_active = _concat(session, "abs_active")
     ffb_stops = _concat(session, "ffb_stops")
+    steer_torque = _concat(session, "steer_torque")
     moving = moving_mask(speed)
 
     brake_vs_raw = _brake_vs_raw(brake, brake_raw, moving)
@@ -74,6 +75,7 @@ def compute(session: ParsedSession) -> dict:
         "brake_bias": _brake_bias(session),
         "pedal_noise_floor": noise,
         "ffb": ffb,
+        "steer_torque": _steer_torque(steer_torque, moving),
         "areas_of_concern": _areas_of_concern(noise, ffb),
         "caveat": _CAVEAT,
     }
@@ -186,6 +188,50 @@ def _ffb(ffb_stops: np.ndarray, moving: np.ndarray) -> dict:
     if clipping_pct == 0.0:
         out["finding"] = "no FFB clipping detected"
     return out
+
+
+def _steer_torque(steer_torque: np.ndarray | None, moving: np.ndarray) -> dict:
+    """Column torque in Nm — the same force ffb reports, in physical units.
+
+    `ffb` reads SteeringWheelPctTorqueSignStops, which is torque normalised to
+    whatever the rig's force range happens to be set to, so it cannot be
+    compared between sessions or after a settings change. This one can: Nm is
+    Nm. Both are kept because the normalised channel is the one that says
+    "against the stops", and this one says how hard that actually was.
+
+    The saturation share here is measured against the DRIVER'S OWN maximum this
+    session, in keeping with the self-envelope rule — it is not a claim about
+    the wheelbase's rated output, which the file does not carry.
+    """
+    if steer_torque is None:
+        return {
+            "available": False,
+            "reason": "SteeringWheelTorque not carried into lap objects",
+        }
+    if not moving.any():
+        return {"insufficient_data": True, "reason": "no moving ticks"}
+
+    vals = np.abs(steer_torque[moving].astype(np.float64))
+    vals = vals[np.isfinite(vals)]
+    if vals.size == 0:
+        return {"insufficient_data": True, "reason": "no finite torque ticks while moving"}
+
+    peak = float(vals.max())
+    at_own_max = (
+        round(100.0 * float((vals >= peak * 0.99).mean()), 2) if peak > 0 else 0.0
+    )
+    return {
+        "available": True,
+        "median_nm": round(float(np.median(vals)), 2),
+        "peak_nm": round(peak, 2),
+        "at_own_max_pct": at_own_max,
+        "ticks": int(vals.size),
+        "note": (
+            "absolute torque at the column. at_own_max_pct is the share of "
+            "moving ticks within 1% of YOUR highest reading this session, not a "
+            "hardware rating"
+        ),
+    }
 
 
 def _areas_of_concern(noise: dict, ffb: dict) -> dict:

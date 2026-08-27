@@ -12,6 +12,7 @@ import { useMemo } from "react";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import NotDrawable from "@/components/proctor/ui/NotDrawable";
+import TechniqueNotes from "@/components/proctor/ui/TechniqueNote";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import { CH, deltaColor, deltaSense, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtCornerGeometry, fmtDelta, fmtLap, kmh, toG } from "@/lib/proctor/format";
@@ -19,6 +20,7 @@ import { windowExtent, wrapIndex } from "@/lib/proctor/geometry";
 import { noteFor } from "@/lib/proctor/provenance";
 import { observation, ranked } from "@/lib/proctor/ledger";
 import { useProctor } from "@/lib/proctor/store";
+import { techniqueForLap } from "@/lib/proctor/technique";
 import type { CornerDelta } from "@/lib/proctor/types";
 import { atLeast } from "@/lib/tier";
 
@@ -235,6 +237,11 @@ export default function WhereItWent() {
           {/* At "glance" the answer leads and the evidence steps back. The
               panel is not missing — the note under the view says it is hidden. */}
           {atLeast(state.tier, "deep") && <CarState selected={selected} />}
+          {/* Deliberately the LAST thing in this column, after every panel that
+              reads this driver's own file. It is general technique and carries
+              a label saying so; putting it above a measurement would invite it
+              to be read as one. */}
+          <TechniqueNotes notes={techniqueForLap(ledger)} showBecause={false} />
         </div>
       </div>
     </div>

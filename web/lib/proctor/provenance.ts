@@ -21,6 +21,26 @@ export interface FieldNote {
 }
 
 export const FIELD_PROVENANCE: Record<string, FieldNote> = {
+  "slip.angle": {
+    provenance: "measured",
+    note: "The angle between where the car was pointing and where it was actually travelling, from the sim's own velocity vector in the car's own frame. Nothing is fitted and no tyre model is involved — this is the file's answer, not ours.",
+  },
+  "steer.torque": {
+    provenance: "measured",
+    note: "Self-aligning torque at the column in newton-metres, as the front tyres returned it. Unlike the force-feedback percentage this is an absolute figure, so it can be compared between sessions and across rig settings.",
+  },
+  "rotation.path": {
+    provenance: "derived",
+    note: "A car on a steady circular path yaws at lateral g over speed. This is the gap between that and the yaw rate the file recorded — computed here from two measured channels, which makes it ours rather than the file's.",
+  },
+  "grade.correction": {
+    provenance: "derived",
+    note: "Road slope from altitude against distance travelled, used to take gravity back out of the braking figure. The uncorrected number is shown beside it because that is what every other panel uses.",
+  },
+  "tire.load_kg": {
+    provenance: "absent",
+    note: "Load on each individual tyre is not available. Splitting the car's measured force between four contact patches needs centre-of-gravity height, track width and wheelbase — per-car constants this app does not hold and will not guess. The whole-car force IS measured and is shown in g.",
+  },
   "corner.sections": {
     provenance: "awaited",
     note: "Per-corner sub-section deltas are split here from the delta trace. corner_sections.per_lap already carries them for the reference lap; the parser does not yet emit them for an arbitrary lap pair.",

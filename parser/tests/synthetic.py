@@ -142,9 +142,16 @@ def make_core_channels(
         "Yaw": np.zeros(n),
         "Lat": 33.0 + dist * 0.01,
         "Lon": -84.0 + dist * 0.01,
-        "Alt": np.full(n, 300.0),
+        # A gentle hill round the lap: +-10 m over a 4 km circuit is about a
+        # 1.5% grade at its steepest, which is real road and well inside the
+        # module's implausible-grade guard.
+        "Alt": 300.0 + 10.0 * np.sin(dist * 2 * np.pi),
+        # VelocityY was all zeros, which made every slip-angle assertion pass
+        # for free. It now carries a known lateral component: 2% of forward
+        # speed, in phase with the steering, so beta = atan2(vy, vx) is exactly
+        # atan(0.02*sin) and a test can assert the recovered peak to the degree.
         "VelocityX": speed,
-        "VelocityY": np.zeros(n),
+        "VelocityY": speed * 0.02 * np.sin(dist * 2 * np.pi),
         "FuelLevel": np.linspace(60.0, 40.0, n),
         "LFspeed": speed,
         "RFspeed": speed,
@@ -157,7 +164,12 @@ def make_core_channels(
         "ShiftGrindRPM": np.zeros(n),
         "SteeringWheelPctTorque": np.full(n, 0.4),
         "SteeringWheelPctTorqueSignStops": np.full(n, 0.4),
-        "SteeringWheelTorque": np.full(n, 5.0),
+        # Torque rises with lock and then FALLS BACK past a threshold, so the
+        # self-aligning-torque falloff the module looks for is planted here with
+        # known ground truth rather than assumed.
+        "SteeringWheelTorque": np.where(
+            np.abs(np.sin(dist * 2 * np.pi) * 0.5) > 0.35, 3.0, 10.0
+        ),
         "LFtempL": np.full(n, 80.0),
         "LFtempM": np.full(n, 85.0),
         "LFtempR": np.full(n, 90.0),

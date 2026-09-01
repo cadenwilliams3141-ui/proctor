@@ -13,3 +13,7 @@ node_modules/
 config.json
 uploader.log
 *.egg-info/
+# Captured bundles and screenshots from web/scripts/responsive-sweep.mjs.
+# Regenerated on demand and megabytes of it; the script is the artifact, not
+# its output.
+.sweep/

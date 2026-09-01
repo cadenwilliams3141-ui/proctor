@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  contactPatchFrom,
   absencesFrom,
   eventPatternsFrom,
   eventsFrom,
@@ -399,10 +400,95 @@ describe("absences are classified by what would fix them", () => {
         "track_map", "traction_circle", "tire_temps", "lockup_wheelspin",
         "shift_analysis", "hardware", "balance", "report_card", "grip",
         "track_edges", "input_response", "stint", "track_width",
+        "contact_patch",
       ].map((k) => [k, k === "tire_temps" ? { ...ok, curve: [1, 2] } : ok]),
     );
     const a = absencesFrom(metrics, { wear_masked: false });
     expect(a.every((x) => x.kind === "permanent")).toBe(true);
     expect(a.map((x) => x.key).sort()).toEqual(["brake_temp", "racecraft"]);
+  });
+});
+
+describe("contactPatchFrom", () => {
+  const full = {
+    contact_patch: {
+      basis: "b",
+      slip: { measured: true, peak_deg: 3.4, median_deg: 1.1, ticks: 900 },
+      rotation: { measured: true, path_agreement: 0.98, rotated_more_than_path_pct: 12.5 },
+      steer_torque: {
+        measured: true,
+        bands: [
+          { band: "0-20°", ticks: 500, measured: true, median_torque_nm: 9.5 },
+          { band: "20-45°", ticks: 3, measured: false, reason: "only 3 ticks at this much lock" },
+        ],
+        most_torque_band: "0-20°",
+        falloff_past_peak_nm: 2.5,
+      },
+      grade: {
+        measured: true,
+        steepest_climb_pct: 4.2,
+        braking: {
+          measured: true,
+          peak_decel_g_uncorrected: 1.4,
+          peak_decel_g_grade_corrected: 1.32,
+          difference_g: -0.08,
+        },
+      },
+      corners: {
+        measured: true,
+        reference_lap: 4,
+        corners: [
+          { id: 1, start_pct: 0.1, apex_pct: 0.15, end_pct: 0.2, measured: true, ticks: 300, peak_slip_deg: 5.1, dir: "left", radius_m: 90 },
+          { id: 2, start_pct: 0.4, apex_pct: 0.45, end_pct: 0.5, measured: false, reason: "only 4 ticks", ticks: 4 },
+        ],
+        most_slip: { id: 1, peak_slip_deg: 5.1 },
+      },
+      per_tire_load: { available: false, reason: "needs wheelbase and track width" },
+    },
+  };
+
+  it("carries slip, torque, grade and corners through", () => {
+    const cp = contactPatchFrom(full)!;
+    expect(cp.slip.peak_deg).toBe(3.4);
+    expect(cp.rotation.path_agreement).toBe(0.98);
+    expect(cp.steerTorque.falloff_past_peak_nm).toBe(2.5);
+    expect(cp.grade.braking.peak_decel_g_grade_corrected).toBe(1.32);
+    expect(cp.corners.corners).toHaveLength(2);
+    expect(cp.corners.most_slip).toEqual({ id: 1, peak_slip_deg: 5.1 });
+  });
+
+  it("keeps an unmeasured band's reason and gives it no number", () => {
+    const band = contactPatchFrom(full)!.steerTorque.bands[1];
+    expect(band.measured).toBe(false);
+    expect(band.reason).toContain("only 3 ticks");
+    expect(band.median_torque_nm).toBeNull();
+  });
+
+  it("keeps an unmeasured corner's reason rather than dropping the corner", () => {
+    const corner = contactPatchFrom(full)!.corners.corners[1];
+    expect(corner.measured).toBe(false);
+    expect(corner.reason).toBe("only 4 ticks");
+    expect(corner.peak_slip_deg).toBeNull();
+  });
+
+  it("always reports the per-tire-load wall, never a number", () => {
+    const wall = contactPatchFrom(full)!.perTireLoad;
+    expect(wall.available).toBe(false);
+    expect(wall.reason).toContain("wheelbase");
+  });
+
+  it("carries the wall even when the module itself measured nothing", () => {
+    const cp = contactPatchFrom({
+      contact_patch: { basis: "b", slip: { measured: false, reason: "too slow" } },
+    })!;
+    expect(cp.slip.measured).toBe(false);
+    expect(cp.slip.reason).toBe("too slow");
+    expect(cp.perTireLoad.available).toBe(false);
+    expect(cp.perTireLoad.reason.length).toBeGreaterThan(0);
+  });
+
+  it("is null when the module never ran", () => {
+    expect(contactPatchFrom({})).toBeNull();
+    expect(contactPatchFrom({ contact_patch: { insufficient_data: true } })).toBeNull();
   });
 });

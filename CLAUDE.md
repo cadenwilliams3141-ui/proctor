@@ -31,6 +31,10 @@ Product identity: observations, not verdicts. This constraint lives in the code 
 
 ## Non-negotiable engineering rules
 - Channels: look up BY NAME, never fixed offset (offsets differ between cars).
+- `CORE_CHANNELS` (ibt.py) is what every file MUST carry; `RAW_CHANNEL_MAP` (session.py) is what
+  reaches modules. They are not the same list, and a channel in the first but not the second is
+  parsed, validated and thrown away — that is how VelocityX/Y, Yaw, Alt and SteeringWheelTorque
+  sat unused until 2026-08-27. Check both before concluding the data is not there.
 - Stationary guard: exclude Speed <= 5 m/s from ALL Brake-vs-BrakeRaw logic
   (`proctor_parser.laps.moving_mask` — the sim forces Brake=1.0 when stopped).
 - Honor SessionNum (files may hold multiple sessions) and wear_masked.
@@ -39,6 +43,11 @@ Product identity: observations, not verdicts. This constraint lives in the code 
 - Uploader waits for the file write to finish before uploading (size stable 5s).
 - Analysis modules follow parser/ANALYSIS_CONTRACT.md: pure ParsedSession → JSON dict,
   registered explicitly in analysis/__init__.py, honesty fields in every payload.
+- No route may carry telemetry bytes through Vercel: serverless request bodies cap at 4.5 MB and
+  a session .ibt is 54-136 MB. The browser POSTs straight to Render. (Broken once by construction.)
+- No screen may carry a measurement as a literal in its own source. Broken three times now —
+  twice on desktop, once on the phone, each found only by looking at the pixels. A number a screen
+  invents survives a change of session and describes the wrong run without ever looking wrong.
 - MCP first, CLI fallback.
 
 ## Regression tripwire (the golden fixtures — exact filenames, in OneDrive iRacing\Telemetry)
@@ -50,7 +59,9 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   **left-foot braking detected** (median **−50 ms** signed release→brake, 77% brake-before-lift);
   **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (51 tests). If these numbers move, you broke something.
+  (**140 collected: 134 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
+  `cd web && npx vitest run` (**108 tests**). If these numbers move, you broke something.
+  The count above was stale at "51" for five sessions — correct it here when you add tests.
 
 ## Capabilities boundary (do NOT build or promise — the data isn't there)
 - Racecraft/positioning tips (no CarIdx in disk files; intent unknowable).
@@ -58,6 +69,10 @@ Product identity: observations, not verdicts. This constraint lives in the code 
 - Tire-wear-over-race in official sessions (masked/frozen).
 - "Why did you lift" — intent is not a channel. Permanent wall.
 - FOV calculator is a static tool, not telemetry analysis — frame it honestly.
+- Per-tire load in kg. Splitting the car's measured force between four contact patches needs
+  CG height, track width and wheelbase — per-car constants, which is the whole thing the
+  self-envelope thesis avoids. The WHOLE-CAR force is measured and reported in g; only the
+  per-tire split is unavailable. `contact_patch.per_tire_load` says so in the payload.
 
 ## Before re-opening a settled question
 Check the Decisions database in Notion first. If it's there and Active, don't re-litigate —

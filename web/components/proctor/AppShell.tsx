@@ -22,7 +22,7 @@ import TopBar from "@/components/proctor/shell/TopBar";
 import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
 import LiveScreen from "@/components/proctor/screens/LiveScreen";
 import ReportScreen from "@/components/proctor/screens/ReportScreen";
-import RigScreen from "@/components/proctor/screens/RigScreen";
+import ForcesScreen from "@/components/proctor/screens/ForcesScreen";
 import SessionsScreen from "@/components/proctor/screens/SessionsScreen";
 import UploadScreen from "@/components/proctor/screens/UploadScreen";
 
@@ -45,8 +45,12 @@ export default function AppShell() {
 
   return (
     <div
+      className="app-shell"
       style={{
-        height: "100vh",
+        /* dvh, not vh: on a mobile browser 100vh is the viewport WITHOUT the
+           address bar, so the last centimetre of every screen sat under it.
+           The phone app already used dvh; this one never did. */
+        height: "100dvh",
         display: "flex",
         overflow: "hidden",
         fontSize: 13,
@@ -133,7 +137,7 @@ export default function AppShell() {
             {state.screen === "live" && <LiveScreen />}
             {state.screen === "sessions" && <SessionsScreen />}
             {state.screen === "report" && <ReportScreen />}
-            {state.screen === "rig" && <RigScreen />}
+            {state.screen === "rig" && <ForcesScreen />}
             {state.screen === "upload" && <UploadScreen />}
           </div>
         )}

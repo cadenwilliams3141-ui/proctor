@@ -72,6 +72,50 @@ def test_hardware_areas_of_concern_flags_pedal_noise():
     assert json.loads(json.dumps(aoc))
 
 
+def test_hardware_ffb_clipping_counts_both_steering_directions():
+    """SteeringWheelPctTorqueSignStops is SIGNED, so clipping is |x| >= 0.99.
+
+    Regression for a bug that could only ever under-report: the check used to
+    be a bare `>= 0.99`, which sees the wheel pinned one way and is blind to it
+    pinned the other. The synthetic holds the channel flat at 0.4, so nothing
+    in the suite had ever driven it against a stop in either direction.
+
+    Planted here: a quarter of the ticks clipped NEGATIVE and nothing positive.
+    The old code reported 0.0% and printed "no FFB clipping detected" over a
+    session that spent a quarter of its time against the stops.
+    """
+    ch = make_core_channels()
+    stops = ch["SteeringWheelPctTorqueSignStops"].copy()
+    n = len(stops)
+    clipped = slice(0, n // 4)
+    stops[clipped] = -1.0
+    ch["SteeringWheelPctTorqueSignStops"] = stops
+    session = parse_ibt(build_ibt(ch))[0]
+
+    ffb = hardware.compute(session)["ffb"]
+    assert ffb["clipping_pct"] > 0.0, "negative-direction clipping went uncounted"
+    assert "finding" not in ffb, "reported the all-clear over a clipped session"
+
+    # And the share is the real one, not half of it. The planted ticks are a
+    # quarter of the file; moving_mask drops the stationary ones, so the share
+    # among MOVING ticks is what is asserted, with room for that trim.
+    assert 15.0 < ffb["clipping_pct"] <= 30.0
+
+
+def test_hardware_ffb_clipping_is_symmetric_in_sign():
+    """The same magnitude clipped either way must report the same share."""
+    shares = []
+    for sign in (1.0, -1.0):
+        ch = make_core_channels()
+        stops = ch["SteeringWheelPctTorqueSignStops"].copy()
+        stops[: len(stops) // 4] = sign
+        ch["SteeringWheelPctTorqueSignStops"] = stops
+        session = parse_ibt(build_ibt(ch))[0]
+        shares.append(hardware.compute(session)["ffb"]["clipping_pct"])
+
+    assert shares[0] == shares[1], f"sign changed the answer: {shares}"
+
+
 def test_hardware_payload_is_json_serializable():
     payload = hardware.compute(_session())
     assert json.loads(json.dumps(payload))["basis"]

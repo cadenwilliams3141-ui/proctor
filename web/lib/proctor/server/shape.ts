@@ -18,12 +18,15 @@
  */
 
 import type {
+  ContactPatchCorner,
+  ContactPatchData,
   Corner,
   EnvelopePoint,
   EventPattern,
   GripData,
   HardwareData,
   InputResponseData,
+  LockBand,
   MetricPayloads,
   ModuleAbsence,
   StintData,
@@ -560,6 +563,140 @@ export function trackWidthFrom(metrics: MetricPayloads): TrackWidthData | null {
   };
 }
 
+/** The physics block: slip angle, rotation, column torque, road grade.
+ *
+ *  Every sub-block keeps its own `measured` flag and its own `reason`, because
+ *  they fail independently — a session can have a perfectly good slip angle and
+ *  no usable grade (an unknown track length), and collapsing that into one
+ *  "unavailable" would report two different facts as one.
+ *
+ *  `perTireLoad` is carried through deliberately even though it is always
+ *  unavailable. It is a wall the screen has to be able to state; dropping it
+ *  here would leave the screen silent about it, which is the one thing the
+ *  missing-is-not-zero rule forbids. */
+export function contactPatchFrom(metrics: MetricPayloads): ContactPatchData | null {
+  const cp = block(metrics, "contact_patch");
+  if (!ran(cp)) return null;
+
+  const num = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const str = (v: unknown): string | undefined => (v == null ? undefined : String(v));
+  const sub = (source: Payload, key: string): Payload => {
+    const v = source[key];
+    return v && typeof v === "object" ? (v as Payload) : {};
+  };
+
+  const slip = sub(cp, "slip");
+  const rotation = sub(cp, "rotation");
+  const torque = sub(cp, "steer_torque");
+  const grade = sub(cp, "grade");
+  const braking = sub(grade, "braking");
+  const corners = sub(cp, "corners");
+  const wall = sub(cp, "per_tire_load");
+
+  const bands: LockBand[] = Array.isArray(torque.bands)
+    ? (torque.bands as Payload[]).map((b) => ({
+        band: String(b.band ?? ""),
+        ticks: Number(b.ticks ?? 0),
+        measured: b.measured === true,
+        reason: str(b.reason),
+        median_torque_nm: num(b.median_torque_nm),
+        peak_torque_nm: num(b.peak_torque_nm),
+      }))
+    : [];
+
+  const cornerRows: ContactPatchCorner[] = Array.isArray(corners.corners)
+    ? (corners.corners as Payload[]).map((c) => ({
+        id: Number(c.id),
+        start_pct: Number(c.start_pct),
+        apex_pct: Number(c.apex_pct),
+        end_pct: Number(c.end_pct),
+        radius_m: num(c.radius_m),
+        dir: c.dir === "left" || c.dir === "right" ? c.dir : null,
+        measured: c.measured === true,
+        reason: str(c.reason),
+        ticks: num(c.ticks),
+        laps_pooled: num(c.laps_pooled),
+        peak_slip_deg: num(c.peak_slip_deg),
+        median_slip_deg: num(c.median_slip_deg),
+        peak_torque_nm: num(c.peak_torque_nm),
+        peak_lock_deg: num(c.peak_lock_deg),
+        median_rotation_gap_rad_s: num(c.median_rotation_gap_rad_s),
+      }))
+    : [];
+
+  const extreme = (key: string): { id: number; peak_slip_deg: number } | null => {
+    const v = sub(corners, key);
+    const id = num(v.id);
+    const peak = num(v.peak_slip_deg);
+    return id == null || peak == null ? null : { id, peak_slip_deg: peak };
+  };
+
+  return {
+    slip: {
+      measured: slip.measured === true,
+      reason: str(slip.reason),
+      ticks: num(slip.ticks),
+      peak_deg: num(slip.peak_deg),
+      median_deg: num(slip.median_deg),
+      highest_single_tick_deg: num(slip.highest_single_tick_deg),
+      note: str(slip.note),
+    },
+    rotation: {
+      measured: rotation.measured === true,
+      reason: str(rotation.reason),
+      median_abs_difference_rad_s: num(rotation.median_abs_difference_rad_s),
+      peak_abs_difference_rad_s: num(rotation.peak_abs_difference_rad_s),
+      rotated_more_than_path_pct: num(rotation.rotated_more_than_path_pct),
+      path_agreement: num(rotation.path_agreement),
+      note: str(rotation.note),
+    },
+    steerTorque: {
+      measured: torque.measured === true,
+      reason: str(torque.reason),
+      bands,
+      peak_torque_nm: num(torque.peak_torque_nm),
+      median_torque_nm: num(torque.median_torque_nm),
+      most_torque_band: str(torque.most_torque_band) ?? null,
+      falloff_past_peak_nm: num(torque.falloff_past_peak_nm),
+      falloff_note: str(torque.falloff_note),
+    },
+    grade: {
+      measured: grade.measured === true,
+      reason: str(grade.reason),
+      steepest_climb_pct: num(grade.steepest_climb_pct),
+      steepest_descent_pct: num(grade.steepest_descent_pct),
+      braking: {
+        measured: braking.measured === true,
+        reason: str(braking.reason),
+        peak_decel_g_uncorrected: num(braking.peak_decel_g_uncorrected),
+        peak_decel_g_grade_corrected: num(braking.peak_decel_g_grade_corrected),
+        difference_g: num(braking.difference_g),
+      },
+    },
+    corners: {
+      measured: corners.measured === true,
+      reason: str(corners.reason),
+      reference_lap: num(corners.reference_lap),
+      laps_pooled: num(corners.laps_pooled),
+      corners: cornerRows,
+      most_slip: extreme("most_slip"),
+      least_slip: extreme("least_slip"),
+    },
+    perTireLoad: {
+      available: false,
+      reason: String(
+        wall.reason ??
+          "splitting the car's force between four tyres needs car geometry this app does not hold",
+      ),
+      note: str(wall.note),
+    },
+  };
+}
+
+
 /** The rig block, flattened to what the Rig screen renders.
  *
  *  Every field is nullable, and null reaches the screen as an em dash. The
@@ -582,6 +719,7 @@ export function hardwareFrom(metrics: MetricPayloads): HardwareData | null {
   const abs = sub("abs");
   const noise = sub("pedal_noise_floor");
   const ffb = sub("ffb");
+  const torque = sub("steer_torque");
   const bias = sub("brake_bias");
   const aoc = sub("areas_of_concern");
 
@@ -607,6 +745,13 @@ export function hardwareFrom(metrics: MetricPayloads): HardwareData | null {
       clipping_pct: num(ffb.clipping_pct),
       finding: ffb.finding == null ? undefined : String(ffb.finding),
       reason: ffb.reason == null ? undefined : String(ffb.reason),
+    },
+    steerTorque: {
+      available: torque.available === true,
+      median_nm: num(torque.median_nm),
+      peak_nm: num(torque.peak_nm),
+      at_own_max_pct: num(torque.at_own_max_pct),
+      reason: torque.reason == null ? undefined : String(torque.reason),
     },
     brake_bias: {
       available: bias.available === true,
@@ -752,6 +897,7 @@ export function absencesFrom(
     input_response: "Your inputs against the car's response",
     stint: "How the run changed",
     track_width: "The road you used",
+    contact_patch: "Between the car and the ground",
   };
 
   for (const [key, title] of Object.entries(TITLES)) {

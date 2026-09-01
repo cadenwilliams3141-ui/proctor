@@ -270,6 +270,29 @@ def test_input_response_steering_bands_carry_lateral_g():
     assert steering["peak_steer_deg"] > 0
 
 
+def test_input_response_wheel_clipping_counts_both_directions():
+    """Same signed-channel bug as hardware._ffb, same fix, its own guard.
+
+    The two modules read SteeringWheelPctTorqueSignStops independently, so a
+    fix to one does not protect the other. Both panels are read side by side
+    on the Forces screen, and disagreeing about whether the wheel clipped is
+    worse than either number alone.
+    """
+    shares = []
+    for sign in (1.0, -1.0):
+        ch = make_core_channels()
+        stops = ch["SteeringWheelPctTorqueSignStops"].copy()
+        stops[: len(stops) // 4] = sign
+        ch["SteeringWheelPctTorqueSignStops"] = stops
+        wheel = input_response.compute(parse_ibt(build_ibt(ch))[0])["wheel"]
+        assert wheel["measured"] is True
+        assert "finding" not in wheel, "all-clear reported over a clipped session"
+        shares.append(wheel["clipping_pct_of_moving"])
+
+    assert shares[0] > 0.0
+    assert shares[0] == shares[1], f"sign changed the answer: {shares}"
+
+
 def test_input_response_findings_are_plain_sentences():
     findings = input_response.compute(_session())["findings"]
     assert findings and all(isinstance(f, str) and f for f in findings)

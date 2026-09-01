@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
+import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
 import { CH, INK, dim } from "@/lib/proctor/channels";
 import { data } from "@/lib/proctor/data-source";
 import { fmtDay, fmtLap } from "@/lib/proctor/format";
@@ -93,6 +94,12 @@ export default function MobileSessions() {
           Each sparkline is on its own scale — two different tracks are not
           comparable, and drawing them on a shared axis would imply they were.
         </Caveat>
+      </div>
+
+      {/* The phone app drops the ribbon, the session report and upload by
+          design. This is how you get to them without knowing the URL. */}
+      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
+        <ViewSwitch to="desktop" />
       </div>
     </div>
   );

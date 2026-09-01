@@ -653,3 +653,123 @@ button[disabled] {
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Narrow desktop ──────────────────────────────────────────────────────────
+   Phones go to /m (see middleware.ts), so what reaches the desktop shell is a
+   tablet or a small laptop. The shell is designed for >= 1440x900 and the two
+   rails are fixed at 56px and 248px, which at 768px leaves 464px of workspace
+   before any content has asked for room.
+
+   These rules buy that width back without removing anything. The lap rail
+   NARROWS rather than hides: it is how a lap is chosen on the Analyze and Live
+   screens, so hiding it would take the screen's subject away rather than
+   tidying its chrome. Below 720px it becomes a horizontal strip above the
+   workspace instead — still there, still choosing laps, no longer spending a
+   third of the viewport on it.
+
+   Written as media queries in CSS because this app styles with inline objects
+   and CSS variables, which cannot express a breakpoint. */
+@media (max-width: 1100px) {
+  .lap-rail {
+    width: 200px;
+  }
+}
+
+@media (max-width: 860px) {
+  .lap-rail {
+    width: 168px;
+  }
+  /* The workspace padding is var(--space-6) on every screen; at this width that
+     is a meaningful share of the line length. */
+  .scrollpane.screen-pad {
+    padding: var(--space-4) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  .lap-rail {
+    width: 100%;
+    max-height: 38vh;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .icon-rail {
+    width: 100% !important;
+    flex-direction: row !important;
+    justify-content: space-between;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  }
+  /* The switch-to-phone link is pushed to the foot of a column rail; in a row
+     it belongs at the end of the row instead. */
+  .icon-rail > .rail-foot {
+    margin-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+}
+
+/* A wide child — a table, a chart, a band of readings — scrolls inside its own
+   box rather than pushing the page sideways. A horizontal scrollbar on <body>
+   means every other panel on the screen is now off-centre too. */
+.overflow-guard {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* ── Top bar under pressure ──────────────────────────────────────────────────
+   The bar is one row of fixed-size controls, so at tablet width it used to run
+   straight off the right edge: on a 768px iPad the detail-tier switcher sat at
+   x=995 and could not be seen or reached. It is the app's only preference, and
+   the "N panels hidden at this detail" note sends people to it, so losing it
+   loses the way out of a screen that looks empty.
+
+   It now sheds decoration in order of how little it costs: the screen's
+   subtitle first, then the view-button words (the icons stay, with the label as
+   the accessible name), then the word "detail" and its divider, then the
+   decorative avatar. The controls themselves are the last thing standing. */
+@media (max-width: 1200px) {
+  .tb-view-label {
+    display: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .tb-sub {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .tb-detail-word,
+  .tb-avatar {
+    display: none !important;
+  }
+}
+
+/* The Live trace puts the readouts in a fixed 340px column beside the map.
+   That is the right shape while there is room for both and the wrong one the
+   moment there is not: below this the column stacks under the map instead of
+   pushing it out of the window. */
+@media (max-width: 1080px) {
+  .live-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-rows: min-content;
+  }
+}
+
+/* Where-it-went: the ranked corner list beside a fixed 372px detail column.
+   Same call as the Live trace — the second column stacks under the first
+   rather than pushing the ranking out of the window. The ranked rows carry
+   their own fixed-width bar and sparkline, so the list needs the full width
+   at this size, not a share of it. */
+@media (max-width: 1080px) {
+  .loss-split {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .loss-split > .loss-detail {
+    width: 100% !important;
+    flex: none;
+  }
+}

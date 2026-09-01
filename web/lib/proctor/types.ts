@@ -626,9 +626,108 @@ export interface HardwareData {
     reason?: string;
   };
   ffb: { clipping_pct: number | null; finding?: string; reason?: string };
+  /** Column torque in newton-metres. `ffb` is the same force normalised to
+   *  whatever the rig's range is set to, so it cannot be compared between
+   *  sessions; this can. Both are kept for that reason. */
+  steerTorque: {
+    available: boolean;
+    median_nm: number | null;
+    peak_nm: number | null;
+    at_own_max_pct: number | null;
+    reason?: string;
+  };
   brake_bias: { available: boolean; values?: number[]; changed?: boolean; reason?: string };
   concerns: { area: string; observation: string; watch: string }[];
   concerns_finding: string | null;
+}
+
+/** One steering-lock band, on whichever axis the panel is reading. */
+export interface LockBand {
+  band: string;
+  ticks: number;
+  measured: boolean;
+  reason?: string;
+  median_torque_nm?: number | null;
+  peak_torque_nm?: number | null;
+}
+
+/** One corner's reading of what happened between the car and the ground. */
+export interface ContactPatchCorner {
+  id: number;
+  start_pct: number;
+  apex_pct: number;
+  end_pct: number;
+  radius_m?: number | null;
+  dir?: "left" | "right" | null;
+  measured: boolean;
+  reason?: string;
+  ticks: number | null;
+  laps_pooled?: number | null;
+  peak_slip_deg?: number | null;
+  median_slip_deg?: number | null;
+  peak_torque_nm?: number | null;
+  peak_lock_deg?: number | null;
+  median_rotation_gap_rad_s?: number | null;
+}
+
+/** The physics layer: where the car pointed against where it went, what the
+ *  front tyres sent back up the column, and the slope of the road under it.
+ *
+ *  `perTireLoad` is a WALL, not a measurement — splitting the car's force
+ *  between four contact patches needs car geometry this app does not hold. It
+ *  travels in the payload so the screen can say so rather than staying quiet. */
+export interface ContactPatchData {
+  slip: {
+    measured: boolean;
+    reason?: string;
+    ticks?: number | null;
+    peak_deg?: number | null;
+    median_deg?: number | null;
+    highest_single_tick_deg?: number | null;
+    note?: string;
+  };
+  rotation: {
+    measured: boolean;
+    reason?: string;
+    median_abs_difference_rad_s?: number | null;
+    peak_abs_difference_rad_s?: number | null;
+    rotated_more_than_path_pct?: number | null;
+    path_agreement?: number | null;
+    note?: string;
+  };
+  steerTorque: {
+    measured: boolean;
+    reason?: string;
+    bands: LockBand[];
+    peak_torque_nm?: number | null;
+    median_torque_nm?: number | null;
+    most_torque_band?: string | null;
+    falloff_past_peak_nm?: number | null;
+    falloff_note?: string;
+  };
+  grade: {
+    measured: boolean;
+    reason?: string;
+    steepest_climb_pct?: number | null;
+    steepest_descent_pct?: number | null;
+    braking: {
+      measured: boolean;
+      reason?: string;
+      peak_decel_g_uncorrected?: number | null;
+      peak_decel_g_grade_corrected?: number | null;
+      difference_g?: number | null;
+    };
+  };
+  corners: {
+    measured: boolean;
+    reason?: string;
+    reference_lap?: number | null;
+    laps_pooled?: number | null;
+    corners: ContactPatchCorner[];
+    most_slip?: { id: number; peak_slip_deg: number } | null;
+    least_slip?: { id: number; peak_slip_deg: number } | null;
+  };
+  perTireLoad: { available: false; reason: string; note?: string };
 }
 
 export interface SessionBundle {
@@ -653,6 +752,7 @@ export interface SessionBundle {
   /** What this session alone saw of the surface. */
   trackEdges: TrackEdges | null;
   hardware: HardwareData | null;
+  contactPatch: ContactPatchData | null;
   /** Sample count on the shared distance grid. */
   gridSize: number;
   /** Circuit centreline in metres, gridSize long. */

@@ -26,6 +26,7 @@ import { Ban, Fuel, Gauge, ShieldCheck, Thermometer, TrendingDown, Waves } from 
 
 import Absences from "@/components/proctor/ui/Absences";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
+import { Evidence } from "@/components/proctor/ui/Answer";
 import Explain, { Lede } from "@/components/proctor/ui/Explain";
 import Panel from "@/components/proctor/ui/Panel";
 import { excludedReason } from "@/components/proctor/shell/LapRail";
@@ -44,11 +45,20 @@ import { atLeast } from "@/lib/tier";
  * Tier-dependent on purpose: a card that a lower detail level does not render
  * is not voicing anything, so its absence has to fall back through to the
  * summary block. Absences are never tier-gated — hiding a negative result at a
- * lower detail level would leave a gap the reader has to notice themselves. */
+ * lower detail level would leave a gap the reader has to notice themselves.
+ *
+ * THE SAME RULE APPLIES TO <Evidence>. A section folded behind a disclosure is
+ * not voicing anything either, because the reader has to already suspect there
+ * is something to find before they will open it. So `input_response` came off
+ * this list when ResponseSection moved behind the fold: its absence now falls
+ * through to the summary block, which is always visible. Getting this wrong is
+ * how the answer-first layout would have quietly deleted a negative result. */
 function voicedHere(deep: boolean): ReadonlySet<string> {
   const keys = [
-    "stint", // → StintSection (always) and the "Fuel used" card
-    "input_response", // → ResponseSection (always)
+    // Voiced by the always-visible "Fuel used" card. StintSection voices it
+    // too, but that section now sits behind <Evidence> and so cannot be
+    // counted — see the note below.
+    "stint",
     "grip", // → the "Grip you demonstrated" card (always)
   ];
   // The tire card is deep-only.
@@ -133,21 +143,39 @@ export default function ReportScreen() {
         <Lede item={explainSession(bundle.laps, stats.clean)} />
       </div>
 
-      <section style={{ marginTop: "var(--space-6)" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
-          <h2 style={{ fontSize: 13, margin: 0 }}>Every lap, against your own best</h2>
-          <span style={{ fontSize: 11, color: dim(40) }}>
-            bars hang down from your best clean lap — a short bar is a quick lap
-          </span>
+      {/* ── The evidence ─────────────────────────────────────────────────────
+          Everything below proves the paragraph above. It is one click away, not
+          gone — and the absences it would otherwise have voiced now fall
+          through to the always-visible block at the foot of the screen. See
+          voicedHere. */}
+      <Evidence
+        label="Show every lap against your best"
+        hint={`${bundle.laps.length} laps, ${stats.clean.length} of them clean`}
+      >
+        <div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
+            <h2 style={{ fontSize: 13, margin: 0 }}>Every lap, against your own best</h2>
+            <span style={{ fontSize: 11, color: dim(40) }}>
+              bars hang down from your best clean lap — a short bar is a quick lap
+            </span>
+          </div>
+          <LapChart best={stats.best} sd={stats.sd} />
         </div>
-        <LapChart best={stats.best} sd={stats.sd} />
-      </section>
+      </Evidence>
 
-      {/* ── How the run changed ──────────────────────────────────────────── */}
-      <StintSection />
+      <Evidence
+        label="Show how the run changed from start to finish"
+        hint="lap time, brake response, tyre surface and fuel, in lap order"
+      >
+        <StintSection />
+      </Evidence>
 
-      {/* ── Inputs against response ──────────────────────────────────────── */}
-      <ResponseSection />
+      <Evidence
+        label="Show your inputs against what the car did with them"
+        hint="pedal versus applied pressure, ABS, wheel slip, steering against grip"
+      >
+        <ResponseSection />
+      </Evidence>
 
       {/* ── The measured cards ───────────────────────────────────────────── */}
       <section
@@ -505,7 +533,7 @@ function StintSection() {
   return (
     <section style={{ marginTop: "var(--space-8)" }}>
     <SectionHead>{STINT_HEADING}</SectionHead>
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)", gap: "var(--space-4)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-4)" }}>
       <Panel
         title="What drifted"
         sub={
@@ -650,7 +678,7 @@ function ResponseSection() {
   return (
     <section style={{ marginTop: "var(--space-8)" }}>
     <SectionHead>{RESPONSE_HEADING}</SectionHead>
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.1fr)", gap: "var(--space-4)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-4)" }}>
       <Panel
         title="The gap between your controls and the car"
         padding="var(--space-4)"

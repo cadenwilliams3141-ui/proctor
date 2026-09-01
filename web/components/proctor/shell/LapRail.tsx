@@ -41,12 +41,12 @@ export default function LapRail() {
     return { best: Math.min(...times), worst: Math.max(...times) };
   }, [bundle]);
 
-  if (!bundle) return <aside style={RAIL} aria-label="Laps" />;
+  if (!bundle) return <aside className="lap-rail" style={RAIL} aria-label="Laps" />;
 
   const { session, laps } = bundle;
 
   return (
-    <aside style={RAIL} aria-label="Laps">
+    <aside className="lap-rail" style={RAIL} aria-label="Laps">
       {/* Session header */}
       <div style={{ padding: "var(--space-4) var(--space-4) var(--space-3)" }}>
         <div

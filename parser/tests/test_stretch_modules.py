@@ -162,6 +162,65 @@ def test_balance_computes_payload_when_yaw_tracks_steer():
     assert json.loads(json.dumps(payload))
 
 
+def _balance_session(invert_yaw: bool):
+    """A session whose yaw genuinely tracks steer, optionally sign-inverted.
+
+    Inverting YawRate is exactly what some sim builds do: the two channels are
+    each self-consistent but disagree about which way is positive. Nothing about
+    the driving changes, so every magnitude and the quality of the fit must come
+    out identical — only the sign convention differs.
+    """
+    ch = make_core_channels()
+    n = len(ch["Gear"])
+    rng = np.random.default_rng(0)
+    steer = ch["SteeringWheelAngle"]
+    yaw = 0.03 * steer * ch["Speed"] + rng.normal(0, 0.01, n)
+    # A real understeer/oversteer split to classify: push some ticks past the
+    # fit in the steered direction so they are unambiguously oversteer.
+    yaw[: n // 5] += 0.05 * np.sign(steer[: n // 5])
+    ch["YawRate"] = -yaw if invert_yaw else yaw
+    return parse_ibt(build_ibt(ch))[0]
+
+
+def test_balance_flags_and_corrects_an_inverted_yaw_convention():
+    """A negative fit k means the channels disagree, not that the car is odd.
+
+    Left unguarded this was silent and total: magnitudes are unaffected, so r2
+    still clears its floor and every block still fills in, but the oversteer
+    test compares the residual's sign against the steering's — and with yaw
+    mirrored EVERY divergence lands in the opposite bucket.
+    """
+    payload = balance.compute(_balance_session(invert_yaw=True))
+    assert "insufficient_data" not in payload, "the fit is strong; only the sign differed"
+    assert payload["yaw_sign_flipped"] is True
+    assert "opposite sign conventions" in payload["yaw_sign_note"]
+    # k is the physical coefficient and must be positive once aligned: more lock
+    # one way produces more rotation that same way, in any car.
+    assert payload["fit_k"] > 0
+
+
+def test_balance_reads_the_same_whichever_way_the_yaw_channel_signs_it():
+    """The regression that matters: the labels must not depend on the convention.
+
+    Before the guard these two sessions — identical driving, one channel
+    mirrored — reported opposite tendencies. A driver whose car pushed would
+    have been told it was loose.
+    """
+    normal = balance.compute(_balance_session(invert_yaw=False))
+    flipped = balance.compute(_balance_session(invert_yaw=True))
+
+    assert normal["yaw_sign_flipped"] is False
+    assert flipped["yaw_sign_flipped"] is True
+
+    # Same driving -> same reading, to the digit.
+    assert normal["tendency"] == flipped["tendency"]
+    assert normal["by_input_state"] == flipped["by_input_state"]
+    assert normal["fit_k"] == flipped["fit_k"]
+    assert normal["fit_r2"] == flipped["fit_r2"]
+    assert normal["divergence_share_pct"] == flipped["divergence_share_pct"]
+    assert json.loads(json.dumps(flipped))
+
+
 def test_balance_by_corner_places_divergences_on_a_carved_corner():
     ch = make_core_channels()
     n = len(ch["Gear"])

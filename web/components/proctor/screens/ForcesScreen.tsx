@@ -167,31 +167,36 @@ export default function ForcesScreen() {
         title="What the ground gave"
         sub="grip, measured rather than modelled"
       >
+        {/* THE TRACTION CIRCLE IS NOT GATED ON THE GRIP MODULE.
+            It was, and that made surfacing it worthless on every real session.
+            traction_circle is one of the original modules and has a stored
+            block on everything in the database; grip shipped 2026-08-02 and has
+            a block on nothing until a re-ingest runs. Nesting the plot inside
+            `grip ? …` meant the one panel in this step that HAD data was hidden
+            behind the one that did not, and the step rendered as a bare
+            "re-ingest to fix" notice with a drawable g-g plot sitting behind
+            it.
+
+            TractionCircle reads bundle.traction and EnvelopeBars reads
+            bundle.laps — neither touches grip — and each carries its own empty
+            state. So they render on their own terms, and the grip commentary
+            below says what it can separately. */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+            gap: "var(--space-4)",
+          }}
+        >
+          <TractionCircle />
+          <EnvelopeBars />
+        </div>
+
         {grip ? (
           <>
             <Panel title="In plain English" padding="var(--space-4)">
               <Explain items={explainGrip(grip)} max={5} />
             </Panel>
-
-            {/* The traction circle comes OUT of the fold.
-                It is the picture this whole step is about — the shape of what
-                the tyres actually did, in every direction the car was pushed —
-                and it was sitting behind a disclosure labelled "how the grip
-                was measured", which reads like methodology rather than like the
-                answer. A driver looking for their g-g plot had no reason to
-                open that. The METHOD stays folded, which is what the fold was
-                always for. */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-                gap: "var(--space-4)",
-              }}
-            >
-              <TractionCircle />
-              <EnvelopeBars />
-            </div>
-
             <Evidence
               label="Show how the grip was measured"
               hint="the formula, speed bands, the load curve and per-corner grip"

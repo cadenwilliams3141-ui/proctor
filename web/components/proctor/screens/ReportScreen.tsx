@@ -533,7 +533,7 @@ function StintSection() {
   return (
     <section style={{ marginTop: "var(--space-8)" }}>
     <SectionHead>{STINT_HEADING}</SectionHead>
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)", gap: "var(--space-4)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-4)" }}>
       <Panel
         title="What drifted"
         sub={
@@ -678,7 +678,7 @@ function ResponseSection() {
   return (
     <section style={{ marginTop: "var(--space-8)" }}>
     <SectionHead>{RESPONSE_HEADING}</SectionHead>
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.1fr)", gap: "var(--space-4)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-4)" }}>
       <Panel
         title="The gap between your controls and the car"
         padding="var(--space-4)"

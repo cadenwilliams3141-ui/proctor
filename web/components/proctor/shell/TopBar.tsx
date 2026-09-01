@@ -39,12 +39,21 @@ export default function TopBar() {
         alignItems: "center",
         gap: "var(--space-4)",
         padding: "0 var(--space-6)",
+        // Every control in here is flex:none, so without this the row simply
+        // spilled past the right edge and the tier switcher — the app's only
+        // preference — became unreachable on a tablet. It sheds its decorative
+        // parts first (see .tb-* rules in globals.css); this is the backstop
+        // for whatever is left.
+        minWidth: 0,
+        overflowX: "auto",
+        scrollbarWidth: "none",
         boxShadow: `inset 0 -1px 0 ${dim(8)}`,
       }}
     >
       <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", minWidth: 0 }}>
         <span style={{ font: "500 14px var(--font-heading)" }}>{meta.title}</span>
         <span
+          className="tb-sub"
           style={{
             fontSize: 11.5,
             color: dim(45),
@@ -83,6 +92,8 @@ export default function TopBar() {
                 className="pk"
                 onClick={() => dispatch({ t: "view", view: id })}
                 aria-pressed={active}
+                aria-label={label}
+                title={label}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -97,15 +108,17 @@ export default function TopBar() {
                 }}
               >
                 <Icon size={14} strokeWidth={1.7} />
-                {label}
+                <span className="tb-view-label">{label}</span>
               </button>
             );
           })}
         </div>
       )}
 
-      <span style={{ width: 1, height: 18, background: dim(12), flex: "none" }} />
-      <span style={{ fontSize: 11, color: dim(42), flex: "none" }}>detail</span>
+      <span className="tb-detail-word" style={{ width: 1, height: 18, background: dim(12), flex: "none" }} />
+      <span className="tb-detail-word" style={{ fontSize: 11, color: dim(42), flex: "none" }}>
+        detail
+      </span>
 
       <div className="seg" style={{ flex: "none" }}>
         {TIERS.map((t) => (
@@ -125,6 +138,7 @@ export default function TopBar() {
 
       <div
         aria-hidden
+        className="tb-avatar"
         style={{
           width: 26,
           height: 26,

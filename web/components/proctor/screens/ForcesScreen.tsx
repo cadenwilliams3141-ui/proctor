@@ -180,7 +180,7 @@ export default function ForcesScreen() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
                   gap: "var(--space-4)",
                 }}
               >
@@ -501,7 +501,7 @@ function TorqueSection({
   const top = Math.max(1, ...measured.map((b) => b.median_torque_nm ?? 0));
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)", gap: "var(--space-4)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-4)" }}>
       <Panel
         title="Torque against lock"
         sub="how hard the front tyres pushed back"
@@ -541,7 +541,7 @@ function TorqueSection({
       </Panel>
 
       <Panel title="What the wheel was doing" padding="var(--space-4)">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "var(--space-4)" }}>
           <Figure label="peak torque" value={fixed(t.peak_torque_nm, 1)} unit="N·m" accent />
           <Figure label="median torque" value={fixed(t.median_torque_nm, 1)} unit="N·m" />
           {hw?.steerTorque.available && (
@@ -736,7 +736,7 @@ function GradeSection({ cp }: { cp: ContactPatchData | null }) {
 
 function GripSection({ grip }: { grip: GripData }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "var(--space-4)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-4)" }}>
       <Panel
         title="How it is measured"
         sub="force sideways over force downwards"
@@ -765,7 +765,7 @@ function GripSection({ grip }: { grip: GripData }) {
           modelled.
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 135px), 1fr))", gap: "var(--space-3)" }}>
           <Figure label="peak grip" value={grip.session.peak_mu.toFixed(2)} unit="g per g" accent />
           <GripFigure
             label="peak lateral"

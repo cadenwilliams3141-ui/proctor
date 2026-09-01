@@ -45,8 +45,12 @@ export default function AppShell() {
 
   return (
     <div
+      className="app-shell"
       style={{
-        height: "100vh",
+        /* dvh, not vh: on a mobile browser 100vh is the viewport WITHOUT the
+           address bar, so the last centimetre of every screen sat under it.
+           The phone app already used dvh; this one never did. */
+        height: "100dvh",
         display: "flex",
         overflow: "hidden",
         fontSize: 13,

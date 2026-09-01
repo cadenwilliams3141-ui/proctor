@@ -32,6 +32,8 @@ import TrackMap from "@/components/proctor/ui/TrackMap";
 import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtLap, kmh, pct, toG } from "@/lib/proctor/format";
 import { noteFor } from "@/lib/proctor/provenance";
+import NotDrawable from "@/components/proctor/ui/NotDrawable";
+import { derivePlaybackReadiness } from "@/lib/proctor/readiness";
 import { useProctor } from "@/lib/proctor/store";
 import { buildTimebase, sampleAt, stepAt } from "@/lib/proctor/timebase";
 
@@ -43,7 +45,7 @@ const STORAGE_KEY = "proctor-speed-mul";
 const TRAIL_S = 1.6;
 
 export default function LiveScreen() {
-  const { bundle, state, dispatch, traceA } = useProctor();
+  const { bundle, state, dispatch, traceA, error, referenceLap } = useProctor();
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
@@ -96,8 +98,18 @@ export default function LiveScreen() {
     [lapTime],
   );
 
-  if (!bundle || !traceA || !tb) {
-    return <div style={{ padding: "var(--space-8) var(--space-6)", color: dim(45) }}>Reading…</div>;
+  /* Not "Reading…" for everything. A session with no clean lap never seats a
+     lap A, so traceA stays null forever and the old guard promised a load that
+     could not arrive. Same rule the four comparison views already follow. */
+  const readiness = derivePlaybackReadiness({
+    error,
+    lapCount: bundle ? bundle.laps.length : null,
+    referenceLap,
+    lapA: state.lapA,
+    traceA,
+  });
+  if (readiness.state !== "ready" || !bundle || !traceA || !tb) {
+    return <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />;
   }
 
   const n = traceA.speed.length;
@@ -120,6 +132,11 @@ export default function LiveScreen() {
           gap: "var(--space-3)",
           padding: "var(--space-4) var(--space-6) var(--space-3)",
           flex: "none",
+          // The scrubber, the two readouts and the speed control are all fixed
+          // width; on a narrow window they ran off the edge and took the speed
+          // control with them. Wrapping costs a row of height and keeps every
+          // control reachable.
+          flexWrap: "wrap",
         }}
       >
         <button
@@ -235,11 +252,12 @@ export default function LiveScreen() {
       </div>
 
       <div
+        className="live-split"
         style={{
           flex: 1,
           minHeight: 0,
           display: "grid",
-          gridTemplateColumns: "1fr 340px",
+          gridTemplateColumns: "minmax(0, 1fr) 340px",
           gap: "var(--space-3)",
           padding: "0 var(--space-6) var(--space-6)",
         }}
@@ -372,7 +390,7 @@ function Readouts({ idx }: { idx: number }) {
 
   return (
     <Panel fill padding="var(--space-4)" style={{ minHeight: 0 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3) var(--space-4)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "var(--space-3) var(--space-4)" }}>
         {[
           { l: "speed", v: kmh(sampleAt(traceA.speed, idx)), u: "km/h" },
           // Gear and rpm are stepped, not interpolated: there is no gear 3.4.

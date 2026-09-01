@@ -57,7 +57,15 @@ export default function WhereItWent() {
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* ── Headline ─────────────────────────────────────────────────────── */}
       <div style={{ padding: "var(--space-6) var(--space-6) var(--space-4)", flex: "none" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-8)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "var(--space-8)",
+            // Wraps rather than pushing the stat block off the right edge.
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ minWidth: 0 }}>
             <Eyebrow size={10} style={{ letterSpacing: ".11em" }}>
               lap {state.lapB} measured against your best valid lap
@@ -183,6 +191,7 @@ export default function WhereItWent() {
           gap: "var(--space-4)",
           padding: "0 var(--space-6) var(--space-6)",
         }}
+        className="loss-split"
       >
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           <div
@@ -224,6 +233,7 @@ export default function WhereItWent() {
 
         {/* Right column */}
         <div
+          className="loss-detail"
           style={{
             width: 372,
             flex: "none",
@@ -502,7 +512,7 @@ function CarState({ selected }: { selected: CornerDelta }) {
         what the car was doing here
       </Eyebrow>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "7px var(--space-6)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "7px var(--space-6)" }}>
         {stats.map((s) => (
           <div key={s.label}>
             <Eyebrow size={9.5} style={{ letterSpacing: ".09em", color: dim(38) }}>

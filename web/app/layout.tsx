@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 
 import "./globals.css";
@@ -18,6 +18,17 @@ export const metadata: Metadata = {
   title: "Proctor",
   description:
     "iRacing telemetry analysis. Observations, not verdicts — every comparison is you against you.",
+};
+
+/* Every route under this layout needs this, and until now only /m had one.
+   Without width=device-width a phone lays the page out at a ~980px virtual
+   viewport and scales the result down, so the desktop shell arrived on a phone
+   as an unreadable thumbnail — and the phone app is reached THROUGH a page
+   under this layout, so the one route that got this right was behind a page
+   that did not. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

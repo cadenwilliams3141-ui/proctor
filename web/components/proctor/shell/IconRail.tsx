@@ -16,6 +16,8 @@ import {
 import { dim } from "@/lib/proctor/channels";
 import { useProctor, type Screen } from "@/lib/proctor/store";
 
+import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
+
 /* Phosphor is what the design specifies; lucide is what is vendored in this
    app, so each glyph is mapped to its nearest lucide equivalent. The one that
    is not a like-for-like is `steering-wheel` -> Gauge: lucide has no steering
@@ -37,6 +39,7 @@ export default function IconRail() {
 
   return (
     <nav
+      className="icon-rail"
       aria-label="Screens"
       style={{
         width: 56,
@@ -106,6 +109,12 @@ export default function IconRail() {
           detail tier — is a control in the top bar. A button that does nothing
           is the same lie as a number that describes nothing, so it is gone
           rather than wired to a placeholder. */}
+
+      {/* Pushed to the foot: the way to the phone app, for anyone who pinned
+          the desktop view on a phone or wants to send themselves the link. */}
+      <div className="rail-foot" style={{ marginTop: "auto", paddingBottom: "var(--space-2)" }}>
+        <ViewSwitch to="phone" compact />
+      </div>
     </nav>
   );
 }

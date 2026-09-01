@@ -321,7 +321,9 @@ def _wheel_block(ch: dict, moving: np.ndarray) -> dict:
     if stops is None:
         return _unmeasured("the file does not carry a force-feedback saturation channel")
 
-    saturated = stops[moving] >= 0.99
+    # Magnitude: the channel is signed (see hardware._ffb), so a bare
+    # comparison counts clipping in one steering direction only.
+    saturated = np.abs(stops[moving]) >= 0.99
     share = 100.0 * float(saturated.mean())
     out: dict = {
         "measured": True,

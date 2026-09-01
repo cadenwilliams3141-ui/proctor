@@ -179,11 +179,24 @@ def _pedal_noise_floor(throttle: np.ndarray, brake_raw: np.ndarray) -> dict:
 
 
 def _ffb(ffb_stops: np.ndarray, moving: np.ndarray) -> dict:
-    """Share of moving ticks where FFB torque is clipped against the stops."""
+    """Share of moving ticks where FFB torque is clipped against the stops.
+
+    THE MAGNITUDE, NOT THE SIGNED VALUE. The channel is
+    SteeringWheelPctTorqueSignStops -- iRacing's SIGNED variant, which runs
+    -1..+1 as the force reverses with the direction of the corner. Testing it
+    with a bare `>= 0.99` therefore only ever saw clipping in one steering
+    direction: a session that pinned the wheel through every left-hander and
+    never through a right one reported "no FFB clipping detected", and a
+    session that clipped both ways reported about half of what happened.
+
+    That is a confident wrong number rather than a blank, which is the failure
+    the honesty rules exist to catch -- an empty panel invites a question, and
+    "no clipping detected" closes one.
+    """
     if not moving.any():
         return {"insufficient_data": True, "reason": "no moving ticks"}
 
-    clipping_pct = round(100.0 * float((ffb_stops[moving] >= 0.99).mean()), 2)
+    clipping_pct = round(100.0 * float((np.abs(ffb_stops[moving]) >= 0.99).mean()), 2)
     out = {"clipping_pct": clipping_pct}
     if clipping_pct == 0.0:
         out["finding"] = "no FFB clipping detected"

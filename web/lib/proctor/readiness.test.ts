@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { deriveReadiness, type ReadinessInput } from "./readiness";
+import { deriveReadiness, derivePlaybackReadiness, type ReadinessInput } from "./readiness";
 import type { Trace } from "@/lib/proctor/types";
 
 const TRACE = { lap_number: 1 } as unknown as Trace;
@@ -144,5 +144,63 @@ describe("every non-ready state explains itself", () => {
       if (r.state === "ready" || r.state === "loading") throw new Error("unreachable");
       expect(r.reason.trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+
+/* Live trace plays ONE lap back. It has its own derivation because the
+   comparison rules do not fit it — and because both Live screens used to guard
+   on `!traceA` and render "Reading…", which on a session with no clean lap was
+   a spinner that could never resolve. */
+describe("playback readiness (one lap, not two)", () => {
+  const playbackBase = {
+    error: null as string | null,
+    lapCount: 10 as number | null,
+    referenceLap: 3 as number | null,
+    lapA: 3 as number | null,
+    traceA: TRACE as Trace | null,
+  };
+
+  it("is ready with a reference, a lap A and its trace", () => {
+    expect(derivePlaybackReadiness(playbackBase).state).toBe("ready");
+  });
+
+  it("does NOT require a lap B — playback is not a comparison", () => {
+    // The comparison path calls the same session no-comparison; playback does not.
+    expect(deriveReadiness({ ...base, lapB: null }).state).toBe("no-comparison");
+    expect(derivePlaybackReadiness(playbackBase).state).toBe("ready");
+  });
+
+  it("says no-reference, never loading, when no lap is clean", () => {
+    const r = derivePlaybackReadiness({
+      ...playbackBase,
+      referenceLap: null,
+      lapA: null,
+      traceA: null,
+    });
+    expect(r.state).toBe("no-reference");
+    expect(r.state !== "ready" && r.state !== "loading" && r.reason).toMatch(/clean/);
+  });
+
+  it("frames the reason as playback rather than comparison", () => {
+    const r = derivePlaybackReadiness({ ...playbackBase, referenceLap: null, lapA: null, traceA: null });
+    expect(r.state !== "ready" && r.state !== "loading" && r.reason).toContain("Playback needs");
+    const c = deriveReadiness({ ...base, referenceLap: null, lapA: null, lapB: null, traceA: null, traceB: null });
+    expect(c.state !== "ready" && c.state !== "loading" && c.reason).toContain("Comparison needs");
+  });
+
+  it("still says loading while the bundle is in flight", () => {
+    expect(derivePlaybackReadiness({ ...playbackBase, lapCount: null }).state).toBe("loading");
+  });
+
+  it("reports a missing trace as a settled fact, not a load", () => {
+    const r = derivePlaybackReadiness({ ...playbackBase, traceA: null });
+    expect(r.state).toBe("no-traces");
+    expect(r.state !== "ready" && r.state !== "loading" && r.reason).toMatch(/play back/);
+  });
+
+  it("surfaces a load error ahead of everything else", () => {
+    const r = derivePlaybackReadiness({ ...playbackBase, error: "boom", referenceLap: null });
+    expect(r.state).toBe("error");
   });
 });

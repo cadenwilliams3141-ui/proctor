@@ -12,11 +12,12 @@ import Panel from "@/components/proctor/ui/Panel";
 import { CH, deltaColor, dim } from "@/lib/proctor/channels";
 import { fixed, fmtDelta, fmtLap } from "@/lib/proctor/format";
 import { observationShort, ranked } from "@/lib/proctor/ledger";
+import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import { useProctor } from "@/lib/proctor/store";
 import { isUsable } from "@/lib/proctor/types";
 
 export default function MobileLap() {
-  const { bundle, state, dispatch, ledger, traceA, traceB } = useProctor();
+  const { bundle, state, dispatch, ledger, traceA, traceB, readiness } = useProctor();
 
   const rows = useMemo(() => (ledger ? ranked(ledger) : []), [ledger]);
 
@@ -46,8 +47,15 @@ export default function MobileLap() {
     ];
   }, [bundle, traceA]);
 
-  if (!bundle || !ledger || !traceA || !traceB || !stack || !brief) {
-    return <div style={{ padding: "var(--space-6)", color: dim(45) }}>Reading the session…</div>;
+  /* The phone carried the bug the desktop views had fixed in August: one
+     "Reading the session…" for four different conditions, only one of which is
+     a load. A session with no clean lap can never produce a ledger, so this
+     screen promised a result that was never coming. `readiness` is the same
+     derivation the desktop uses, so the two now say the same thing. */
+  if (readiness.state !== "ready" || !bundle || !ledger || !traceA || !traceB || !stack || !brief) {
+    return (
+      <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />
+    );
   }
 
   const clean = bundle.laps.filter(isUsable);

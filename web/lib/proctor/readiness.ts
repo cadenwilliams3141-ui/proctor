@@ -35,21 +35,23 @@ export interface ReadinessInput {
   traceB: Trace | null;
 }
 
+function noReference(lapCount: number, need: string): Readiness {
+  return {
+    state: "no-reference",
+    reason:
+      lapCount === 0
+        ? "This session has no completed laps, so there is no lap to measure anything against."
+        : `None of this session's ${lapCount} ${
+            lapCount === 1 ? "lap is" : "laps are"
+          } clean enough to serve as a reference — every one is an out lap, an in lap, a partial lap or was flagged. ${need} needs one clean lap to measure against.`,
+  };
+}
+
 export function deriveReadiness(i: ReadinessInput): Readiness {
   if (i.error) return { state: "error", reason: i.error };
   if (i.lapCount == null) return { state: "loading" };
 
-  if (i.referenceLap == null) {
-    return {
-      state: "no-reference",
-      reason:
-        i.lapCount === 0
-          ? "This session has no completed laps, so there is no lap to measure anything against."
-          : `None of this session's ${i.lapCount} ${
-              i.lapCount === 1 ? "lap is" : "laps are"
-            } clean enough to serve as a reference — every one is an out lap, an in lap, a partial lap or was flagged. Comparison needs one clean lap to measure against.`,
-    };
-  }
+  if (i.referenceLap == null) return noReference(i.lapCount, "Comparison");
 
   // The reference exists but the opening selection has not been seated yet.
   if (i.lapA == null) return { state: "loading" };
@@ -74,5 +76,33 @@ export function deriveReadiness(i: ReadinessInput): Readiness {
     };
   }
 
+  return { state: "ready" };
+}
+
+
+/* The same question for a view that plays back ONE lap rather than comparing
+ * two. Live trace does not need a lap B, so `no-comparison` can never apply to
+ * it — but it still cannot draw without a reference, because the store only
+ * seats lap A once a reference exists (store.tsx: the effect returns early
+ * while referenceLap is null). Without this the Live screen guarded on
+ * `!traceA` and rendered "Reading…", which for a session with no clean lap was
+ * a promise it could never keep: the bundle had already arrived and nothing
+ * further was coming.
+ *
+ * Kept beside deriveReadiness, sharing its sentences, so the phone and the
+ * desktop cannot drift apart on what they say about the same session. */
+export function derivePlaybackReadiness(
+  i: Pick<ReadinessInput, "error" | "lapCount" | "referenceLap" | "lapA" | "traceA">,
+): Readiness {
+  if (i.error) return { state: "error", reason: i.error };
+  if (i.lapCount == null) return { state: "loading" };
+  if (i.referenceLap == null) return noReference(i.lapCount, "Playback");
+  if (i.lapA == null) return { state: "loading" };
+  if (!i.traceA) {
+    return {
+      state: "no-traces",
+      reason: `No stored telemetry trace for lap ${i.lapA}. The lap is recorded but its per-sample data was not saved, so there is nothing to play back.`,
+    };
+  }
   return { state: "ready" };
 }

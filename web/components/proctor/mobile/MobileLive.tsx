@@ -10,12 +10,14 @@ import { CH, dim } from "@/lib/proctor/channels";
 import { fmtLap, kmh, pct, toG } from "@/lib/proctor/format";
 import { wrapIndex } from "@/lib/proctor/geometry";
 import { noteFor } from "@/lib/proctor/provenance";
+import NotDrawable from "@/components/proctor/ui/NotDrawable";
+import { derivePlaybackReadiness } from "@/lib/proctor/readiness";
 import { useProctor } from "@/lib/proctor/store";
 
 const SPEEDS = [1, 2, 4, 8] as const;
 
 export default function MobileLive() {
-  const { bundle, state, dispatch, traceA } = useProctor();
+  const { bundle, state, dispatch, traceA, error, referenceLap } = useProctor();
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
@@ -42,8 +44,17 @@ export default function MobileLive() {
     };
   }, [playing, n, lapTime, state.speedMul]);
 
-  if (!bundle || !traceA) {
-    return <div style={{ padding: "var(--space-6)", color: dim(45) }}>Reading…</div>;
+  /* See LiveScreen: a session with no clean lap has no lap A, so this is a
+     settled fact and not a load in progress. */
+  const readiness = derivePlaybackReadiness({
+    error,
+    lapCount: bundle ? bundle.laps.length : null,
+    referenceLap,
+    lapA: state.lapA,
+    traceA,
+  });
+  if (readiness.state !== "ready" || !bundle || !traceA) {
+    return <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />;
   }
 
   const i = wrapIndex(Math.round(idx), n);

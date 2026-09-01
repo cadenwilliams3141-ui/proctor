@@ -92,6 +92,34 @@ def compute(session: ParsedSession) -> dict:
         }
 
     k = float(np.sum(x * yaw) / sxx)
+
+    # ── The sign guard ───────────────────────────────────────────────────────
+    # k is the coefficient in yaw ~= k * steer * speed, and it MUST come out
+    # positive: turning the wheel further one way makes the car rotate further
+    # that same way, in any car, under any self-consistent pair of conventions.
+    #
+    # A negative k does not mean the car is strange. It means SteeringWheelAngle
+    # and YawRate disagree about which way is positive in this file, which some
+    # sim builds do — contact_patch._rotation() already declines to assert a
+    # convention for exactly this reason.
+    #
+    # Left alone this was silent and total. The magnitudes are unaffected, so
+    # r2 still clears its floor and every block below still fills in; but the
+    # oversteer test at `same_sign` compares the residual's sign against the
+    # steering's, and with yaw mirrored EVERY divergence lands in the opposite
+    # bucket. The screen would then report understeer for oversteer, and the
+    # driver's own data would look like it disagreed with what they felt.
+    #
+    # Flipping yaw's sign is the whole correction: it negates k and negates the
+    # residual exactly, leaving r2 and every magnitude untouched, and the two
+    # channels then share one convention. It is recorded in the payload rather
+    # than done quietly, because "your two channels disagree" is a fact about
+    # the file that the reader is entitled to.
+    yaw_sign_flipped = k < 0.0
+    if yaw_sign_flipped:
+        yaw = -yaw
+        k = -k
+
     resid = yaw - k * x
     ss_res = float(np.sum(resid ** 2))
     r2 = 1.0 - ss_res / ss_tot
@@ -128,6 +156,24 @@ def compute(session: ParsedSession) -> dict:
         "method": _METHOD,
         "fit_k": round(k, 6),
         "fit_r2": round(r2, 3),
+        # False on every well-behaved file. True says this session's steering
+        # and yaw channels disagreed about which way is positive and were
+        # aligned before anything was concluded — see the sign guard above.
+        "yaw_sign_flipped": yaw_sign_flipped,
+        **(
+            {
+                "yaw_sign_note": (
+                    "this file's steering-angle and yaw-rate channels use "
+                    "opposite sign conventions; yaw was mirrored to match the "
+                    "steering before comparing them. Magnitudes are unchanged "
+                    "and the fit is equally good either way — but without this "
+                    "every understeer reading below would have been an "
+                    "oversteer reading, and the other way round"
+                )
+            }
+            if yaw_sign_flipped
+            else {}
+        ),
         "divergence_share_pct": round(100.0 * n_div / n_moving, 1) if n_moving else 0.0,
         "tendency": _split(understeer, oversteer, n_div),
         "by_input_state": {

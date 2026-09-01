@@ -12,7 +12,7 @@ const TABS: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "sessions", label: "Sessions", Icon: LayoutGrid },
   { id: "analyze", label: "Lap", Icon: ListOrdered },
   { id: "live", label: "Live", Icon: CirclePlay },
-  { id: "rig", label: "Forces", Icon: Gauge },
+  { id: "rig", label: "Physics", Icon: Gauge },
 ];
 
 export default function TabBar() {

@@ -28,12 +28,13 @@
  * │ cannot see into is how detail gets lost rather than tidied.              │
  * └──────────────────────────────────────────────────────────────────────────┘ */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ChevronRight } from "lucide-react";
 
 import { dim } from "@/lib/proctor/channels";
 import type { Explanation } from "@/lib/proctor/explain";
+import { useProctor } from "@/lib/proctor/store";
 
 import Explain from "@/components/proctor/ui/Explain";
 
@@ -109,11 +110,21 @@ export default function Answer({
   );
 }
 
-/** The proof, one click away.
+/** The proof, one click away — or already in front of you at "everything".
  *
  *  Collapsed by default. `hint` names what is inside so a folded section is
  *  never a mystery, and the summary is a real <button> so it is reachable by
- *  keyboard and announced as expandable. */
+ *  keyboard and announced as expandable.
+ *
+ *  EXCEPT AT THE TOP DETAIL TIER. "everything" promises "every panel the
+ *  session produced, including the quiet ones" (lib/tier.ts), and a reader who
+ *  has deliberately asked for all of it should not then have to open nine folds
+ *  to get it. Answer-first is a default for people who want the answer; it was
+ *  never meant to outrank an explicit request for the evidence.
+ *
+ *  This does not weaken the 2026-08-27 rule about what may go in a fold — a
+ *  fold still may not contain an absence, and a folded section still does not
+ *  count as voicing one. It changes only whether the fold starts open. */
 export function Evidence({
   children,
   label = "Show the evidence",
@@ -126,7 +137,16 @@ export function Evidence({
   hint?: string;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const { state } = useProctor();
+  const openByTier = state.tier === "everything";
+  const [open, setOpen] = useState(defaultOpen || openByTier);
+
+  /* Follow the tier when it changes, rather than only at mount: switching to
+     "everything" and finding the folds still shut would read as the control
+     not working. Switching back down re-folds them. */
+  useEffect(() => {
+    setOpen(defaultOpen || openByTier);
+  }, [defaultOpen, openByTier]);
 
   return (
     <section style={{ marginTop: "var(--space-4)" }}>

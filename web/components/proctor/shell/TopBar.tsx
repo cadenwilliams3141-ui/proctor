@@ -11,10 +11,14 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
   sessions: { title: "Sessions", sub: "everything the rig watcher has sent" },
   report: { title: "Session report", sub: "what this session did, module by module" },
   analyze: { title: "Analyze", sub: "any lap of this session against any other" },
-  live: { title: "Live trace", sub: "your lap played back in the time it actually took" },
+  /* NOT "in the time it actually took": playback defaults to 4x, so that
+     sentence was false the moment the screen opened. The rate is a control on
+     the screen and the readout beside it already states the truth; the subtitle
+     now says what is true at every multiplier. */
+  live: { title: "Live trace", sub: "where the car was, moment by moment, at a speed you choose" },
   rig: {
-    title: "Forces",
-    sub: "from your foot to the ground, in the order it happened",
+    title: "Physics",
+    sub: "what you asked for, what the car did with it, and what the ground actually gave",
   },
   upload: { title: "Upload", sub: "add a session by hand" },
 };

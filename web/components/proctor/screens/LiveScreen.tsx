@@ -222,8 +222,30 @@ export default function LiveScreen() {
           </div>
         </div>
 
-        <span className="num" style={{ fontSize: 11, color: dim(42), width: 96, flex: "none" }}>
-          {distPct.toFixed(1)}% <span style={{ color: dim(30) }}>of the lap</span>
+        {/* Two different answers to "where is the car", both true, and until now
+            neither was labelled: the handle is how far through the LAP TIME you
+            are, the tick is how far round the ROAD the car has got. They only
+            coincide at a constant speed, so on any real circuit they sit apart
+            and the readout below disagreed with the handle for no stated
+            reason. Naming them is the whole fix — the numbers were right. */}
+        <span
+          className="num"
+          style={{
+            fontSize: 11,
+            color: dim(42),
+            // Wide enough that "through the time" does not wrap onto a third
+            // line; the row wraps as a whole below ~1080px instead.
+            width: 158,
+            flex: "none",
+            lineHeight: 1.35,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span style={{ color: CH.b }}>▏</span> {distPct.toFixed(1)}%{" "}
+          <span style={{ color: dim(30) }}>round the lap</span>
+          <br />
+          <span style={{ color: dim(55) }}>●</span> {timePct.toFixed(1)}%{" "}
+          <span style={{ color: dim(30) }}>through the time</span>
         </span>
 
         <div className="seg" style={{ flex: "none" }}>

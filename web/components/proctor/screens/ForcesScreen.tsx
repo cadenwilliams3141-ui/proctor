@@ -172,21 +172,31 @@ export default function ForcesScreen() {
             <Panel title="In plain English" padding="var(--space-4)">
               <Explain items={explainGrip(grip)} max={5} />
             </Panel>
+
+            {/* The traction circle comes OUT of the fold.
+                It is the picture this whole step is about — the shape of what
+                the tyres actually did, in every direction the car was pushed —
+                and it was sitting behind a disclosure labelled "how the grip
+                was measured", which reads like methodology rather than like the
+                answer. A driver looking for their g-g plot had no reason to
+                open that. The METHOD stays folded, which is what the fold was
+                always for. */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+                gap: "var(--space-4)",
+              }}
+            >
+              <TractionCircle />
+              <EnvelopeBars />
+            </div>
+
             <Evidence
               label="Show how the grip was measured"
-              hint="the formula, speed bands, load curve, g-g envelope and per-corner grip"
+              hint="the formula, speed bands, the load curve and per-corner grip"
             >
               <GripSection grip={grip} />
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-                  gap: "var(--space-4)",
-                }}
-              >
-                <TractionCircle />
-                <EnvelopeBars />
-              </div>
             </Evidence>
           </>
         ) : (

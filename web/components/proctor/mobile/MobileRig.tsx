@@ -1,6 +1,6 @@
 "use client";
 
-/* Forces, on the phone. The same chain as the desktop screen, compressed.
+/* Physics, on the phone. The same chain as the desktop screen, compressed.
  *
  * ┌ WHAT WAS WRONG WITH THIS FILE ──────────────────────────────────────────┐
  * │ Every number on it was a LITERAL in its own source: a brake ceiling of   │

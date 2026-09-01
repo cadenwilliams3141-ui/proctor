@@ -21,7 +21,7 @@ import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
 /* Phosphor is what the design specifies; lucide is what is vendored in this
    app, so each glyph is mapped to its nearest lucide equivalent. The one that
    is not a like-for-like is `steering-wheel` -> Gauge: lucide has no steering
-   wheel, and Gauge reads as instrumentation, which is what Forces is.
+   wheel, and Gauge reads as instrumentation, which is what Physics is.
 
    The `rig` id is deliberately unchanged though the label is not: it appears in
    ?screen= links people may have kept. */
@@ -30,7 +30,7 @@ const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "report", label: "Session report", Icon: NotebookText },
   { id: "analyze", label: "Analyze", Icon: ChartLine },
   { id: "live", label: "Live trace", Icon: CirclePlay },
-  { id: "rig", label: "Forces", Icon: Gauge },
+  { id: "rig", label: "Physics", Icon: Gauge },
   { id: "upload", label: "Upload", Icon: Upload },
 ];
 

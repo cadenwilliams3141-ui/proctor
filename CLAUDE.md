@@ -59,7 +59,7 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   **left-foot braking detected** (median **−50 ms** signed release→brake, 77% brake-before-lift);
   **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (**140 collected: 134 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
+  (**145 collected: 139 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
   `cd web && npx vitest run` (**110 tests**). If these numbers move, you broke something.
   The count above was stale at "51" for five sessions — correct it here when you add tests.
 

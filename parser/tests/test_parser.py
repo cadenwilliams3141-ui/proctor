@@ -11,7 +11,7 @@ from proctor_parser import (
     moving_mask,
     parse_ibt,
 )
-from tests.synthetic import build_ibt, make_core_channels
+from tests.synthetic import DEFAULT_YAML, build_ibt, make_core_channels
 
 
 def test_header_and_record_count():
@@ -117,6 +117,35 @@ def test_yaml_meta():
     assert meta.car_name == "Test Car GT3"
     assert meta.track_length_km == pytest.approx(4.0)
     assert meta.car_redline_rpm == pytest.approx(9000.0)
+
+
+def test_yaml_meta_keeps_where_the_track_is():
+    """WeekendInfo's own coordinates, which this parser read and discarded.
+
+    iRacing writes them with a bogus ' m' suffix on a latitude, so the numeric
+    coercion has to survive that, and a western longitude has to keep its sign.
+    """
+    yaml_text = DEFAULT_YAML.replace(
+        " EventType: Test",
+        " EventType: Test\n TrackLatitude: 33.807222 m\n"
+        " TrackLongitude: -83.809722 m\n TrackAltitude: 256.4384 m\n"
+        " TrackNorthOffset: 3.108133 rad",
+    )
+    sessions = parse_ibt(build_ibt(make_core_channels(), yaml_text=yaml_text))
+    meta = sessions[0].meta
+    assert meta.track_latitude == pytest.approx(33.807222)
+    assert meta.track_longitude == pytest.approx(-83.809722)
+    assert meta.track_altitude_m == pytest.approx(256.4384)
+    assert meta.track_north_offset_rad == pytest.approx(3.108133)
+
+
+def test_yaml_meta_missing_coordinates_stay_none():
+    """Missing is not zero. A track with no stated position says so."""
+    meta = parse_ibt(build_ibt(make_core_channels()))[0].meta
+    assert meta.track_latitude is None
+    assert meta.track_longitude is None
+    assert meta.track_altitude_m is None
+    assert meta.track_north_offset_rad is None
 
 
 def test_grid_shape_and_monotonicity():

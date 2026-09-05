@@ -41,6 +41,37 @@ def test_track_map_projection_scale(session):
     assert isinstance(payload["source_lap"], int)
 
 
+def test_track_map_carries_its_projection_anchor(session):
+    """The map must say WHERE it is, not just what shape it is.
+
+    lat_mean/lon_mean were computed to project the lap and then dropped, which
+    left x_m/y_m as offsets about an origin nobody recorded. This asserts the
+    round trip, because that is the only thing the anchor is for: projecting
+    forward and inverting must land back on the GPS the file actually carried.
+    """
+    payload = track_map.compute(session)
+    lat0 = payload["origin_lat"]
+    lon0 = payload["origin_lon"]
+    mpd = payload["meters_per_degree"]
+
+    # The anchor is a real place on Earth, not a placeholder.
+    assert -90.0 <= lat0 <= 90.0
+    assert -180.0 <= lon0 <= 180.0
+
+    ref = next(l for l in session.laps if l.lap_number == payload["source_lap"])
+    lat = np.asarray(ref.grid["lat_gps"], dtype=float)
+    lon = np.asarray(ref.grid["lon_gps"], dtype=float)
+
+    x = np.array(payload["x_m"])
+    y = np.array(payload["y_m"])
+    back_lat = lat0 + y / mpd
+    back_lon = lon0 + x / (mpd * np.cos(np.radians(lat0)))
+
+    # Within the rounding the payload applies (x_m/y_m to the centimetre).
+    assert np.max(np.abs(back_lat - lat)) < 1e-6
+    assert np.max(np.abs(back_lon - lon)) < 1e-6
+
+
 def test_track_map_json_serializable(session):
     json.dumps(track_map.compute(session))
 

@@ -93,7 +93,7 @@ export default function TopBar() {
               <button
                 key={id}
                 type="button"
-                className="pk"
+                className="pk tb-view-btn"
                 onClick={() => dispatch({ t: "view", view: id })}
                 aria-pressed={active}
                 aria-label={label}

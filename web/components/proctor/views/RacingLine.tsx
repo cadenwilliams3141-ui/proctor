@@ -112,6 +112,7 @@ export default function RacingLine() {
       </div>
 
       <div
+        className="view-split line-split"
         style={{
           flex: 1,
           minHeight: 0,

@@ -343,6 +343,9 @@ button[disabled] {
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 6px;
+  /* A two-word tag broken across two lines puts half a bordered box on each,
+     and in a narrow table cell the upper half lands on the row's own title. */
+  white-space: nowrap;
 }
 
 .input {
@@ -709,6 +712,26 @@ button[disabled] {
   }
 }
 
+/* ── Controls under a finger ─────────────────────────────────────────────────
+   Nocturne is dense on purpose (density 0.70x) and that density is right for a
+   pointer: the lap rail's rows are 28px, the view and detail switchers 24-25px,
+   the corner blocks 26px. Under a fingertip those same controls are a coin
+   toss, and a tablet gets THIS app rather than the phone one by an explicit
+   decision (2026-09-01) — chosen because the lap rail and the ribbon want the
+   width, which is no use if the lap rail cannot be operated.
+
+   Scoped to coarse pointers so a mouse sees no change at all: the density
+   decision stands where it was made, and only the touch case is bought back to
+   a hittable size. Height only — the widths were already fine. */
+@media (pointer: coarse) {
+  .lrow,
+  .seg-opt,
+  .btn,
+  .tb-view-btn {
+    min-height: 36px;
+  }
+}
+
 /* A wide child — a table, a chart, a band of readings — scrolls inside its own
    box rather than pushing the page sideways. A horizontal scrollbar on <body>
    means every other panel on the screen is now off-centre too. */
@@ -755,6 +778,44 @@ button[disabled] {
   .live-split {
     grid-template-columns: minmax(0, 1fr) !important;
     grid-auto-rows: min-content;
+    /* Stacked, the two panels are taller than the window. The grid is a flex
+       child with min-height 0, so without this the readouts below the map are
+       simply unreachable — the shell clips them and nothing scrolls. Stacking
+       the columns fixed the sideways overflow and created a vertical one. */
+    overflow-y: auto;
+  }
+}
+
+/* The detail column scrolls; the panels inside it keep their own height.
+   A flex item shrinks by default, and a shrunk panel does not hide anything —
+   it draws its full content over whatever comes next. That is how the corner
+   detail panel came to print its caveat across its own peak-lateral and tyre
+   temperatures, with the technique block over the top of both. Three panels
+   cannot fit above the fold at 1280x800 and no arrangement makes them; the
+   column scrolls instead. */
+.loss-detail > * {
+  flex-shrink: 0;
+}
+
+/* The other three Analyze views — ribbon, map & delta, racing line.
+   Each is a two-column layout with a hard-coded ratio and, until now, no
+   breakpoint at all: on a 768px tablet the map view put 104 elements past the
+   right edge with nothing to scroll them into view, and the whole right half
+   of the screen was simply unreachable. The Live trace and Where-it-went got
+   this treatment on 2026-09-01; these three did not, because the sweep only
+   ever opened the default view and never saw them. Same call as those two:
+   the second column stacks under the first rather than pushing it out. */
+@media (max-width: 1080px) {
+  .view-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-rows: min-content;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  /* Stacked, the readout column is as wide as everything else. */
+  .ribbon-split > .ribbon-readout {
+    width: 100% !important;
+    flex: none;
   }
 }
 
@@ -771,5 +832,8 @@ button[disabled] {
   .loss-split > .loss-detail {
     width: 100% !important;
     flex: none;
+    /* Stacked under the ranked list, the page itself is the scroller. A second
+       one nested inside it traps the wheel over this column. */
+    overflow-y: visible;
   }
 }

@@ -86,9 +86,16 @@ export default function MapDelta() {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      {/* Five KPIs, each holding a number that cannot be made narrower than
+          its own digits. As one flex row they simply ran off a 768px tablet,
+          taking "gap to best" — the figure the view exists to show — with
+          them. The auto-fit grid is the pattern the rest of the app already
+          uses for exactly this (Live's readouts, the corner detail panel). */}
       <div
         style={{
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
+          gap: "var(--space-3) 0",
           padding: "var(--space-4) var(--space-6) var(--space-3)",
           flex: "none",
         }}
@@ -99,6 +106,7 @@ export default function MapDelta() {
       </div>
 
       <div
+        className="view-split map-split"
         style={{
           flex: 1,
           minHeight: 0,

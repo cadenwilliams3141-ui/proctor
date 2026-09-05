@@ -56,11 +56,22 @@ export default function Panel({
         </header>
       )}
 
-      <div style={{ flex: fill ? 1 : undefined, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      {/* `fill` lets the parent squeeze this body, so the body must be able to
+          give the slack back — otherwise its content keeps drawing at full
+          height and lands on top of the foot below it. A panel that has been
+          made shorter than its readings scrolls them; it never prints them
+          through its own honesty note. (2026-09-05: that is exactly what the
+          Where-it-went detail panel was doing.) */}
+      <div
+        className={fill ? "scrollpane" : undefined}
+        style={{ flex: fill ? 1 : undefined, minHeight: 0, display: "flex", flexDirection: "column" }}
+      >
         {children}
       </div>
 
-      {foot}
+      {/* flex: none — the foot is the one thing that must never be shrunk away.
+          It carries the panel's caveat. */}
+      {foot && <div style={{ flex: "none" }}>{foot}</div>}
     </section>
   );
 }

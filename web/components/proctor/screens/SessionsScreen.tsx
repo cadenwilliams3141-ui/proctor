@@ -218,18 +218,22 @@ export default function SessionsScreen() {
                 title="Open this session"
                 onClick={() => dispatch({ t: "session", id: String(s.id) })}
               >
+                {/* A wrapping ROW, not a run of inline tags. Inline, a tag that
+                    wrapped broke mid-phrase and its padded, bordered box rode
+                    up over the track name on the line above — on a 768px
+                    tablet the first column reads "Testland" with "wear masked"
+                    printed through it. Wrapping whole tags onto their own line
+                    costs a row of height and stays legible. */}
                 <td>
-                  <span style={{ font: "500 12.5px var(--font-heading)" }}>{s.track_name}</span>
-                  {openId === String(s.id) && (
-                    <span className="tag" style={{ marginLeft: 7, fontSize: 10, color: CH.a }}>
-                      open
-                    </span>
-                  )}
-                  {s.wear_masked && (
-                    <span className="tag-warn" style={{ marginLeft: 7 }}>
-                      wear masked
-                    </span>
-                  )}
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7 }}>
+                    <span style={{ font: "500 12.5px var(--font-heading)" }}>{s.track_name}</span>
+                    {openId === String(s.id) && (
+                      <span className="tag" style={{ fontSize: 10, color: CH.a }}>
+                        open
+                      </span>
+                    )}
+                    {s.wear_masked && <span className="tag-warn">wear masked</span>}
+                  </div>
                 </td>
                 <td style={{ color: dim(62) }}>{s.car_name}</td>
                 <td style={{ color: dim(62) }}>{s.session_type}</td>

@@ -60,8 +60,12 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
   (**145 collected: 139 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**110 tests**). If these numbers move, you broke something.
-  The count above was stale at "51" for five sessions — correct it here when you add tests.
+  `cd web && npx vitest run` (**110 tests**). The third suite was missing from this list
+  until 2026-09-05 and is the one that covers ingest and the dev tools:
+  `cd render-service && python -m pytest tests -q` (**47 tests**).
+  If these numbers move, you broke something.
+  The count above was stale at "51" for five sessions, and again at 134 for two — correct
+  it here when you add tests.
 
 ## Capabilities boundary (do NOT build or promise — the data isn't there)
 - Racecraft/positioning tips (no CarIdx in disk files; intent unknowable).

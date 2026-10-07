@@ -1,6 +1,6 @@
 "use client";
 
-/* The shell. One ground, three columns, six screens.
+/* The shell. One ground, three columns, seven screens.
  *
  * What this replaces: web/app/layout.tsx plus the four routes under
  * web/app/session/[id]/. Those were separate pages you navigated between and
@@ -23,18 +23,22 @@ import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
 import LiveScreen from "@/components/proctor/screens/LiveScreen";
 import ReportScreen from "@/components/proctor/screens/ReportScreen";
 import ForcesScreen from "@/components/proctor/screens/ForcesScreen";
+import HardwareScreen from "@/components/proctor/screens/HardwareScreen";
 import SessionsScreen from "@/components/proctor/screens/SessionsScreen";
 import UploadScreen from "@/components/proctor/screens/UploadScreen";
 
 /* Screens that do not read a session bundle.
  *
  * Everything else is a view OF a session, so a failed load has to replace it.
- * These two are not: Sessions lists what exists, and Upload is how a session
- * comes to exist in the first place. Blanking them on a load failure locked the
+ * These are not: Sessions lists what exists, and Upload is how a session comes
+ * to exist in the first place. Blanking them on a load failure locked the
  * driver out of the only screen that could fix the failure — and with an empty
  * database it locked them out permanently, because "latest" has nothing to
- * resolve to until something has been uploaded. */
-const SCREENS_WITHOUT_A_SESSION = new Set(["upload", "sessions"]);
+ * resolve to until something has been uploaded.
+ *
+ * Rig is here for a plainer reason: it draws the rig and reads no session at
+ * all, so there is nothing for a failed load to make untrue. */
+const SCREENS_WITHOUT_A_SESSION = new Set(["upload", "sessions", "hardware"]);
 
 export default function AppShell() {
   const { state, error } = useProctor();
@@ -138,6 +142,7 @@ export default function AppShell() {
             {state.screen === "sessions" && <SessionsScreen />}
             {state.screen === "report" && <ReportScreen />}
             {state.screen === "rig" && <ForcesScreen />}
+            {state.screen === "hardware" && <HardwareScreen />}
             {state.screen === "upload" && <UploadScreen />}
           </div>
         )}

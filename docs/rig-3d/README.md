@@ -1,7 +1,12 @@
 # Rig builder in 3D
 
 A to-scale 3D model of a sim rig, and a copy of the rig-builder mockup that uses it in place of the flat
-schematic. This is design material: nothing here is wired into `/web`, and nothing here reads telemetry.
+schematic. Nothing here reads telemetry.
+
+The model is also live in the app: the **Rig** item in the left rail (`?screen=hardware`) opens it in
+`web/components/proctor/screens/HardwareScreen.tsx`. That screen is the viewer only. It draws the rig and
+lists the seven slots as "nothing recorded", because there is nowhere to save a component yet. The picker,
+the component names and the health tab in the mockup are still design material.
 
 ![Three-quarter view of the rig](out/still_hero.jpg)
 
@@ -67,10 +72,25 @@ mount. The screens are not a texture: each pixel is shaded along the ray from th
 and the road stay continuous across the three panels. If WebGL or three.js is unavailable, the page shows the
 rendered still and says so.
 
-## If this moves into `/web`
+## The copy the app serves
 
-- The classic-script three.js r147 build is a constraint of the sandbox the mockup was published in, not a
-  choice. In the Next.js app, use the `three` package and its `GLTFLoader` and `OrbitControls` modules.
-- Serve `proctor_rig.glb` as a static file instead of inlining it as base64.
-- Slot keys in the page (`monitors`, `wheelbase`, `rim`, `pedals`, `shifter`, `handbrake`, `frame`) map to
-  GLB nodes named `slot_<key>`.
+`web/public/rig/` holds the three files the Rig screen loads: `proctor_rig.glb`, `floor_ao.png` and
+`poster.jpg`. They are copies of the ones in `out/`. After rebuilding the model, copy them across:
+
+```bash
+cp docs/rig-3d/out/proctor_rig.glb docs/rig-3d/out/floor_ao.png docs/rig-3d/out/poster.jpg web/public/rig/
+```
+
+`web/lib/proctor/rig.test.ts` opens the served GLB and checks its node names against the slot list, so a
+rebuild that renames a slot fails a test rather than shipping a part that cannot be clicked.
+
+The mockup page here and the app screen draw the same scene with different three.js builds. The mockup uses
+the classic-script r147 build because the sandbox it was published in only loads plain script tags; the app
+uses the `three` package. Newer three.js only honours a material's own reflection strength for an
+environment map the material owns, which is why `RigScene.tsx` hands the room map to every material.
+
+## What the full builder still needs
+
+- Somewhere to save what is mounted: a table, a migration and a route. Today there is none.
+- The picker and the per-component history from the mockup, reading that table and nothing else.
+- A decision on the catalogue: the mockup's product list and spec values are illustrative.

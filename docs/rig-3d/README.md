@@ -1,0 +1,76 @@
+# Rig builder in 3D
+
+A to-scale 3D model of a sim rig, and a copy of the rig-builder mockup that uses it in place of the flat
+schematic. This is design material: nothing here is wired into `/web`, and nothing here reads telemetry.
+
+![Three-quarter view of the rig](out/still_hero.jpg)
+
+| | |
+|---|---|
+| ![Driver's eye view](out/still_pov.jpg) | ![The wheel close up](out/still_wheel.jpg) |
+
+## What it is, and what it is not
+
+- **A mockup.** Every number on the page is a sample literal under a "sample data" tag. None of it may be
+  carried into a real screen (see "No screen may carry a measurement as a literal" in the root `CLAUDE.md`).
+- **Generic parts.** Each part stands in for its category. No maker's shapes, logos or lettering: the
+  mockup's own rule is exact models, generic art.
+- **To scale for one sample rig**: three 34-inch 21:9 1500R screens, 620 mm from the eye point.
+- **One known inconsistency, left as found:** the mockup's sample field of view (104.6°) does not match
+  that sample rig. Three 34-inch screens at 620 mm wrap roughly 196°. Fix it before it seeds anything real.
+- The Blender script is asset tooling that lives with the docs. It is not app code and does not touch the
+  Python-in-`/parser`, TypeScript-in-`/web` boundary.
+
+## What is here
+
+| Path | What it is |
+|---|---|
+| `blender/build_rig.py` | Builds the whole rig in Blender from numbers (no hand modelling), exports the GLB, renders stills. |
+| `out/proctor_rig.glb` | The model: Y up, metres, about 49k triangles, 1.2 MB. One node per slot (`slot_frame`, `slot_monitors`, `slot_wheelbase`, `slot_rim`, `slot_pedals`, `slot_shifter`, `slot_handbrake`) plus `anchor_eye` at the driver's eye point. |
+| `out/still_*.jpg` | Cycles renders of the model. `out/poster.jpg` is the one the page shows while the 3D loads. |
+| `out/floor_ao.png` | Top-down soft shadow of the rig; the page lays it on the floor as a contact shadow. |
+| `page/source_mockup.html` | The original rig-builder mockup, kept verbatim. |
+| `page/viewer.js`, `viewer.css`, `stage.html` | The 3D view (three.js r147) with its markup and styles. Nocturne tokens only. |
+| `page/build.mjs` | Patches the original mockup and inlines the model, shadow map and poster into one file. |
+
+The built page is not committed. One command makes it:
+
+```bash
+node docs/rig-3d/page/build.mjs     # writes docs/rig-3d/dist/
+node docs/rig-3d/page/serve.mjs     # http://localhost:4317/preview.html
+```
+
+## Rebuilding the model
+
+Needs Blender 5.x on the PATH (or call its executable directly).
+
+```bash
+cd docs/rig-3d
+
+# model + GLB + floor shadow map, about 20 s
+blender -b --python blender/build_rig.py -- --floor-ao --samples 64
+
+# stills, about 2 min each at 1600x1000 / 128 samples on a 6-core CPU; --engine workbench for a quick shape check
+blender -b --python blender/build_rig.py -- --no-export --engine cycles --samples 128 --views hero,pov,wheel
+```
+
+Everything hangs off a handful of constants at the top of `build_rig.py`: the eye point, the screen distance,
+radius and size, the side-screen angle, the steering column tilt and the pedal deck angle. Change a number,
+rebuild, look at the stills.
+
+## How the page talks to the 3D view
+
+The page script stays the source of truth. It calls `rig3d.sync(selected, rig)` when anything changes,
+`rig3d.focus(slot)` to fly the camera and `rig3d.pop(slot)` after a swap. The view calls `__rig.choose(slot)`
+when a part, a caption or the "+" on an empty slot is clicked. An empty slot is drawn as a dashed ghost on its
+mount. The screens are not a texture: each pixel is shaded along the ray from the eye point, so the horizon
+and the road stay continuous across the three panels. If WebGL or three.js is unavailable, the page shows the
+rendered still and says so.
+
+## If this moves into `/web`
+
+- The classic-script three.js r147 build is a constraint of the sandbox the mockup was published in, not a
+  choice. In the Next.js app, use the `three` package and its `GLTFLoader` and `OrbitControls` modules.
+- Serve `proctor_rig.glb` as a static file instead of inlining it as base64.
+- Slot keys in the page (`monitors`, `wheelbase`, `rim`, `pedals`, `shifter`, `handbrake`, `frame`) map to
+  GLB nodes named `slot_<key>`.

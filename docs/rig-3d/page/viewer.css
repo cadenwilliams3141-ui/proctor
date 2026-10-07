@@ -1,0 +1,77 @@
+
+/* ── The 3D scene ───────────────────────────────────────────────────────────
+   Replaces the SVG schematic. Nocturne tokens only, same as the rest of the
+   mockup: no new colours, spaces, radii or shadows. */
+:root { color-scheme: dark; }
+
+.stage {
+  position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 10;
+  border-radius: var(--radius-sm); overflow: hidden;
+  background: var(--color-bg); box-shadow: var(--shadow-sm);
+}
+.stage .poster, .stage canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+}
+.stage .poster { object-fit: cover; transition: opacity .5s .1s; }
+.stage canvas { opacity: 0; transition: opacity .5s; cursor: grab; outline-offset: -2px; }
+.stage canvas:active { cursor: grabbing; }
+.stage canvas[data-hot="true"] { cursor: pointer; }
+.stage[data-state="live"] canvas { opacity: 1; }
+.stage[data-state="live"] .poster { opacity: 0; pointer-events: none; }
+
+.stage-overlay { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.stage:not([data-state="live"]) .stage-overlay,
+.stage:not([data-state="live"]) .stage-hud { display: none; }
+
+.ring3d {
+  position: absolute; left: 0; top: 0; opacity: 0; transition: opacity .16s;
+  border: 1.4px dashed var(--color-accent-400); border-radius: var(--radius-md);
+}
+.lbl {
+  position: absolute; left: 0; top: 0; pointer-events: auto; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font: 500 9.5px var(--font-heading); letter-spacing: .09em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 62%, transparent);
+  border: 0; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2);
+  transition: color .13s, background .13s, opacity .16s;
+}
+.lbl::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: currentColor; flex: none; }
+.lbl:hover { color: var(--color-text); background: color-mix(in srgb, var(--color-bg) 82%, transparent); }
+.lbl[data-sel="true"] { color: var(--color-accent-400); }
+.lbl[data-empty="true"] { font-style: italic; }
+.lbl[data-off="true"], .plus3d[data-off="true"] { opacity: 0; pointer-events: none; }
+
+.plus3d {
+  position: absolute; left: 0; top: 0; width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center; pointer-events: auto; cursor: pointer;
+  border-radius: 50%; background: var(--color-surface);
+  border: 1.3px solid var(--color-accent); color: var(--color-accent-400);
+  transition: opacity .16s, background .13s;
+}
+.plus3d:hover { background: var(--color-accent-900); }
+
+.stage-hud {
+  position: absolute; left: var(--space-3); bottom: var(--space-3);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.stage-hud .seg { background: color-mix(in srgb, var(--color-bg) 78%, transparent); }
+.stage-hud .seg-opt { font-size: 11.5px; padding: 5px 10px; }
+.stage-msg {
+  position: absolute; right: var(--space-3); bottom: var(--space-3); max-width: 60%;
+  text-align: right; pointer-events: none; transition: opacity .4s;
+  padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-bg) 62%, transparent);
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+.stage[data-state="static"] .stage-msg {
+  left: var(--space-3); max-width: none; text-align: left; text-transform: none; letter-spacing: 0;
+  font-size: 10.5px; background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+@media (max-width: 560px) {
+  .topbar { height: auto; flex-wrap: wrap; row-gap: var(--space-2); padding-block: var(--space-2); }
+  .stage { aspect-ratio: 4 / 3; }
+  .stage-msg { display: none; }
+  .stage[data-state="static"] .stage-msg { display: block; }
+}

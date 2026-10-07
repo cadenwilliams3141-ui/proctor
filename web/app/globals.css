@@ -955,3 +955,350 @@ button[disabled] {
   color: color-mix(in srgb, var(--color-text) 62%, transparent);
   background: color-mix(in srgb, var(--color-bg) 82%, transparent);
 }
+
+/* ── The Anatomy screen ──────────────────────────────────────────────────────
+   An exploded car that fills the workspace, with chrome laid over it. In CSS
+   for the same reason as the Rig screen above: hover, data-attribute states
+   and a scroll container are things an inline style object cannot say.
+   Nocturne tokens only.
+
+   The tags (.ana-label) are positioned every frame by views/AnatomyScene.tsx,
+   which writes `transform`, `opacity` and the tag's own offsets directly — so
+   nothing here sets those except their resting values. */
+.ana-root {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
+  background: var(--color-bg);
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.ana-root canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.ana-root[data-state="ready"] canvas {
+  opacity: 1;
+}
+
+.ana-center {
+  position: absolute;
+  inset: 0;
+  width: fit-content;
+  height: fit-content;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  pointer-events: none;
+}
+
+.ana-bar {
+  width: 180px;
+  height: 2px;
+  background: var(--color-neutral-800);
+}
+
+.ana-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.2s;
+}
+
+.ana-tags {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ana-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.ana-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent-400);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-400) 22%, transparent);
+}
+
+.ana-lead {
+  position: absolute;
+  left: 0;
+  top: -34px;
+  width: 1px;
+  height: 30px;
+  background: var(--color-accent-400);
+}
+
+.ana-tag,
+.ana-chip {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg) 84%, transparent);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  transition: background 0.13s, color 0.13s, border-color 0.13s;
+}
+
+.ana-tag {
+  position: absolute;
+  left: 0;
+  bottom: 34px;
+  padding: 3px 9px 3px 7px;
+  pointer-events: auto;
+}
+
+.ana-chip {
+  flex: none;
+  padding: 7px 11px;
+}
+
+.ana-n {
+  font: 500 10.5px var(--font-heading);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent-400);
+}
+
+.ana-t {
+  font: 500 11px var(--font-heading);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Pointed at, or selected: an accent outline on a tint, never a fill — the
+   same rule the buttons follow. */
+.ana-tag[data-hi="true"],
+.ana-chip[data-hi="true"] {
+  border-color: var(--color-neutral-700);
+  background: color-mix(in srgb, var(--color-text) 9%, var(--color-bg));
+}
+
+.ana-tag[data-hi="true"],
+.ana-chip[data-on="true"] {
+  color: var(--color-accent-400);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-bg));
+}
+
+.ana-ui {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  pointer-events: none;
+}
+
+.ana-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-8);
+}
+
+.ana-intro {
+  max-width: 400px;
+}
+
+.ana-intro p {
+  margin: var(--space-2) 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  text-wrap: pretty;
+}
+
+.ana-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  pointer-events: auto;
+}
+
+/* Over a moving car, a transparent button is a button you cannot read. */
+.ana-actions .btn {
+  font-size: 12px;
+  background: color-mix(in srgb, var(--color-bg) 76%, transparent);
+}
+
+.ana-actions .btn-primary {
+  min-width: 92px;
+}
+
+.ana-actions .btn-primary:hover {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg));
+}
+
+.ana-actions .btn-secondary:hover {
+  background: color-mix(in srgb, var(--color-text) 9%, var(--color-bg));
+}
+
+.ana-mid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+.ana-mid[data-narrow="true"] {
+  align-items: flex-end;
+}
+
+.ana-panel {
+  width: min(360px, 100%);
+  max-height: 100%;
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+  user-select: text;
+}
+
+.ana-mid[data-narrow="true"] .ana-panel {
+  max-height: 58%;
+}
+
+.ana-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+}
+
+.ana-panel > header button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.ana-body {
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
+.ana-body h2 {
+  margin: var(--space-2) 0 0;
+  font: 500 22px/1.1 var(--font-heading);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.ana-body p {
+  margin: var(--space-3) 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--color-text) 78%, transparent);
+  text-wrap: pretty;
+}
+
+.ana-panel dl {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+}
+
+.ana-panel dl > div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ana-panel dt {
+  padding-top: 2px;
+  font: 500 10px var(--font-heading);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+
+.ana-panel dd {
+  margin: 0;
+}
+
+.ana-panel > footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  box-shadow: inset 0 1px 0 var(--color-divider);
+}
+
+.ana-panel > footer button {
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: 500 11.5px var(--font-heading);
+  text-align: left;
+}
+
+.ana-panel > footer button + button {
+  text-align: right;
+  box-shadow: inset 1px 0 0 var(--color-divider);
+}
+
+.ana-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-8);
+}
+
+.ana-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-width: 920px;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.ana-chips[data-narrow="true"] {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+@media (max-width: 860px) {
+  .ana-ui {
+    padding: var(--space-4);
+  }
+}

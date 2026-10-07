@@ -1,6 +1,6 @@
 "use client";
 
-/* The shell. One ground, three columns, seven screens.
+/* The shell. One ground, three columns, eight screens.
  *
  * What this replaces: web/app/layout.tsx plus the four routes under
  * web/app/session/[id]/. Those were separate pages you navigated between and
@@ -20,6 +20,7 @@ import LaunchScreen from "@/components/proctor/shell/LaunchScreen";
 import TopBar from "@/components/proctor/shell/TopBar";
 
 import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
+import AnatomyScreen from "@/components/proctor/screens/AnatomyScreen";
 import LiveScreen from "@/components/proctor/screens/LiveScreen";
 import ReportScreen from "@/components/proctor/screens/ReportScreen";
 import ForcesScreen from "@/components/proctor/screens/ForcesScreen";
@@ -36,9 +37,10 @@ import UploadScreen from "@/components/proctor/screens/UploadScreen";
  * database it locked them out permanently, because "latest" has nothing to
  * resolve to until something has been uploaded.
  *
- * Rig is here for a plainer reason: it draws the rig and reads no session at
- * all, so there is nothing for a failed load to make untrue. */
-const SCREENS_WITHOUT_A_SESSION = new Set(["upload", "sessions", "hardware"]);
+ * Rig and Anatomy are here for a plainer reason: one draws the rig, the other
+ * an exploded car, and neither reads a session at all, so there is nothing for
+ * a failed load to make untrue. */
+const SCREENS_WITHOUT_A_SESSION = new Set(["upload", "sessions", "hardware", "anatomy"]);
 
 export default function AppShell() {
   const { state, error } = useProctor();
@@ -143,6 +145,7 @@ export default function AppShell() {
             {state.screen === "report" && <ReportScreen />}
             {state.screen === "rig" && <ForcesScreen />}
             {state.screen === "hardware" && <HardwareScreen />}
+            {state.screen === "anatomy" && <AnatomyScreen />}
             {state.screen === "upload" && <UploadScreen />}
           </div>
         )}

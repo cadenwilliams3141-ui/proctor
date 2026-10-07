@@ -1,6 +1,6 @@
 "use client";
 
-/* 56px icon rail, full height. The whole app lives behind seven items, which is
+/* 56px icon rail, full height. The whole app lives behind eight items, which is
  * the point of the redesign: the five Next routes became one shell, so moving
  * between them no longer loses lap selection, cursor or scroll position. */
 
@@ -9,6 +9,7 @@ import {
   ChartLine,
   CirclePlay,
   Gauge,
+  Layers,
   LayoutGrid,
   NotebookText,
   Upload,
@@ -30,7 +31,10 @@ import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
    That leaves the screen that IS about the rig without the obvious id, so it is
    `hardware`, labelled "Rig". Its glyph is a seat because the rig is the thing
    you sit in, and because a second dial next to Physics would read as the same
-   screen twice. */
+   screen twice.
+
+   Anatomy is the exploded car. Its glyph is a stack of layers lifting apart,
+   which is what the screen does; a car glyph would promise the driver's own. */
 const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "sessions", label: "Sessions", Icon: LayoutGrid },
   { id: "report", label: "Session report", Icon: NotebookText },
@@ -38,6 +42,7 @@ const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "live", label: "Live trace", Icon: CirclePlay },
   { id: "rig", label: "Physics", Icon: Gauge },
   { id: "hardware", label: "Rig", Icon: Armchair },
+  { id: "anatomy", label: "Anatomy", Icon: Layers },
   { id: "upload", label: "Upload", Icon: Upload },
 ];
 

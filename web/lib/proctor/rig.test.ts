@@ -9,8 +9,10 @@ import {
   DESIGN_ASPECT,
   RIG_EYE_NODE,
   RIG_LAYOUTS,
+  RIG_NONE,
   RIG_SLOTS,
   defaultRigPrefs,
+  emptySlots,
   fitDistance,
   isSideNode,
   parseRigPrefs,
@@ -126,8 +128,48 @@ describe("parseRigPrefs", () => {
   });
 
   it("round-trips what it produces", () => {
-    const prefs = { ...fresh, layout: "stand" as const, screens: { ...fresh.screens, stand: "triple" as const } };
+    const prefs = {
+      ...fresh,
+      layout: "stand" as const,
+      screens: { ...fresh.screens, stand: "triple" as const },
+      parts: { ...fresh.parts, pedals: "some-pedals", handbrake: RIG_NONE },
+    };
     expect(parseRigPrefs(JSON.stringify(prefs))).toEqual(prefs);
+  });
+
+  it("starts with nothing said about any slot", () => {
+    for (const slot of RIG_SLOTS) expect(fresh.parts[slot.key], slot.label).toBeNull();
+  });
+
+  it("still reads a choice saved before a rig had parts", () => {
+    const got = parseRigPrefs(JSON.stringify({ layout: "desk", screens: { desk: "triple" } }));
+    expect(got.layout).toBe("desk");
+    expect(got.parts).toEqual(fresh.parts);
+  });
+
+  it("keeps a part id, and drops anything that is not one", () => {
+    const got = parseRigPrefs(
+      JSON.stringify({ parts: { wheelbase: "a-wheelbase", rim: 7, pedals: "", monitors: "x".repeat(200), elbow: "no" } }),
+    );
+    expect(got.parts.wheelbase).toBe("a-wheelbase");
+    expect(got.parts.rim).toBeNull();
+    expect(got.parts.pedals).toBeNull();
+    expect(got.parts.monitors).toBeNull();
+    expect(Object.keys(got.parts).sort()).toEqual(RIG_SLOTS.map((s) => s.key).sort());
+  });
+
+  it("lets only a slot a rig can do without be marked empty", () => {
+    const all = Object.fromEntries(RIG_SLOTS.map((s) => [s.key, RIG_NONE]));
+    const got = parseRigPrefs(JSON.stringify({ parts: all }));
+    for (const slot of RIG_SLOTS) {
+      expect(got.parts[slot.key], slot.label).toBe(slot.optional ? RIG_NONE : null);
+    }
+    expect(emptySlots(got.parts)).toEqual(RIG_SLOTS.filter((s) => s.optional).map((s) => s.key));
+  });
+
+  it("does not call a slot empty because nothing has been said about it", () => {
+    expect(emptySlots(fresh.parts)).toEqual([]);
+    expect(emptySlots({ ...fresh.parts, shifter: "a-shifter" })).toEqual([]);
   });
 });
 

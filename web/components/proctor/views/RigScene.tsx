@@ -5,8 +5,9 @@
  * WHAT THIS IS. A generic sim rig — something to carry it all and a seat,
  * screens, wheelbase, rim, pedals, shifter, handbrake — with one node per
  * mounting slot. It comes in the layouts listed in lib/proctor/rig.ts, one
- * model each under public/rig/, and with one screen or three. You can orbit
- * it, sit in it, and click a part to select its slot.
+ * model each under public/rig/, and with one screen or three. A slot the
+ * driver says is empty is left out of the drawing. You can orbit it, sit in
+ * it, and click a part to select its slot.
  *
  * WHAT THIS IS NOT. It is not the driver's rig and it reads nothing from a
  * session. Three things in here could be mistaken for data, so each is said
@@ -57,6 +58,7 @@ interface SceneHandle {
   setView(view: View): void;
   setLayout(key: RigLayoutKey): void;
   setScreens(count: RigScreens): void;
+  setAbsent(keys: readonly RigSlotKey[]): void;
   home(): void;
   dispose(): void;
 }
@@ -71,6 +73,7 @@ interface SceneNodes {
 interface SceneOptions {
   layout: RigLayoutKey;
   screens: RigScreens;
+  absent: readonly RigSlotKey[];
   reduceMotion: boolean;
   onPick: (key: RigSlotKey) => void;
   onStatus: (status: Status) => void;
@@ -234,6 +237,8 @@ interface Slot {
   anchor: THREE.Vector3;
   hover: number;
   shown: number;
+  /** The driver says there is nothing in this slot, so it is not drawn. */
+  gone: boolean;
 }
 
 /* Where a slot's caption sits. Over the top of the part for most; over the
@@ -410,6 +415,7 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
   /* ── The model, and its slots ─────────────────────────────────────────── */
   let current: RigLayout = rigLayout(opts.layout);
   let screenCount: RigScreens = opts.screens;
+  let absent = new Set<RigSlotKey>(opts.absent);
   let model: THREE.Object3D | null = null;
   let loads = 0; // counts loads, so a model that lands late can tell it is stale
   const slots: Partial<Record<RigSlotKey, Slot>> = {};
@@ -480,17 +486,31 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
     s.anchor.copy(captionAnchor(s.key, s.box, s.center, picture));
   }
 
-  /* One screen or three. The model always carries three; the side two, and the
-     wings of a stand that hold them, are simply not drawn. Everything worked
-     out from a slot's extent is worked out again, so the ring round the
-     monitors hugs one screen when there is one, and a hidden screen cannot be
-     clicked. Their lights are turned down rather than removed, which would
-     make three rebuild every material's shader. */
-  function showScreens() {
+  /* What is drawn: one screen or three, and not the slots the driver says are
+     empty. The model always carries everything; the side screens, the wings of
+     a stand that hold them, and an empty slot's part are simply not drawn.
+     Everything worked out from a slot's extent is worked out again, so the ring
+     round the monitors hugs one screen when there is one, and a part that is
+     not drawn cannot be clicked. The side screens' lights are turned down
+     rather than removed, which would make three rebuild every material's
+     shader. */
+  function showParts() {
     const triple = screenCount === "triple";
     for (const node of sideNodes) node.visible = triple;
     for (const lamp of lamps) if (lamp.side) lamp.light.intensity = triple ? SCREEN_LIGHT : 0;
-    pickables = parts.filter((m) => triple || !m.userData.side);
+    for (const def of RIG_SLOTS) {
+      const s = slots[def.key];
+      if (!s) continue;
+      s.gone = absent.has(def.key);
+      s.root.visible = !s.gone;
+    }
+    pickables = parts.filter(
+      (m) => !absent.has(m.userData.slot as RigSlotKey) && (triple || !m.userData.side),
+    );
+    if (hover && absent.has(hover)) {
+      hover = null;
+      canvas.dataset.hot = "false";
+    }
     if (rim) {
       // measured at rest, not at whatever angle the wheel happened to be turned to
       rim.root.quaternion.copy(rim.rest);
@@ -593,7 +613,7 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
           slots[def.key] = {
             key: def.key, root, meshes,
             box: new THREE.Box3(), center: new THREE.Vector3(), radius: 0, anchor: new THREE.Vector3(),
-            hover: 0, shown: -1,
+            hover: 0, shown: -1, gone: false,
           };
         }
         loaded.traverse((o) => {
@@ -610,7 +630,7 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
         } else {
           seatAim.copy(vec(SEAT.look));
         }
-        showScreens();
+        showParts();
 
         ready = true;
         resize();
@@ -723,6 +743,11 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
   function focus(k: RigSlotKey) {
     const s = slots[k];
     if (!ready || !s) return;
+    if (s.gone) {
+      // nothing there to fly to: step back and show the rig it is missing from
+      if (mode === "orbit") goHome(900);
+      return;
+    }
     if (mode === "seat") {
       const a = aimAt(s.center);
       const y0 = yaw;
@@ -821,7 +846,7 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
     const points: CaptionPoint<RigSlotKey>[] = [];
     for (const def of RIG_SLOTS) {
       const s = slots[def.key];
-      const p = s && toStage(s.anchor);
+      const p = s && !s.gone ? toStage(s.anchor) : null;
       if (!p) continue;
       at[def.key] = p;
       points.push({ key: def.key, x: p.x, y: p.y, rank: def.key === selected ? 1 : 0 });
@@ -840,7 +865,7 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
 
     const s = selected ? slots[selected] : undefined;
     let show = false;
-    if (s) {
+    if (s && !s.gone) {
       let x0 = Infinity;
       let y0 = Infinity;
       let x1 = -Infinity;
@@ -994,7 +1019,12 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
       if (count === screenCount) return;
       screenCount = count;
       // a model still on its way picks this up when it lands
-      if (ready) showScreens();
+      if (ready) showParts();
+    },
+    setAbsent(keys) {
+      if (keys.length === absent.size && keys.every((k) => absent.has(k))) return;
+      absent = new Set(keys);
+      if (ready) showParts();
     },
     home() {
       if (ready && mode === "orbit") goHome(900);
@@ -1029,11 +1059,14 @@ const NOTE: Record<Status, string> = {
 export default function RigScene({
   layout,
   screens,
+  absent,
   selected,
   onSelect,
 }: {
   layout: RigLayoutKey;
   screens: RigScreens;
+  /** Slots the driver says are empty. Their parts are left out of the drawing. */
+  absent: readonly RigSlotKey[];
   selected: RigSlotKey | null;
   onSelect: (key: RigSlotKey) => void;
 }) {
@@ -1043,7 +1076,9 @@ export default function RigScene({
   const captions = useRef<Partial<Record<RigSlotKey, HTMLButtonElement>>>({});
   const handle = useRef<SceneHandle | null>(null);
   const pick = useRef(onSelect);
-  const rig = useRef({ layout, screens });
+  const rig = useRef({ layout, screens, absent });
+  // As a string, so a new array holding the same slots is not a change.
+  const absentKey = absent.join(",");
   const [status, setStatus] = useState<Status>("loading");
   const [view, setView] = useState<View>("orbit");
 
@@ -1055,10 +1090,12 @@ export default function RigScene({
      scene starts on the rig asked for, and afterwards a change of rig goes to
      the scene that is already running rather than building a new one. */
   useEffect(() => {
-    rig.current = { layout, screens };
+    const gone = absentKey ? (absentKey.split(",") as RigSlotKey[]) : [];
+    rig.current = { layout, screens, absent: gone };
     handle.current?.setLayout(layout);
     handle.current?.setScreens(screens);
-  }, [layout, screens]);
+    handle.current?.setAbsent(gone);
+  }, [layout, screens, absentKey]);
 
   useEffect(() => {
     if (!stage.current || !canvas.current || !ring.current) return;
@@ -1067,6 +1104,7 @@ export default function RigScene({
       {
         layout: rig.current.layout,
         screens: rig.current.screens,
+        absent: rig.current.absent,
         reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         onPick: (k) => pick.current(k),
         onStatus: setStatus,

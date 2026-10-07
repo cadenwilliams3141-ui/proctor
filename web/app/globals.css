@@ -820,6 +820,229 @@ button[disabled] {
   color: color-mix(in srgb, var(--color-text) 42%, transparent);
 }
 
+/* ── The rig builder ───────────────────────────────────────────────────────
+   The right-hand column of the Rig screen: the rig as the driver has described
+   it, one line per slot, and under it whatever can be picked for the line in
+   hand. Rows and options are buttons that look like list lines, so the whole
+   line is the target. */
+.rig-row,
+.rig-opt {
+  display: flex;
+  width: 100%;
+  flex: none;
+  gap: var(--space-3);
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.13s;
+}
+
+.rig-row {
+  align-items: baseline;
+}
+
+.rig-opt {
+  align-items: center;
+}
+
+.rig-row:hover,
+.rig-opt:hover {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.rig-row[data-active="true"],
+.rig-opt[data-active="true"] {
+  background: color-mix(in srgb, var(--color-accent) 13%, transparent);
+}
+
+.rig-row-label,
+.rig-opt-make {
+  font: 500 9.5px var(--font-heading);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+
+.rig-row-label {
+  flex: none;
+  width: 96px;
+}
+
+.rig-row[data-active="true"] .rig-row-label {
+  color: var(--ch-a);
+}
+
+.rig-row-value {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Not answered yet. Italic and quiet, so a placeholder is never read as an
+   answer. */
+.rig-row-value[data-said="false"] {
+  font-style: italic;
+  color: color-mix(in srgb, var(--color-text) 34%, transparent);
+}
+
+.rig-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* A slot's list can be longer than the panel should be. It scrolls inside the
+   panel so the picture beside it stays on screen while the driver reads it. */
+.rig-opts.scrollpane {
+  max-height: 252px;
+}
+
+.rig-opt-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rig-opt-make {
+  font-size: 9px;
+}
+
+.rig-opt-name {
+  font-size: 12.5px;
+}
+
+.rig-opt-note {
+  flex: 0 1 46%;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+  text-wrap: pretty;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.rig-opt-check {
+  flex: none;
+  color: var(--ch-a);
+  opacity: 0;
+}
+
+.rig-opt[data-active="true"] .rig-opt-check {
+  opacity: 1;
+}
+
+.rig-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+
+.rig-count .seg-opt {
+  font-size: 11.5px;
+  padding: 4px 10px;
+}
+
+.rig-clear {
+  align-self: flex-start;
+  margin-top: var(--space-2);
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.rig-clear:hover {
+  color: var(--color-text);
+}
+
+.rig-again {
+  margin-top: var(--space-3);
+}
+
+.rig-again .btn,
+.rig-nav .btn {
+  font-size: 12.5px;
+  padding: 6px 12px;
+}
+
+/* Back and Next, during the guided setup only. */
+.rig-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  box-shadow: inset 0 1px 0 var(--color-divider);
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+
+/* The strip across the top of the Rig screen while it is a step of setup. It
+   is tinted so it reads as temporary: it belongs to the setup, not the screen. */
+.rig-guide {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 9%, var(--color-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.rig-guide-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rig-guide-title {
+  margin: 2px 0;
+  font: 500 15px var(--font-heading);
+}
+
+.rig-guide p {
+  max-width: 68ch;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+
+.rig-guide-count {
+  flex: none;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+.rig-guide .btn {
+  flex: none;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .rig-guide {
+    flex-wrap: wrap;
+  }
+}
+
 .rig-stage {
   position: relative;
   width: 100%;
@@ -978,6 +1201,150 @@ button[disabled] {
   text-align: left;
   color: color-mix(in srgb, var(--color-text) 62%, transparent);
   background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+}
+
+/* ── The guided setup, first step ───────────────────────────────────────────
+   One question laid over the whole shell: how much detail. Same ground and the
+   same glow as the launch screen, because it stands where the launch screen
+   would have. */
+.setup {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  display: flex;
+  overflow-y: auto;
+  padding: var(--space-6);
+  background: var(--color-bg);
+  animation: fadeIn 0.3s both;
+}
+
+/* The screen takes focus when it opens so the keyboard starts inside it. It
+   fills the window, so a focus ring round it would only be a border on the
+   viewport. */
+.setup:focus-visible {
+  outline: none;
+}
+
+.setup-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 760px;
+  max-width: 100vw;
+  height: 460px;
+  transform: translate(-50%, -58%);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--color-accent) 20%, transparent),
+    transparent
+  );
+  filter: blur(38px);
+  pointer-events: none;
+}
+
+/* margin: auto centres it when there is room and lets it scroll from the top
+   when there is not, which align-items: center would cut off. */
+.setup-body {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  margin: auto;
+}
+
+.setup-title {
+  margin: var(--space-2) 0;
+  font: 500 30px/1.15 var(--font-heading);
+}
+
+.setup-lede {
+  max-width: 62ch;
+  margin: 0 0 var(--space-6);
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+
+.setup-tiers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.setup-tier {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: 184px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.setup-tier:hover,
+.setup-tier:focus-visible {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+
+.setup-tier:active {
+  transform: scale(0.99);
+}
+
+.setup-glyph {
+  width: 56px;
+  height: 40px;
+  margin-bottom: var(--space-2);
+  fill: var(--ch-a);
+}
+
+.setup-tier-name {
+  font: 500 19px var(--font-heading);
+  text-transform: capitalize;
+}
+
+.setup-tier-blurb {
+  font-size: 13px;
+  line-height: 1.55;
+  text-wrap: pretty;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+
+.setup-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.setup-foot .btn {
+  flex: none;
+  font-size: 12.5px;
+}
+
+@media (max-width: 760px) {
+  .setup-tiers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .setup-tier {
+    min-height: 0;
+  }
+  .setup-foot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 /* ── The Anatomy screen ──────────────────────────────────────────────────────

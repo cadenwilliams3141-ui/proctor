@@ -4,9 +4,10 @@ A to-scale 3D model of a sim rig, and a copy of the rig-builder mockup that uses
 schematic. Nothing here reads telemetry.
 
 The model is also live in the app: the **Rig** item in the left rail (`?screen=hardware`) opens it in
-`web/components/proctor/screens/HardwareScreen.tsx`. That screen is the viewer only. It draws the rig and
-lists the seven slots as "nothing recorded", because there is nowhere to save a component yet. The picker,
-the component names and the health tab in the mockup are still design material.
+`web/components/proctor/screens/HardwareScreen.tsx`. That screen is a rig builder working from a **demo
+catalogue**: the driver picks a layout, a screen count and a product for each of the seven slots, and it is
+kept in their browser only (see "The builder in the app" below). The install dates, the per-component
+history and the health tab in the mockup are still design material.
 
 The app draws the rig in three layouts, with one screen or three (see "Layouts" below). The mockup page
 only ever shows the cockpit.
@@ -120,8 +121,24 @@ node docs/rig-3d/sync.mjs
 the side screens are a `_side` child of the monitors slot, and that the shadow and poster it names exist.
 A rebuild that renames a slot fails a test rather than shipping a part that cannot be clicked.
 
-Which layout and how many screens someone last picked is kept in their browser's storage and nowhere else.
-It is a preference about a drawing. Nothing reads it as a fact about their rig.
+## The builder in the app
+
+The Rig screen is where a driver says what they drive on: the layout, one screen or three, and a product
+for each slot. A first plain visit to the app is walked there by the guided setup, which asks for the level
+of detail first (`web/components/proctor/shell/SetupScreen.tsx`, `web/lib/setup.ts`). `?setup=1` runs the
+setup again, and so does the button under the rig on the Rig screen. The phone app at `/m` has no setup.
+
+- **It is the driver's word, not a reading.** Proctor cannot detect hardware. Nothing in a `.ibt` names the
+  product behind a channel, so picking one changes no number anywhere.
+- **The catalogue is a demo.** `web/lib/proctor/rigCatalog.ts` is a short hand-picked list, seeded from the
+  mockup and widened with desk-clamp gear. The makes and models are real; the one-line descriptions have not
+  been checked against the makers' sheets. Every row on screen carries a "demo catalogue" tag.
+- **It is kept in the browser only**, under the storage key `proctor-rig-layout`. There is no table for a
+  rig, so it does not follow the driver to another device and nothing downstream reads it.
+- **A slot has three states**: not said, said to be empty, or a product. Only the shifter and the handbrake
+  can be marked empty, and an empty slot is left out of the drawing. Otherwise the drawing stays generic
+  whichever product is picked. The loading poster always shows the layout with every part and its usual
+  screens, so it can differ from the rig for a moment before the 3D view arrives.
 
 The mockup page here and the app screen draw the same scene with different three.js builds. The mockup uses
 the classic-script r147 build because the sandbox it was published in only loads plain script tags; the app
@@ -130,6 +147,8 @@ environment map the material owns, which is why `RigScene.tsx` hands the room ma
 
 ## What the full builder still needs
 
-- Somewhere to save what is mounted: a table, a migration and a route. Today there is none.
-- The picker and the per-component history from the mockup, reading that table and nothing else.
-- A decision on the catalogue: the mockup's product list and spec values are illustrative.
+- Somewhere to save what is mounted: a table, a migration and a route. Today it lives in one browser.
+- A real catalogue in place of the demo list in `rigCatalog.ts`, with its descriptions verified. Keep the
+  ids stable, or map the old ones forward, so a rig someone has already built still reads back.
+- The per-component history from the mockup (install dates, what a part replaced), reading that table and
+  nothing else.

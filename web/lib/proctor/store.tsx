@@ -23,6 +23,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -32,6 +33,7 @@ import { buildLedger } from "@/lib/proctor/ledger";
 import { deriveReadiness, type Readiness } from "@/lib/proctor/readiness";
 import type { CornerLedger, SessionBundle, Trace } from "@/lib/proctor/types";
 import { isUsable } from "@/lib/proctor/types";
+import { SETUP_COOKIE, SETUP_DONE, SETUP_PARAM, type SetupStep } from "@/lib/setup";
 import { DEFAULT_TIER, parseTier, TIER_COOKIE, type Tier } from "@/lib/tier";
 
 export type Screen =
@@ -62,6 +64,13 @@ export interface ProctorState {
   tier: Tier;
   speedMul: 1 | 2 | 4 | 8;
   splash: boolean;
+  /** The guided setup's current step, or null when it is not running.
+   *
+   *  "detail" is a screen of its own, laid over the shell. "rig" is not: it
+   *  happens ON the Rig screen, with a strip across the top that walks the
+   *  driver through it, so there is one rig builder and not a second copy of
+   *  it that only exists during setup. */
+  setup: SetupStep | null;
   /** Which slot the lap rail assigns to on the next click.
    *
    *  Lap A used to be pinned to the reference lap with no way to move it, so
@@ -84,6 +93,7 @@ type Action =
   | { t: "tier"; tier: Tier }
   | { t: "speedMul"; mul: 1 | 2 | 4 | 8 }
   | { t: "splash"; on: boolean }
+  | { t: "setup"; step: SetupStep | null }
   | { t: "pick"; which: "A" | "B" }
   | { t: "sheet"; id: number | null }
   | { t: "initLaps"; a: number; b: number | null };
@@ -94,18 +104,27 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       // A different session shares nothing with the one before it: lap 4 of
       // yesterday's race is not lap 4 of this one, and carrying the selection
       // across would put a stale lap number against a new set of traces.
-      if (a.id === s.sessionId) return { ...s, screen: "analyze" };
+      if (a.id === s.sessionId) return { ...s, screen: "analyze", setup: null };
       return {
         ...s,
         sessionId: a.id,
         screen: "analyze",
+        setup: null,
         lapA: null,
         lapB: null,
         selCorner: null,
         sheet: null,
       };
     case "screen":
-      return { ...s, screen: a.screen, sheet: null };
+      /* Walking off to another screen in the middle of the rig step is an
+         answer: not now. The setup ends there rather than following the driver
+         round the app or dragging them back. */
+      return {
+        ...s,
+        screen: a.screen,
+        sheet: null,
+        setup: s.setup === "rig" && a.screen !== "hardware" ? null : s.setup,
+      };
     case "view":
       // Lap A, lap B, cursor and the selected corner all persist across a view
       // change. Switching how you look at the lap must not lose your place.
@@ -133,6 +152,11 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       return { ...s, speedMul: a.mul };
     case "splash":
       return { ...s, splash: a.on };
+    case "setup":
+      // The rig step is the Rig screen, so entering it goes there. The launch
+      // screen never plays over a setup: one full-screen thing at a time.
+      if (a.step === "rig") return { ...s, setup: "rig", screen: "hardware", splash: false };
+      return { ...s, setup: a.step, splash: a.step ? false : s.splash };
     case "sheet":
       return { ...s, sheet: a.id };
     case "initLaps":
@@ -153,6 +177,7 @@ const INITIAL: ProctorState = {
   tier: DEFAULT_TIER,
   speedMul: 4,
   splash: true,
+  setup: null,
   pick: "B",
   sheet: null,
 };
@@ -184,6 +209,7 @@ export function ProctorProvider({
   initialScreen = "analyze",
   initialView = "loss",
   skipSplash = false,
+  initialSetup = null,
   children,
 }: {
   sessionId?: string;
@@ -192,6 +218,9 @@ export function ProctorProvider({
   initialScreen?: Screen;
   initialView?: AnalysisView;
   skipSplash?: boolean;
+  /** The setup step this visit opens on, decided on the server from a cookie
+   *  (lib/setup.ts). The phone app never passes one. */
+  initialSetup?: SetupStep | null;
   children: ReactNode;
 }) {
   const [state, dispatch] = useReducer(reducer, {
@@ -200,7 +229,8 @@ export function ProctorProvider({
     tier: initialTier,
     screen: initialScreen,
     view: initialView,
-    splash: !skipSplash,
+    splash: !skipSplash && initialSetup == null,
+    setup: initialSetup,
   });
   const [bundle, setBundle] = useState<SessionBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -300,6 +330,28 @@ export function ProctorProvider({
     dispatch({ t: "tier", tier: t });
     document.cookie = `${TIER_COOKIE}=${t}; path=/; max-age=31536000; samesite=lax`;
   }, []);
+
+  /* Once a setup that was running stops, remember that it has been through,
+     however it ended: finished, skipped, or walked away from. A visit that
+     never opened one (a shared link, say) writes nothing, so the setup is still
+     there for that driver the first time they open the app plainly. */
+  const inSetup = useRef(false);
+  useEffect(() => {
+    if (state.setup) {
+      inSetup.current = true;
+      return;
+    }
+    if (!inSetup.current) return;
+    inSetup.current = false;
+    document.cookie = `${SETUP_COOKIE}=${SETUP_DONE}; path=/; max-age=31536000; samesite=lax`;
+    // ?setup=1 asked for this run. Left in the address it would ask again on
+    // every reload, and travel with the link if it were copied.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has(SETUP_PARAM)) {
+      url.searchParams.delete(SETUP_PARAM);
+      window.history.replaceState(null, "", url);
+    }
+  }, [state.setup]);
 
   // Pick up a tier written by a previous visit.
   useEffect(() => {

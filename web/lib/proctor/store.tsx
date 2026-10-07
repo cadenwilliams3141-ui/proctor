@@ -41,6 +41,7 @@ export type Screen =
   | "live"
   | "rig"
   | "hardware"
+  | "anatomy"
   | "upload";
 export type AnalysisView = "loss" | "ribbon" | "map" | "line";
 

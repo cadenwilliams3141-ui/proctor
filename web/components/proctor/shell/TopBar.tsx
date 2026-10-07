@@ -23,6 +23,10 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
   /* Labelled Rig, though its id is `hardware`: `rig` is the Physics screen's id
      and is in links people have kept. See shell/IconRail.tsx. */
   hardware: { title: "Rig", sub: "where the mounting slots are, and what has been recorded for each" },
+  anatomy: {
+    title: "Anatomy",
+    sub: "a prototype racer taken apart, and the rig hardware that stands in for each system",
+  },
   upload: { title: "Upload", sub: "add a session by hand" },
 };
 

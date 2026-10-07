@@ -9,6 +9,12 @@
  * model you can walk round and sit in, with the slots a future inventory will
  * hang off.
  *
+ * THE LAYOUT SWITCH. Not everyone drives from a cockpit, so the drawing comes
+ * as a desk, a wheel stand or a cockpit, with one screen or three. That choice
+ * is about which picture to look at. It is kept in this browser's storage and
+ * nowhere else, it is not a record of the driver's rig, and nothing downstream
+ * reads it.
+ *
  * Three things were left out on purpose, because each would have been a control
  * or a figure with nothing behind it:
  *
@@ -25,29 +31,80 @@
  * when this screen opens, so a driver who never comes here never downloads it. */
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import { dim } from "@/lib/proctor/channels";
-import { RIG_POSTER_URL, RIG_SLOTS, type RigSlotKey } from "@/lib/proctor/rig";
+import {
+  RIG_LAYOUTS,
+  RIG_PREFS_KEY,
+  RIG_SLOTS,
+  parseRigPrefs,
+  rigLayout,
+  type RigLayoutKey,
+  type RigPrefs,
+  type RigScreens,
+  type RigSlotKey,
+} from "@/lib/proctor/rig";
+
+const SCREEN_CHOICES: readonly { key: RigScreens; label: string }[] = [
+  { key: "single", label: "One screen" },
+  { key: "triple", label: "Triples" },
+];
+
+/* Which layout's poster stands in while three.js is on its way. next/dynamic
+   hands its loading component no props, so the layout reaches it this way.
+   Null is the moment before the saved choice has been read. */
+const PosterLayout = createContext<RigLayoutKey | null>(null);
+
+/* The same box the scene will occupy, already showing the model, so the panel
+   does not jump when the 3D view arrives. */
+function StagePlaceholder() {
+  const layout = useContext(PosterLayout);
+  return (
+    <div className="rig-stage" data-state="loading">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {layout && <img className="rig-poster" alt="" src={rigLayout(layout).poster} />}
+      <span className="rig-note">loading the 3D view</span>
+    </div>
+  );
+}
 
 const RigScene = dynamic(() => import("@/components/proctor/views/RigScene"), {
   ssr: false,
-  /* The same box the scene will occupy, already showing the model, so the
-     panel does not jump when the 3D view arrives. */
-  loading: () => (
-    <div className="rig-stage" data-state="loading">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="rig-poster" alt="" src={RIG_POSTER_URL} />
-      <span className="rig-note">loading the 3D view</span>
-    </div>
-  ),
+  loading: StagePlaceholder,
 });
 
 export default function HardwareScreen() {
   const [selected, setSelected] = useState<RigSlotKey | null>(null);
   const slot = RIG_SLOTS.find((s) => s.key === selected) ?? null;
+
+  /* Null until the saved choice has been read, which can only happen in the
+     browser. Starting on a default and correcting it a moment later would draw
+     the wrong rig first, and would not match what the server rendered. */
+  const [prefs, setPrefs] = useState<RigPrefs | null>(null);
+  useEffect(() => {
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(RIG_PREFS_KEY);
+    } catch {
+      /* storage is switched off: the defaults stand */
+    }
+    setPrefs(parseRigPrefs(raw));
+  }, []);
+
+  function choose(next: RigPrefs) {
+    setPrefs(next);
+    try {
+      localStorage.setItem(RIG_PREFS_KEY, JSON.stringify(next));
+    } catch {
+      /* the choice lasts until the page is closed, which is all it can do */
+    }
+  }
+
+  const layout = prefs ? rigLayout(prefs.layout) : null;
+  const screens = prefs && layout ? prefs.screens[layout.key] : null;
 
   return (
     <div
@@ -61,13 +118,57 @@ export default function HardwareScreen() {
           right={<Eyebrow>{slot ? slot.label : "click a part"}</Eyebrow>}
           foot={
             <Caveat>
-              A generic rig, drawn to realistic proportions. It is not your hardware: nothing about
-              your rig has been recorded, and nothing on this screen comes from telemetry. The road
-              on the three screens is decoration, not a replay of a session.
+              A generic rig, drawn to realistic proportions. It is not your hardware: picking a
+              layout changes the drawing and records nothing about your rig, and the choice is
+              remembered in this browser only. Nothing on this screen comes from telemetry. The
+              road on the screens is decoration, not a replay of a session.
             </Caveat>
           }
         >
-          <RigScene selected={selected} onSelect={setSelected} />
+          <div className="rig-tools">
+            <div className="seg" role="group" aria-label="Layout">
+              {RIG_LAYOUTS.map((l) => (
+                <button
+                  key={l.key}
+                  type="button"
+                  className="seg-opt"
+                  title={l.blurb}
+                  data-active={layout?.key === l.key}
+                  aria-pressed={layout?.key === l.key}
+                  disabled={!prefs}
+                  onClick={() => prefs && choose({ ...prefs, layout: l.key })}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+            <div className="seg" role="group" aria-label="Screens">
+              {SCREEN_CHOICES.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  className="seg-opt"
+                  data-active={screens === c.key}
+                  aria-pressed={screens === c.key}
+                  disabled={!prefs}
+                  onClick={() =>
+                    prefs && layout && choose({ ...prefs, screens: { ...prefs.screens, [layout.key]: c.key } })
+                  }
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            <span className="rig-tools-note">{layout?.blurb}</span>
+          </div>
+
+          <PosterLayout.Provider value={layout?.key ?? null}>
+            {layout && screens ? (
+              <RigScene layout={layout.key} screens={screens} selected={selected} onSelect={setSelected} />
+            ) : (
+              <StagePlaceholder />
+            )}
+          </PosterLayout.Provider>
         </Panel>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", minWidth: 0 }}>

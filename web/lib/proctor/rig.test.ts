@@ -1,37 +1,52 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 import {
   COMPACT_STAGE_PX,
+  DEFAULT_RIG_LAYOUT,
   DESIGN_ASPECT,
   RIG_EYE_NODE,
-  RIG_MODEL_URL,
+  RIG_LAYOUTS,
   RIG_SLOTS,
+  defaultRigPrefs,
   fitDistance,
+  isSideNode,
+  parseRigPrefs,
   placeCaptions,
   pullBack,
+  rigLayout,
 } from "@/lib/proctor/rig";
 
 /* A GLB is a 12-byte header, then chunks. The first chunk is the scene as JSON,
-   which is all this needs — node names — so the model is read here without a 3D
-   library and without a GPU. */
-function glbNodeNames(path: string): string[] {
+   which is all this needs — node names and who is whose child — so the model is
+   read here without a 3D library and without a GPU. */
+interface GlbNode {
+  name: string;
+  children: string[];
+}
+
+function glbNodes(path: string): GlbNode[] {
   const buf = readFileSync(path);
   expect(buf.toString("latin1", 0, 4)).toBe("glTF");
   const jsonLength = buf.readUInt32LE(12);
   expect(buf.toString("latin1", 16, 20)).toBe("JSON");
   const gltf = JSON.parse(buf.toString("utf8", 20, 20 + jsonLength)) as {
-    nodes?: { name?: string }[];
+    nodes?: { name?: string; children?: number[] }[];
   };
-  return (gltf.nodes ?? []).map((n) => n.name ?? "");
+  const nodes = gltf.nodes ?? [];
+  return nodes.map((n) => ({
+    name: n.name ?? "",
+    children: (n.children ?? []).map((i) => nodes[i].name ?? ""),
+  }));
 }
 
-const MODEL = fileURLToPath(new URL(`../../public${RIG_MODEL_URL}`, import.meta.url));
+const served = (url: string) => fileURLToPath(new URL(`../../public${url}`, import.meta.url));
 
-describe("the rig model and the slot list agree", () => {
-  const names = glbNodeNames(MODEL);
+describe.each(RIG_LAYOUTS.map((l) => [l.label, l] as const))("the %s model and the slot list agree", (_label, layout) => {
+  const nodes = glbNodes(served(layout.model));
+  const names = nodes.map((n) => n.name);
 
   it("has a node for every slot", () => {
     for (const slot of RIG_SLOTS) expect(names, slot.label).toContain(slot.node);
@@ -46,9 +61,73 @@ describe("the rig model and the slot list agree", () => {
     expect(names).toContain(RIG_EYE_NODE);
   });
 
-  it("names each slot once", () => {
+  it("keeps the side screens apart, inside the monitors slot, so one screen can be shown", () => {
+    const monitors = nodes.find((n) => n.name === "slot_monitors");
+    expect(monitors?.children.filter(isSideNode)).toHaveLength(1);
+  });
+
+  it("hangs every side node off a slot, never loose in the scene", () => {
+    const owned = new Set(nodes.filter((n) => n.name.startsWith("slot_")).flatMap((n) => n.children));
+    expect(names.filter((n) => isSideNode(n) && !owned.has(n))).toEqual([]);
+  });
+
+  it("ships the floor shadow and the poster it names", () => {
+    expect(existsSync(served(layout.shadow)), layout.shadow).toBe(true);
+    expect(existsSync(served(layout.poster)), layout.poster).toBe(true);
+  });
+});
+
+describe("the layout list", () => {
+  it("names each slot and each layout once", () => {
     expect(new Set(RIG_SLOTS.map((s) => s.key)).size).toBe(RIG_SLOTS.length);
     expect(new Set(RIG_SLOTS.map((s) => s.node)).size).toBe(RIG_SLOTS.length);
+    expect(new Set(RIG_LAYOUTS.map((l) => l.key)).size).toBe(RIG_LAYOUTS.length);
+  });
+
+  it("opens on a layout that exists", () => {
+    expect(RIG_LAYOUTS.map((l) => l.key)).toContain(DEFAULT_RIG_LAYOUT);
+    expect(rigLayout(DEFAULT_RIG_LAYOUT).key).toBe(DEFAULT_RIG_LAYOUT);
+  });
+
+  it("only gives a vantage for slots that exist", () => {
+    const keys = new Set<string>(RIG_SLOTS.map((s) => s.key));
+    for (const l of RIG_LAYOUTS) {
+      expect(Object.keys(l.vantage).filter((k) => !keys.has(k)), l.label).toEqual([]);
+    }
+  });
+});
+
+describe("parseRigPrefs", () => {
+  const fresh = defaultRigPrefs();
+
+  it("starts each layout on the screens it is usually set up with", () => {
+    for (const l of RIG_LAYOUTS) expect(fresh.screens[l.key]).toBe(l.screens);
+    expect(fresh.layout).toBe(DEFAULT_RIG_LAYOUT);
+  });
+
+  it("falls back to the defaults when nothing was saved, or what was saved is not JSON", () => {
+    expect(parseRigPrefs(null)).toEqual(fresh);
+    expect(parseRigPrefs("")).toEqual(fresh);
+    expect(parseRigPrefs("{not json")).toEqual(fresh);
+    expect(parseRigPrefs('"desk"')).toEqual(fresh);
+    expect(parseRigPrefs("null")).toEqual(fresh);
+  });
+
+  it("reads back a saved layout and a saved screen count for it", () => {
+    const got = parseRigPrefs(JSON.stringify({ layout: "desk", screens: { desk: "triple" } }));
+    expect(got.layout).toBe("desk");
+    expect(got.screens.desk).toBe("triple");
+    expect(got.screens.cockpit).toBe(fresh.screens.cockpit);
+  });
+
+  it("ignores a layout or a screen count it does not know", () => {
+    const got = parseRigPrefs(JSON.stringify({ layout: "motion-platform", screens: { desk: "five", stand: 3 } }));
+    expect(got).toEqual(fresh);
+  });
+
+  it("round-trips what it produces", () => {
+    const prefs = { ...fresh, layout: "stand" as const, screens: { ...fresh.screens, stand: "triple" as const } };
+    expect(parseRigPrefs(JSON.stringify(prefs))).toEqual(prefs);
   });
 });
 

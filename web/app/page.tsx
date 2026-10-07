@@ -1,5 +1,7 @@
 import AppShell from "@/components/proctor/AppShell";
 import { ProctorProvider, type AnalysisView, type Screen } from "@/lib/proctor/store";
+import { openingStep, SETUP_PARAM } from "@/lib/setup";
+import { readSetupDone } from "@/lib/setup-server";
 import { readTier } from "@/lib/tier-server";
 
 /* The desktop app. One shell, eight screens, four analysis views.
@@ -11,7 +13,11 @@ import { readTier } from "@/lib/tier-server";
  * component cannot hold.
  *
  * ?screen= and ?view= make a particular reading of a lap linkable — "look at
- * T6 on the ribbon" is a thing one driver says to another. */
+ * T6 on the ribbon" is a thing one driver says to another.
+ *
+ * A first plain visit opens on the guided setup instead: how much detail, then
+ * the rig. Whether that has been through is a cookie, read here for the same
+ * reason the tier is. ?setup=1 runs it again. See lib/setup.ts. */
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +49,22 @@ export default async function Page({
     ? (one(q.view) as AnalysisView)
     : "loss";
 
+  // Arriving via a shared link means someone already told you what you are
+  // about to look at; the launch screen or a setup would just be in the way.
+  const linked = q.screen != null || q.view != null;
+  const setup = openingStep({
+    done: await readSetupDone(),
+    linked,
+    asked: one(q[SETUP_PARAM]) === "1",
+  });
+
   return (
     <ProctorProvider
       initialTier={tier}
       initialScreen={screen}
       initialView={view}
-      // Arriving via a shared link means someone already told you what you are
-      // about to look at; the launch screen would just be in the way.
-      skipSplash={q.screen != null || q.view != null}
+      skipSplash={linked}
+      initialSetup={setup}
     >
       <AppShell />
     </ProctorProvider>

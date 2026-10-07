@@ -1,10 +1,13 @@
-/* The rig's mounting slots, the layouts a rig comes in, and the arithmetic the
- * 3D view needs that is worth testing without a GPU.
+/* The rig's mounting slots, the layouts a rig comes in, what the driver has
+ * said theirs is, and the arithmetic the 3D view needs that is worth testing
+ * without a GPU.
  *
  * The slots are the seven places hardware bolts on. They are a fixed list, not
- * data: which PRODUCT sits in a slot is something Proctor cannot record yet, and
- * nothing in a .ibt identifies the hardware that produced a channel. So this
- * module names the slots and says nothing about what is in them.
+ * data. Which PRODUCT sits in a slot is not something Proctor can find out for
+ * itself: nothing in a .ibt identifies the hardware that produced a channel.
+ * The only source is the driver saying so, and what they say is kept here as
+ * an id per slot (see "Remembering the choice"). The products those ids point
+ * at are in rigCatalog.ts.
  *
  * `node` is the name of the slot's node in each layout's model under
  * public/rig/. The models are built by docs/rig-3d/blender/build_rig.py, and
@@ -25,6 +28,9 @@ export interface RigSlot {
   key: RigSlotKey;
   label: string;
   node: string;
+  /** A rig can do without this one. Plenty of them have no handbrake, and a
+   *  wheel with paddles needs no shifter. Only these can be marked as empty. */
+  optional?: boolean;
 }
 
 export const RIG_SLOTS: readonly RigSlot[] = [
@@ -32,8 +38,8 @@ export const RIG_SLOTS: readonly RigSlot[] = [
   { key: "wheelbase", label: "Wheelbase", node: "slot_wheelbase" },
   { key: "rim", label: "Wheel rim", node: "slot_rim" },
   { key: "pedals", label: "Pedals", node: "slot_pedals" },
-  { key: "shifter", label: "Shifter", node: "slot_shifter" },
-  { key: "handbrake", label: "Handbrake", node: "slot_handbrake" },
+  { key: "shifter", label: "Shifter", node: "slot_shifter", optional: true },
+  { key: "handbrake", label: "Handbrake", node: "slot_handbrake", optional: true },
   { key: "frame", label: "Frame & seat", node: "slot_frame" },
 ];
 
@@ -143,23 +149,45 @@ export function isSideNode(name: string): boolean {
 }
 
 /* ── Remembering the choice ────────────────────────────────────────────────
-   Which layout, and how many screens in each, kept in this browser's own
-   storage. It is a preference about a drawing, so it does not need a database
-   and does not follow the driver to another device. Whatever comes back out of
-   storage is treated as untrusted: it may be from an older version, or not
-   written by this app at all. */
+   Which layout, how many screens in each, and what the driver has said is in
+   each slot, kept in this browser's own storage. It is what one person told
+   one browser, so it does not need a database and does not follow them to
+   another device. Whatever comes back out of storage is treated as untrusted:
+   it may be from an older version, or not written by this app at all.
+
+   A slot is in one of three states, and they are kept apart on purpose:
+
+     null        the driver has not said
+     RIG_NONE    the driver has said there is nothing there
+     an id       the driver has said which product it is
+
+   "Has not said" is not "nothing there". Only the second takes the part out of
+   the drawing. */
+
+/** In `parts`, a slot the driver says is empty. Never a product id. */
+export const RIG_NONE = "none";
+
+export type RigParts = Record<RigSlotKey, string | null>;
 
 export interface RigPrefs {
   layout: RigLayoutKey;
   screens: Record<RigLayoutKey, RigScreens>;
+  parts: RigParts;
 }
 
+/* The key keeps the name it had when it only held the layout, so a choice
+   saved then still reads back. */
 export const RIG_PREFS_KEY = "proctor-rig-layout";
+
+/** Longer than any id in the catalogue, short enough that junk cannot pile up. */
+const MAX_PART_ID = 48;
 
 export function defaultRigPrefs(): RigPrefs {
   const screens = {} as Record<RigLayoutKey, RigScreens>;
   for (const l of RIG_LAYOUTS) screens[l.key] = l.screens;
-  return { layout: DEFAULT_RIG_LAYOUT, screens };
+  const parts = {} as RigParts;
+  for (const slot of RIG_SLOTS) parts[slot.key] = null;
+  return { layout: DEFAULT_RIG_LAYOUT, screens, parts };
 }
 
 export function parseRigPrefs(raw: string | null | undefined): RigPrefs {
@@ -172,7 +200,7 @@ export function parseRigPrefs(raw: string | null | undefined): RigPrefs {
     return prefs;
   }
   if (typeof saved !== "object" || saved === null) return prefs;
-  const { layout, screens } = saved as { layout?: unknown; screens?: unknown };
+  const { layout, screens, parts } = saved as { layout?: unknown; screens?: unknown; parts?: unknown };
   if (RIG_LAYOUTS.some((l) => l.key === layout)) prefs.layout = layout as RigLayoutKey;
   if (typeof screens === "object" && screens !== null) {
     for (const l of RIG_LAYOUTS) {
@@ -180,7 +208,21 @@ export function parseRigPrefs(raw: string | null | undefined): RigPrefs {
       if (s === "single" || s === "triple") prefs.screens[l.key] = s;
     }
   }
+  if (typeof parts === "object" && parts !== null) {
+    for (const slot of RIG_SLOTS) {
+      const id = (parts as Record<string, unknown>)[slot.key];
+      if (typeof id !== "string" || id.length === 0 || id.length > MAX_PART_ID) continue;
+      // A slot every rig has cannot be empty, whatever storage says.
+      if (id === RIG_NONE && !slot.optional) continue;
+      prefs.parts[slot.key] = id;
+    }
+  }
   return prefs;
+}
+
+/** The slots the driver says are empty, which the drawing leaves out. */
+export function emptySlots(parts: RigParts): RigSlotKey[] {
+  return RIG_SLOTS.filter((s) => s.optional && parts[s.key] === RIG_NONE).map((s) => s.key);
 }
 
 /* ── Captions ──────────────────────────────────────────────────────────────

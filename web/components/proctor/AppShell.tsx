@@ -17,6 +17,7 @@ import { useProctor } from "@/lib/proctor/store";
 import LapRail from "@/components/proctor/shell/LapRail";
 import IconRail from "@/components/proctor/shell/IconRail";
 import LaunchScreen from "@/components/proctor/shell/LaunchScreen";
+import SetupScreen from "@/components/proctor/shell/SetupScreen";
 import TopBar from "@/components/proctor/shell/TopBar";
 
 import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
@@ -64,6 +65,7 @@ export default function AppShell() {
       }}
     >
       <LaunchScreen />
+      <SetupScreen />
       <IconRail />
       {showLapRail && <LapRail />}
 

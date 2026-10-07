@@ -1,26 +1,39 @@
 "use client";
 
-/* Rig. Where the seven mounting slots are, and what is known about each.
+/* Rig. The layout the driver sits in, and what they have said is in each slot.
  *
- * What is known about each is, today, nothing — and this screen says exactly
- * that rather than dressing the gap. Proctor has no table for what hardware is
- * mounted and nothing in a .ibt names the product behind a channel, so there is
- * no component list to show. What there IS to show is the rig itself: a generic
- * model you can walk round and sit in, with the slots a future inventory will
- * hang off.
+ * WHERE THE NAMES COME FROM. Proctor cannot detect hardware: nothing in a .ibt
+ * names the product behind a channel. So the only thing this screen can show
+ * about a rig is what the driver tells it, and that is what the builder is for.
+ * They pick a layout, a screen count, and a product for each of the seven
+ * slots, and the screen plays it back to them. It is their word, not a reading,
+ * and every caveat on the screen says which.
  *
- * THE LAYOUT SWITCH. Not everyone drives from a cockpit, so the drawing comes
- * as a desk, a wheel stand or a cockpit, with one screen or three. That choice
- * is about which picture to look at. It is kept in this browser's storage and
- * nowhere else, it is not a record of the driver's rig, and nothing downstream
- * reads it.
+ * THE CATALOGUE IS A DEMO. The products come from lib/proctor/rigCatalog.ts, a
+ * short hand-picked list that exists so the builder can be tried before there
+ * is a real catalogue. Wherever a row from it is on screen, so is a "demo
+ * catalogue" tag. See that file for what the list is and is not.
  *
- * Three things were left out on purpose, because each would have been a control
- * or a figure with nothing behind it:
+ * WHERE IT IS KEPT. In this browser's storage and nowhere else. Proctor has no
+ * table for a rig yet, so nothing here follows the driver to another device,
+ * and nothing downstream reads it.
  *
- *   - no "add a component" button      there is nowhere to save one
- *   - no component names or dates      nothing has been recorded
- *   - no field-of-view figure          it would be the model's, not the driver's
+ * WHAT THE DRAWING DOES WITH IT. The model stays generic whichever product is
+ * picked: a part stands in for its category. Three things do change it, because
+ * they are about shape rather than brand: the layout, one screen or three, and
+ * a slot the driver says is empty, which is left out.
+ *
+ * THE GUIDED SETUP. On a first visit the driver is brought here as the second
+ * step of setup (see shell/SetupScreen.tsx and lib/setup.ts). That is this same
+ * screen with a strip across the top and a Back / Next under the picker, not a
+ * second builder: what is built during setup is exactly what is edited later.
+ *
+ * Still left out on purpose, because each would be a figure with nothing
+ * behind it:
+ *
+ *   - no install dates, session counts or wear       nothing records them
+ *   - no field-of-view figure                         it would be the model's
+ *   - no "add a product by hand"                      nowhere to keep one yet
  *
  * WHY THE ID IS `hardware` AND NOT `rig`. `rig` is taken: it is the Physics
  * screen's id, kept unchanged because it is in ?screen= links people have saved
@@ -30,6 +43,7 @@
  * The 3D view pulls in three.js, which is most of a megabyte. It is loaded only
  * when this screen opens, so a driver who never comes here never downloads it. */
 
+import { Check } from "lucide-react";
 import dynamic from "next/dynamic";
 import { createContext, useContext, useEffect, useState } from "react";
 
@@ -38,8 +52,10 @@ import Panel from "@/components/proctor/ui/Panel";
 import { dim } from "@/lib/proctor/channels";
 import {
   RIG_LAYOUTS,
+  RIG_NONE,
   RIG_PREFS_KEY,
   RIG_SLOTS,
+  emptySlots,
   parseRigPrefs,
   rigLayout,
   type RigLayoutKey,
@@ -47,11 +63,21 @@ import {
   type RigScreens,
   type RigSlotKey,
 } from "@/lib/proctor/rig";
+import { productName, productsFor, rigChoice, type RigChoice } from "@/lib/proctor/rigCatalog";
+import { useProctor } from "@/lib/proctor/store";
+import { stepOf } from "@/lib/setup";
 
 const SCREEN_CHOICES: readonly { key: RigScreens; label: string }[] = [
   { key: "single", label: "One screen" },
   { key: "triple", label: "Triples" },
 ];
+
+/** What the builder is asking about: the layout, or one of the slots. */
+type Step = "layout" | RigSlotKey;
+const STEPS: readonly Step[] = ["layout", ...RIG_SLOTS.map((s) => s.key)];
+
+const DEMO_NOTE =
+  "A short, hand-picked list so the builder can be tried. The makes and models are real; the one-line descriptions have not been checked against the makers' own sheets, and a product missing from the list has simply not been added.";
 
 /* Which layout's poster stands in while three.js is on its way. next/dynamic
    hands its loading component no props, so the layout reaches it this way.
@@ -76,11 +102,73 @@ const RigScene = dynamic(() => import("@/components/proctor/views/RigScene"), {
   loading: StagePlaceholder,
 });
 
-export default function HardwareScreen() {
-  const [selected, setSelected] = useState<RigSlotKey | null>(null);
-  const slot = RIG_SLOTS.find((s) => s.key === selected) ?? null;
+/* One line of the rig as the driver has described it. */
+function RigRow({
+  label,
+  value,
+  said,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  /** False while the driver has not answered: the value is then a placeholder. */
+  said: boolean;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="rig-row" data-active={active} aria-pressed={active} onClick={onClick}>
+      <span className="rig-row-label">{label}</span>
+      <span className="rig-row-value" data-said={said}>
+        {value}
+      </span>
+    </button>
+  );
+}
 
-  /* Null until the saved choice has been read, which can only happen in the
+/* One thing that can be picked for the step in hand. */
+function Option({
+  title,
+  make,
+  note,
+  active,
+  onClick,
+}: {
+  title: string;
+  make?: string;
+  note?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="rig-opt" data-active={active} aria-pressed={active} onClick={onClick}>
+      <span className="rig-opt-main">
+        {make && <span className="rig-opt-make">{make}</span>}
+        <span className="rig-opt-name">{title}</span>
+      </span>
+      {note && <span className="rig-opt-note">{note}</span>}
+      <Check className="rig-opt-check" size={14} strokeWidth={2} aria-hidden />
+    </button>
+  );
+}
+
+function choiceText(choice: RigChoice): string {
+  if (choice.state === "product") return productName(choice.product);
+  return choice.state === "none" ? "none fitted" : "not chosen";
+}
+
+export default function HardwareScreen() {
+  const { state, dispatch } = useProctor();
+  const guided = state.setup === "rig";
+
+  const [step, setStep] = useState<Step | null>(guided ? "layout" : null);
+  // A setup started from this screen begins at the top of the walk as well.
+  useEffect(() => {
+    if (guided) setStep("layout");
+  }, [guided]);
+
+  /* Null until the saved rig has been read, which can only happen in the
      browser. Starting on a default and correcting it a moment later would draw
      the wrong rig first, and would not match what the server rendered. */
   const [prefs, setPrefs] = useState<RigPrefs | null>(null);
@@ -94,23 +182,71 @@ export default function HardwareScreen() {
     setPrefs(parseRigPrefs(raw));
   }, []);
 
-  function choose(next: RigPrefs) {
+  function save(next: RigPrefs) {
     setPrefs(next);
     try {
       localStorage.setItem(RIG_PREFS_KEY, JSON.stringify(next));
     } catch {
-      /* the choice lasts until the page is closed, which is all it can do */
+      /* the rig lasts until the page is closed, which is all it can do */
     }
+  }
+
+  /* In the guided setup an answer moves on to the next question. Outside it,
+     the driver is editing one thing and stays where they are. */
+  function answered(from: Step) {
+    if (!guided) return;
+    const next = STEPS[STEPS.indexOf(from) + 1];
+    if (next) setStep(next);
+  }
+
+  function finish() {
+    dispatch({ t: "setup", step: null });
+    dispatch({ t: "screen", screen: "analyze" });
   }
 
   const layout = prefs ? rigLayout(prefs.layout) : null;
   const screens = prefs && layout ? prefs.screens[layout.key] : null;
+  const slot = RIG_SLOTS.find((s) => s.key === step) ?? null;
+  const choiceFor = (key: RigSlotKey): RigChoice =>
+    prefs && layout ? rigChoice(key, layout.key, prefs.parts[key]) : { state: "unset" };
+  const saidCount = RIG_SLOTS.filter((s) => choiceFor(s.key).state !== "unset").length;
+
+  const stepIndex = step ? STEPS.indexOf(step) : -1;
+  const stepAnswered = step === "layout" || (slot != null && choiceFor(slot.key).state !== "unset");
+  const options = slot && layout ? productsFor(slot.key, layout.key) : [];
+  const picked = slot ? choiceFor(slot.key) : null;
+
+  const setPart = (key: RigSlotKey, id: string | null) => {
+    if (!prefs) return;
+    save({ ...prefs, parts: { ...prefs.parts, [key]: id } });
+    if (id != null) answered(key);
+  };
 
   return (
     <div
       className="scrollpane screen-pad"
       style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}
     >
+      {guided && (
+        <section className="rig-guide" aria-label="Setup">
+          <div className="rig-guide-text">
+            <Eyebrow color="var(--ch-a)">Setup · {stepOf("rig")}</Eyebrow>
+            <div className="rig-guide-title">Build your rig</div>
+            <p>
+              Pick the layout you drive from, then say what is in each slot. Skip any you are not
+              sure of: all of it can be changed later, on this screen.
+            </p>
+          </div>
+          <span className="rig-guide-count">
+            <span className="num">{saidCount}</span> of <span className="num">{RIG_SLOTS.length}</span>{" "}
+            slots answered
+          </span>
+          <button type="button" className="btn btn-primary" onClick={finish}>
+            {saidCount === 0 ? "Skip for now" : "Finish"}
+          </button>
+        </section>
+      )}
+
       <div className="rig-split">
         <Panel
           title="Rig layout"
@@ -118,10 +254,10 @@ export default function HardwareScreen() {
           right={<Eyebrow>{slot ? slot.label : "click a part"}</Eyebrow>}
           foot={
             <Caveat>
-              A generic rig, drawn to realistic proportions. It is not your hardware: picking a
-              layout changes the drawing and records nothing about your rig, and the choice is
-              remembered in this browser only. Nothing on this screen comes from telemetry. The
-              road on the screens is decoration, not a replay of a session.
+              A generic rig, drawn to realistic proportions. The drawing follows the layout, the
+              number of screens and any slot you say is empty; it does not change with the product
+              you pick, because each part stands in for its category. Nothing on this screen comes
+              from telemetry, and the road on the screens is decoration, not a replay of a session.
             </Caveat>
           }
         >
@@ -136,7 +272,7 @@ export default function HardwareScreen() {
                   data-active={layout?.key === l.key}
                   aria-pressed={layout?.key === l.key}
                   disabled={!prefs}
-                  onClick={() => prefs && choose({ ...prefs, layout: l.key })}
+                  onClick={() => prefs && save({ ...prefs, layout: l.key })}
                 >
                   {l.label}
                 </button>
@@ -152,7 +288,7 @@ export default function HardwareScreen() {
                   aria-pressed={screens === c.key}
                   disabled={!prefs}
                   onClick={() =>
-                    prefs && layout && choose({ ...prefs, screens: { ...prefs.screens, [layout.key]: c.key } })
+                    prefs && layout && save({ ...prefs, screens: { ...prefs.screens, [layout.key]: c.key } })
                   }
                 >
                   {c.label}
@@ -163,8 +299,14 @@ export default function HardwareScreen() {
           </div>
 
           <PosterLayout.Provider value={layout?.key ?? null}>
-            {layout && screens ? (
-              <RigScene layout={layout.key} screens={screens} selected={selected} onSelect={setSelected} />
+            {prefs && layout && screens ? (
+              <RigScene
+                layout={layout.key}
+                screens={screens}
+                absent={emptySlots(prefs.parts)}
+                selected={slot?.key ?? null}
+                onSelect={setStep}
+              />
             ) : (
               <StagePlaceholder />
             )}
@@ -172,69 +314,177 @@ export default function HardwareScreen() {
         </Panel>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", minWidth: 0 }}>
-          <Panel title="Slots" sub="what is mounted where">
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Panel
+            title="Your rig"
+            sub="as you have described it"
+            right={
+              <span className="tag-warn" title={DEMO_NOTE}>
+                demo catalogue
+              </span>
+            }
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <RigRow
+                label="Layout"
+                value={layout ? layout.label : "…"}
+                said={layout != null}
+                active={step === "layout"}
+                onClick={() => setStep("layout")}
+              />
               {RIG_SLOTS.map((s) => {
-                const active = s.key === selected;
+                const choice = choiceFor(s.key);
                 return (
-                  <button
+                  <RigRow
                     key={s.key}
-                    type="button"
-                    className="pk"
-                    aria-pressed={active}
-                    onClick={() => setSelected(s.key)}
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "var(--space-3)",
-                      width: "100%",
-                      padding: "var(--space-2)",
-                      border: 0,
-                      borderRadius: "var(--radius-sm)",
-                      textAlign: "left",
-                      font: "inherit",
-                      color: "inherit",
-                      background: active
-                        ? "color-mix(in srgb, var(--color-accent) 13%, transparent)"
-                        : "transparent",
-                    }}
-                  >
-                    <span
-                      style={{
-                        flex: "none",
-                        width: 96,
-                        font: "500 9.5px var(--font-heading)",
-                        letterSpacing: ".09em",
-                        textTransform: "uppercase",
-                        color: active ? "var(--ch-a)" : dim(42),
-                      }}
-                    >
-                      {s.label}
-                    </span>
-                    <span style={{ fontSize: 12.5, fontStyle: "italic", color: dim(34) }}>
-                      nothing recorded
-                    </span>
-                  </button>
+                    label={s.label}
+                    value={choiceText(choice)}
+                    said={choice.state !== "unset"}
+                    active={step === s.key}
+                    onClick={() => setStep(s.key)}
+                  />
                 );
               })}
             </div>
             <Caveat>
-              Empty means nothing has been recorded for the slot. It does not mean nothing is
-              mounted there, and it does not mean a reading is zero.
+              This is what you have told this browser, not something Proctor detected, and it is
+              kept here only. &ldquo;Not chosen&rdquo; means you have not said. It does not mean
+              nothing is mounted there, and it does not mean a reading is zero.
             </Caveat>
+            {!guided && (
+              <div className="rig-again">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => dispatch({ t: "setup", step: "detail" })}
+                >
+                  Run the guided setup again
+                </button>
+              </div>
+            )}
           </Panel>
 
-          <Panel title={slot ? slot.label : "No slot selected"} sub={slot ? "nothing recorded" : undefined}>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: dim(58), textWrap: "pretty" }}>
-              {slot
-                ? "Proctor cannot record what is mounted on a rig yet, so there is no component to show for this slot."
-                : "Click a part of the rig, a caption over it, or a slot in the list above."}
-            </p>
-            <Caveat>
-              Nothing in a .ibt identifies which product produced a channel, so until a component
-              is recorded here by hand, Proctor cannot tie a reading to a particular piece of
-              hardware.
-            </Caveat>
+          <Panel
+            title={step === "layout" ? "Layout" : slot ? slot.label : "Nothing selected"}
+            sub={
+              step === "layout"
+                ? "what the rig is built on"
+                : slot && picked
+                  ? choiceText(picked)
+                  : undefined
+            }
+          >
+            {step == null && (
+              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: dim(58), textWrap: "pretty" }}>
+                Click a part of the rig, a caption over it, or a line above, and say what you have
+                there.
+              </p>
+            )}
+
+            {step === "layout" && (
+              <div className="rig-opts">
+                {RIG_LAYOUTS.map((l) => (
+                  <Option
+                    key={l.key}
+                    title={l.label}
+                    note={l.blurb}
+                    active={layout?.key === l.key}
+                    onClick={() => {
+                      if (!prefs) return;
+                      save({ ...prefs, layout: l.key });
+                      answered("layout");
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {slot && (
+              <>
+                {slot.key === "monitors" && (
+                  <div className="rig-count">
+                    <span>How many</span>
+                    <div className="seg" role="group" aria-label="How many screens">
+                      {SCREEN_CHOICES.map((c) => (
+                        <button
+                          key={c.key}
+                          type="button"
+                          className="seg-opt"
+                          data-active={screens === c.key}
+                          aria-pressed={screens === c.key}
+                          disabled={!prefs}
+                          onClick={() =>
+                            prefs &&
+                            layout &&
+                            save({ ...prefs, screens: { ...prefs.screens, [layout.key]: c.key } })
+                          }
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="rig-opts scrollpane">
+                  {options.map((p) => (
+                    <Option
+                      key={p.id}
+                      title={p.model}
+                      make={p.make}
+                      note={p.kind}
+                      active={picked?.state === "product" && picked.product.id === p.id}
+                      onClick={() => setPart(slot.key, p.id)}
+                    />
+                  ))}
+                  {slot.optional && (
+                    <Option
+                      title="None fitted"
+                      note="leaves it out of the drawing"
+                      active={picked?.state === "none"}
+                      onClick={() => setPart(slot.key, RIG_NONE)}
+                    />
+                  )}
+                </div>
+
+                {picked && picked.state !== "unset" && (
+                  <button type="button" className="rig-clear" onClick={() => setPart(slot.key, null)}>
+                    Clear this answer
+                  </button>
+                )}
+
+                <Caveat>
+                  Demo catalogue. {DEMO_NOTE} Picking one records what you said and changes no
+                  reading anywhere in Proctor: nothing in a .ibt identifies which product produced
+                  a channel.
+                </Caveat>
+              </>
+            )}
+
+            {guided && step && (
+              <div className="rig-nav">
+                <span>
+                  <span className="num">{stepIndex + 1}</span> of <span className="num">{STEPS.length}</span>
+                </span>
+                <span style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={stepIndex <= 0}
+                  onClick={() => setStep(STEPS[stepIndex - 1])}
+                >
+                  Back
+                </button>
+                {stepIndex < STEPS.length - 1 ? (
+                  <button type="button" className="btn btn-primary" onClick={() => setStep(STEPS[stepIndex + 1])}>
+                    {stepAnswered ? "Next" : "Skip this one"}
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-primary" onClick={finish}>
+                    Finish
+                  </button>
+                )}
+              </div>
+            )}
           </Panel>
         </div>
       </div>

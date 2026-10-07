@@ -40,6 +40,7 @@ export type Screen =
   | "analyze"
   | "live"
   | "rig"
+  | "hardware"
   | "upload";
 export type AnalysisView = "loss" | "ribbon" | "map" | "line";
 

@@ -773,3 +773,185 @@ button[disabled] {
     flex: none;
   }
 }
+
+/* ── The Rig screen ──────────────────────────────────────────────────────────
+   The 3D stage and what floats over it. In CSS rather than inline for the same
+   reason as the rules above: hover, data-attribute states and a breakpoint are
+   things an inline style object cannot say. Nocturne tokens only.
+
+   The captions and the selection ring are positioned every frame by
+   views/RigScene.tsx writing `transform` directly, so nothing here sets one. */
+.rig-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* Same call as the Live trace: the second column stacks under the first rather
+   than squeezing the stage into a strip. */
+@media (max-width: 1080px) {
+  .rig-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rig-stage {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.rig-stage canvas,
+.rig-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* The poster is a render of the same model from the same camera, so the live
+   view fades in over a picture of itself. It also stays if WebGL cannot start. */
+.rig-poster {
+  object-fit: cover;
+  transition: opacity 0.5s 0.1s;
+}
+
+.rig-stage canvas {
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+  transition: opacity 0.5s;
+}
+
+.rig-stage canvas:active {
+  cursor: grabbing;
+}
+
+.rig-stage canvas[data-hot="true"] {
+  cursor: pointer;
+}
+
+.rig-stage[data-state="live"] canvas {
+  opacity: 1;
+}
+
+.rig-stage[data-state="live"] .rig-poster {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rig-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rig-stage:not([data-state="live"]) .rig-overlay,
+.rig-stage:not([data-state="live"]) .rig-hud {
+  display: none;
+}
+
+.rig-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  border: 1.4px dashed var(--color-accent-400);
+  border-radius: var(--radius-md);
+  transition: opacity 0.16s;
+}
+
+.rig-lbl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: 500 9.5px var(--font-heading);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 62%, transparent);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 0.13s, background 0.13s, opacity 0.16s;
+}
+
+.rig-lbl::before {
+  content: "";
+  flex: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.rig-lbl:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+}
+
+.rig-lbl[data-sel="true"] {
+  color: var(--color-accent-400);
+}
+
+.rig-lbl[data-off="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rig-hud {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+}
+
+.rig-hud .seg {
+  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+}
+
+.rig-hud .seg-opt {
+  font-size: 11.5px;
+  padding: 5px 10px;
+}
+
+.rig-note {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  max-width: 60%;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font: 500 10px var(--font-heading);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: right;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 62%, transparent);
+  pointer-events: none;
+}
+
+/* A failure is a sentence, so it is set as one. */
+.rig-stage[data-state="failed"] .rig-note {
+  left: var(--space-3);
+  max-width: none;
+  font: 400 11px/1.5 var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: left;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+}

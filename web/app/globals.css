@@ -796,6 +796,30 @@ button[disabled] {
   }
 }
 
+/* Which rig is drawn: the layout, and one screen or three. These sit above the
+   stage rather than over it because they change what the picture is of. The
+   controls laid over the stage only change where it is looked at from. */
+.rig-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.rig-tools .seg-opt {
+  font-size: 12px;
+  padding: 5px 11px;
+}
+
+.rig-tools-note {
+  flex: 1 1 180px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+
 .rig-stage {
   position: relative;
   width: 100%;

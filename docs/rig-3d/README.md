@@ -8,6 +8,9 @@ The model is also live in the app: the **Rig** item in the left rail (`?screen=h
 lists the seven slots as "nothing recorded", because there is nowhere to save a component yet. The picker,
 the component names and the health tab in the mockup are still design material.
 
+The app draws the rig in three layouts, with one screen or three (see "Layouts" below). The mockup page
+only ever shows the cockpit.
+
 ![Three-quarter view of the rig](out/still_hero.jpg)
 
 | | |
@@ -30,10 +33,13 @@ the component names and the health tab in the mockup are still design material.
 
 | Path | What it is |
 |---|---|
-| `blender/build_rig.py` | Builds the whole rig in Blender from numbers (no hand modelling), exports the GLB, renders stills. |
-| `out/proctor_rig.glb` | The model: Y up, metres, about 49k triangles, 1.2 MB. One node per slot (`slot_frame`, `slot_monitors`, `slot_wheelbase`, `slot_rim`, `slot_pedals`, `slot_shifter`, `slot_handbrake`) plus `anchor_eye` at the driver's eye point. |
-| `out/still_*.jpg` | Cycles renders of the model. `out/poster.jpg` is the one the page shows while the 3D loads. |
-| `out/floor_ao.png` | Top-down soft shadow of the rig; the page lays it on the floor as a contact shadow. |
+| `blender/build_rig.py` | Builds a rig in Blender from numbers (no hand modelling), exports the GLB, renders stills. One run builds one layout. |
+| `out/proctor_rig.glb` | The cockpit: Y up, metres, about 49k triangles, 1.2 MB. One node per slot (`slot_frame`, `slot_monitors`, `slot_wheelbase`, `slot_rim`, `slot_pedals`, `slot_shifter`, `slot_handbrake`) plus `anchor_eye` at the driver's eye point. |
+| `out/proctor_rig_stand.glb`, `out/proctor_rig_desk.glb` | The wheel stand (about 30k triangles) and the desk (about 27k), with the same nodes. |
+| `out/still_*.jpg` | Cycles renders of the cockpit. |
+| `out/poster.jpg`, `poster_stand.jpg`, `poster_desk.jpg` | What is shown while the 3D loads: the `hero` view of each layout as a 1280x800 JPEG. |
+| `out/floor_ao.png`, `floor_ao_stand.png`, `floor_ao_desk.png` | Top-down soft shadow of each layout, laid on the floor as a contact shadow. |
+| `sync.mjs` | Copies the models, shadows and posters into `web/public/rig/` under the names the app asks for. |
 | `page/source_mockup.html` | The original rig-builder mockup, kept verbatim. |
 | `page/viewer.js`, `viewer.css`, `stage.html` | The 3D view (three.js r147) with its markup and styles. Nocturne tokens only. |
 | `page/build.mjs` | Patches the original mockup and inlines the model, shadow map and poster into one file. |
@@ -45,6 +51,27 @@ node docs/rig-3d/page/build.mjs     # writes docs/rig-3d/dist/
 node docs/rig-3d/page/serve.mjs     # http://localhost:4317/preview.html
 ```
 
+## Layouts
+
+Not everyone drives from a cockpit, so the script builds three rigs. They are drawings of how a rig is
+commonly put together. None of them is a record of anyone's rig.
+
+| `--layout` | What carries it | Usual screens |
+|---|---|---|
+| `cockpit` (default) | An aluminium profile frame with a bucket seat, and a freestanding screen stand. | Three 34-inch 1500R |
+| `stand` | A folding wheel stand that carries the wheel, pedals and shifter; an office chair; the same screen stand. | One 34-inch 1500R |
+| `desk` | A desk with the wheel, shifter and handbrake clamped to its edge, pedals on a mat on the floor, an office chair, each screen on its own foot. | One 27-inch flat |
+
+Every layout has the same seven slot nodes, in different places, so whatever reads a GLB does not care which
+one it got. Each model always carries three screens. The two side screens are a child node of
+`slot_monitors` called `monitors_side`, and the wings of the stand that hold them are `frame_side` under
+`slot_frame`. Hiding the nodes whose names end `_side` leaves one screen, which is how the app's
+"One screen / Triples" switch works without a second model. `--screens single|triple` only changes what a
+render shows.
+
+The floor shadow and the poster of each layout are made with its usual screens, so they are a close match
+rather than an exact one when the other screen count is picked in the app.
+
 ## Rebuilding the model
 
 Needs Blender 5.x on the PATH (or call its executable directly).
@@ -52,16 +79,23 @@ Needs Blender 5.x on the PATH (or call its executable directly).
 ```bash
 cd docs/rig-3d
 
-# model + GLB + floor shadow map, about 20 s
+# model + GLB + floor shadow map, about 20 s. Once per layout: cockpit is the default.
 blender -b --python blender/build_rig.py -- --floor-ao --samples 64
+blender -b --python blender/build_rig.py -- --layout stand --floor-ao --samples 64
+blender -b --python blender/build_rig.py -- --layout desk --floor-ao --samples 64
 
 # stills, about 2 min each at 1600x1000 / 128 samples on a 6-core CPU; --engine workbench for a quick shape check
 blender -b --python blender/build_rig.py -- --no-export --engine cycles --samples 128 --views hero,pov,wheel
+blender -b --python blender/build_rig.py -- --layout desk --no-export --engine cycles --samples 128 --views hero
 ```
 
-Everything hangs off a handful of constants at the top of `build_rig.py`: the eye point, the screen distance,
-radius and size, the side-screen angle, the steering column tilt and the pedal deck angle. Change a number,
-rebuild, look at the stills.
+The cockpit keeps the plain file names it always had (`proctor_rig.glb`, `floor_ao.png`); the other two get
+a suffix (`proctor_rig_desk.glb`, `preview_desk_hero.png`). A poster is the `hero` render of a layout
+scaled to 1280x800 and saved as a JPEG named `poster.jpg`, `poster_stand.jpg` or `poster_desk.jpg`.
+
+Everything hangs off the `LAYOUTS` table at the top of `build_rig.py`: per layout, the eye point, the rim
+centre and column tilt, where the pedals, shifter and handbrake sit, and the screens' distance, radius,
+size and side angle. Change a number, rebuild, look at the stills.
 
 ## How the page talks to the 3D view
 
@@ -74,15 +108,20 @@ rendered still and says so.
 
 ## The copy the app serves
 
-`web/public/rig/` holds the three files the Rig screen loads: `proctor_rig.glb`, `floor_ao.png` and
-`poster.jpg`. They are copies of the ones in `out/`. After rebuilding the model, copy them across:
+`web/public/rig/` holds three files per layout, named by the layout's key in `web/lib/proctor/rig.ts`:
+`<key>.glb`, `<key>-floor.png` and `<key>.jpg`, for `cockpit`, `stand` and `desk`. They are copies of the
+ones in `out/`. After rebuilding, copy them across:
 
 ```bash
-cp docs/rig-3d/out/proctor_rig.glb docs/rig-3d/out/floor_ao.png docs/rig-3d/out/poster.jpg web/public/rig/
+node docs/rig-3d/sync.mjs
 ```
 
-`web/lib/proctor/rig.test.ts` opens the served GLB and checks its node names against the slot list, so a
-rebuild that renames a slot fails a test rather than shipping a part that cannot be clicked.
+`web/lib/proctor/rig.test.ts` opens every served GLB and checks its node names against the slot list, that
+the side screens are a `_side` child of the monitors slot, and that the shadow and poster it names exist.
+A rebuild that renames a slot fails a test rather than shipping a part that cannot be clicked.
+
+Which layout and how many screens someone last picked is kept in their browser's storage and nowhere else.
+It is a preference about a drawing. Nothing reads it as a fact about their rig.
 
 The mockup page here and the app screen draw the same scene with different three.js builds. The mockup uses
 the classic-script r147 build because the sandbox it was published in only loads plain script tags; the app

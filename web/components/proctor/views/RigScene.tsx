@@ -2,16 +2,17 @@
 
 /* The rig, drawn in 3D.
  *
- * WHAT THIS IS. A generic sim rig — frame and seat, three screens, wheelbase,
- * rim, pedals, shifter, handbrake — with one node per mounting slot, loaded
- * from public/rig/proctor_rig.glb. You can orbit it, sit in it, and click a
- * part to select its slot.
+ * WHAT THIS IS. A generic sim rig — something to carry it all and a seat,
+ * screens, wheelbase, rim, pedals, shifter, handbrake — with one node per
+ * mounting slot. It comes in the layouts listed in lib/proctor/rig.ts, one
+ * model each under public/rig/, and with one screen or three. You can orbit
+ * it, sit in it, and click a part to select its slot.
  *
  * WHAT THIS IS NOT. It is not the driver's rig and it reads nothing from a
  * session. Three things in here could be mistaken for data, so each is said
  * out loud where it is made:
  *
- *   - the model is one fixed drawing, the same for everyone
+ *   - each layout is one fixed drawing, the same for everyone who picks it
  *   - the picture on the screens is a procedural road, not a replay
  *   - the wheel's display shows an em dash, this app's mark for "not measured"
  *
@@ -35,14 +36,16 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { CH, INK } from "@/lib/proctor/channels";
 import {
   RIG_EYE_NODE,
-  RIG_FLOOR_SHADOW_URL,
-  RIG_MODEL_URL,
-  RIG_POSTER_URL,
   RIG_SLOTS,
   fitDistance,
+  isSideNode,
   placeCaptions,
   pullBack,
+  rigLayout,
   type CaptionPoint,
+  type RigLayout,
+  type RigLayoutKey,
+  type RigScreens,
   type RigSlotKey,
 } from "@/lib/proctor/rig";
 
@@ -52,6 +55,8 @@ type Status = "loading" | "live" | "failed";
 interface SceneHandle {
   select(key: RigSlotKey | null, fly: boolean): void;
   setView(view: View): void;
+  setLayout(key: RigLayoutKey): void;
+  setScreens(count: RigScreens): void;
   home(): void;
   dispose(): void;
 }
@@ -64,6 +69,8 @@ interface SceneNodes {
 }
 
 interface SceneOptions {
+  layout: RigLayoutKey;
+  screens: RigScreens;
   reduceMotion: boolean;
   onPick: (key: RigSlotKey) => void;
   onStatus: (status: Status) => void;
@@ -71,26 +78,24 @@ interface SceneOptions {
 
 /* ── Composition ───────────────────────────────────────────────────────────
    Camera positions, in the model's axes: x to the driver's right, y up, and
-   the driver faces -z. These place a camera; none of them is a reading. */
+   the driver faces -z. These place a camera; none of them is a reading.
+
+   The seated driver looks a little below the middle of the centre screen, so
+   the wheel is in the picture too. `look` is where that lands on the cockpit,
+   and is only used if a model turns up without a screen to aim at. */
 
 const HOME = { pos: [-2.05, 1.8, 2.35], target: [0, 0.66, -0.42], fov: 30 } as const;
-const SEAT = { look: [0, 0.97, -0.6], fov: 64 } as const;
+const SEAT = { look: [0, 0.97, -0.6], drop: 0.1, fov: 64 } as const;
 const FALLBACK_EYE = [0, 1.1, 0.02] as const;
 
-/** Which side to look at a slot from. A slot without one is shown from home. */
-const VANTAGE: Partial<Record<RigSlotKey, readonly [number, number, number]>> = {
-  wheelbase: [-0.95, 0.62, -0.55],
-  rim: [-0.45, 0.42, 1.0],
-  pedals: [0.55, 0.62, -1.0],
-  shifter: [0.9, 0.45, 0.9],
-  handbrake: [-0.9, 0.45, 0.9],
-};
+/** How bright each screen's light on the cockpit is. */
+const SCREEN_LIGHT = 5;
 
 /** How much of the room each material reflects, by its name in the model. */
 const REFLECT: Record<string, number> = {
   chrome: 0.6, steel_brushed: 0.32, alu_raw: 0.4, bolt: 0.4, anodized: 0.6, carbon: 0.45,
   seat_shell: 0.28, seat_bolster: 0.3, alu_black: 0.5, steel_black: 0.45, plastic: 0.4,
-  bezel: 0.35, seat_fabric: 0.15, suede: 0.12, rubber: 0.2, grip_tape: 0.1,
+  bezel: 0.35, laminate: 0.2, seat_fabric: 0.15, suede: 0.12, rubber: 0.2, grip_tape: 0.1,
 };
 
 const vec = (p: readonly [number, number, number]) => new THREE.Vector3(p[0], p[1], p[2]);
@@ -232,12 +237,36 @@ interface Slot {
 }
 
 /* Where a slot's caption sits. Over the top of the part for most; over the
-   middle screen for the monitors, whose bounding box spans all three; and at
-   the rear of the base for the frame, whose top is the screen stand. */
-function captionAnchor(key: RigSlotKey, box: THREE.Box3, center: THREE.Vector3): THREE.Vector3 {
+   middle screen for the monitors, whose bounding box spans all three when
+   there are three; and at the rear of the base for the frame, whose top is
+   the screen stand or the desk. `picture` is the middle screen's glass. */
+function captionAnchor(
+  key: RigSlotKey,
+  box: THREE.Box3,
+  center: THREE.Vector3,
+  picture: THREE.Box3 | null,
+): THREE.Vector3 {
   if (key === "frame") return new THREE.Vector3(center.x, box.min.y + 0.22, box.max.z + 0.02);
-  if (key === "monitors") return new THREE.Vector3(center.x, box.max.y + 0.04, box.min.z + 0.15);
+  if (key === "monitors") {
+    return picture
+      ? new THREE.Vector3((picture.min.x + picture.max.x) / 2, picture.max.y + 0.045, picture.min.z + 0.01)
+      : new THREE.Vector3(center.x, box.max.y + 0.04, box.min.z + 0.15);
+  }
   return new THREE.Vector3(center.x, box.max.y + 0.03, center.z);
+}
+
+/** The name a node had in the model. The loader renames a node whose name is
+ *  already taken, and keeps the original here. */
+function modelName(o: THREE.Object3D): string {
+  return typeof o.userData.name === "string" ? o.userData.name : o.name;
+}
+
+/** True for anything inside a slot that hangs under one of its `_side` nodes. */
+function underSide(o: THREE.Object3D, root: THREE.Object3D): boolean {
+  for (let p: THREE.Object3D | null = o; p && p !== root; p = p.parent) {
+    if (isSideNode(modelName(p))) return true;
+  }
+  return false;
 }
 
 function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null {
@@ -333,27 +362,31 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
   contactPlane.renderOrder = 1;
   scene.add(contactPlane);
 
-  const shadowImg = new Image();
-  shadowImg.onload = () => {
-    if (dead) return;
-    try {
-      // The open floor's own grey is the "no shadow" level.
-      const c = document.createElement("canvas");
-      c.width = c.height = 8;
-      const g = c.getContext("2d");
-      if (g) {
-        g.drawImage(shadowImg, 0, 0, 8, 8);
-        contact.uniforms.lit.value = Math.max(0.5, g.getImageData(0, 0, 1, 1).data[0] / 255 - 0.02);
+  /* Each layout has its own shadow. `mine` is the load it belongs to: one that
+     arrives after the driver has moved on to another layout is dropped. */
+  function loadShadow(url: string, mine: number) {
+    const img = new Image();
+    img.onload = () => {
+      if (dead || mine !== loads) return;
+      try {
+        // The open floor's own grey is the "no shadow" level.
+        const c = document.createElement("canvas");
+        c.width = c.height = 8;
+        const g = c.getContext("2d");
+        if (g) {
+          g.drawImage(img, 0, 0, 8, 8);
+          contact.uniforms.lit.value = Math.max(0.5, g.getImageData(0, 0, 1, 1).data[0] / 255 - 0.02);
+        }
+      } catch {
+        /* keep the default level */
       }
-    } catch {
-      /* keep the default level */
-    }
-    shadowMap.image = shadowImg;
-    shadowMap.needsUpdate = true;
-    contact.uniforms.k.value = 0.85;
-    dirty = true;
-  };
-  shadowImg.src = RIG_FLOOR_SHADOW_URL;
+      shadowMap.image = img;
+      shadowMap.needsUpdate = true;
+      contact.uniforms.k.value = 0.85;
+      dirty = true;
+    };
+    img.src = url;
+  }
 
   const glowMap = radialTexture([
     [0, rgba(INK.accent, 0.55)],
@@ -369,13 +402,22 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
   scene.add(glow);
 
   const eye = vec(FALLBACK_EYE);
+  const seatAim = vec(SEAT.look);
   const screens = screenMaterial(eye);
   const dash = new THREE.MeshBasicMaterial({ map: dashTexture(), toneMapped: false });
   const hoverTint = new THREE.Color(CH.a);
 
-  /* ── Slots ────────────────────────────────────────────────────────────── */
+  /* ── The model, and its slots ─────────────────────────────────────────── */
+  let current: RigLayout = rigLayout(opts.layout);
+  let screenCount: RigScreens = opts.screens;
+  let model: THREE.Object3D | null = null;
+  let loads = 0; // counts loads, so a model that lands late can tell it is stale
   const slots: Partial<Record<RigSlotKey, Slot>> = {};
-  const pickables: THREE.Object3D[] = [];
+  const parts: THREE.Object3D[] = []; // every mesh that belongs to a slot
+  let pickables: THREE.Object3D[] = []; // the ones on show
+  const sideNodes: THREE.Object3D[] = [];
+  const lamps: { light: THREE.RectAreaLight; side: boolean }[] = [];
+  let picture: THREE.Box3 | null = null; // the middle screen's glass
   let selected: RigSlotKey | null = null;
   let hover: RigSlotKey | null = null;
   let ready = false;
@@ -383,7 +425,7 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
 
   /* Each screen lights the cockpit with a rectangle of its own size, placed and
      aimed from the screen's own triangles so it follows the model. */
-  function screenLights(mesh: THREE.Mesh) {
+  function screenLights(mesh: THREE.Mesh, side: boolean) {
     const g = mesh.geometry;
     const pos = g.attributes.position;
     const uv = g.attributes.uv;
@@ -415,70 +457,175 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
       s.c.multiplyScalar(1 / s.a);
       s.n.normalize();
       // area / height = width: the light is the size of the screen it stands for
-      const light = new THREE.RectAreaLight(INK.accent, 5, s.a / size.y, size.y);
+      const light = new THREE.RectAreaLight(INK.accent, SCREEN_LIGHT, s.a / size.y, size.y);
       light.position.copy(s.c).addScaledVector(s.n, 0.03);
       light.lookAt(s.c.clone().addScaledVector(s.n, 1));
       scene.add(light);
+      lamps.push({ light, side });
     }
   }
 
-  new GLTFLoader().load(
-    RIG_MODEL_URL,
-    (gltf) => {
-      if (dead) return;
-      const model = gltf.scene;
-      scene.add(model);
-      model.updateMatrixWorld(true);
-      model.getObjectByName(RIG_EYE_NODE)?.getWorldPosition(eye);
+  /* A slot's extent, from the parts of it that are on show. */
+  const partBox = new THREE.Box3();
+  function measure(s: Slot) {
+    s.box.makeEmpty();
+    s.root.traverseVisible((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      if (mesh.geometry.boundingBox) s.box.union(partBox.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld));
+    });
+    s.box.getCenter(s.center);
+    s.radius = s.box.getSize(new THREE.Vector3()).length() / 2;
+    s.anchor.copy(captionAnchor(s.key, s.box, s.center, picture));
+  }
 
-      for (const def of RIG_SLOTS) {
-        const root = model.getObjectByName(def.node);
-        if (!root) continue;
-        const meshes: Slot["meshes"] = [];
-        root.traverse((o) => {
-          const mesh = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
-          if (!mesh.isMesh) return;
-          const name = mesh.material.name;
-          if (name === "screen") {
-            (mesh as THREE.Mesh).material = screens;
-            screenLights(mesh);
-          } else if (name === "dash_screen") {
-            (mesh as THREE.Mesh).material = dash;
-          } else {
-            mesh.material = mesh.material.clone();
-            mesh.material.envMap = room.texture;
-            mesh.material.envMapIntensity = REFLECT[name] ?? 0.55;
-            if (name === "seat_accent") mesh.material.color.multiplyScalar(0.5);
-            mesh.userData.rest = mesh.material.emissive.clone();
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            meshes.push(mesh);
-          }
-          mesh.userData.slot = def.key;
-          pickables.push(mesh);
+  /* One screen or three. The model always carries three; the side two, and the
+     wings of a stand that hold them, are simply not drawn. Everything worked
+     out from a slot's extent is worked out again, so the ring round the
+     monitors hugs one screen when there is one, and a hidden screen cannot be
+     clicked. Their lights are turned down rather than removed, which would
+     make three rebuild every material's shader. */
+  function showScreens() {
+    const triple = screenCount === "triple";
+    for (const node of sideNodes) node.visible = triple;
+    for (const lamp of lamps) if (lamp.side) lamp.light.intensity = triple ? SCREEN_LIGHT : 0;
+    pickables = parts.filter((m) => triple || !m.userData.side);
+    if (rim) {
+      // measured at rest, not at whatever angle the wheel happened to be turned to
+      rim.root.quaternion.copy(rim.rest);
+      rim.root.updateMatrixWorld(true);
+    }
+    for (const def of RIG_SLOTS) {
+      const s = slots[def.key];
+      if (s) measure(s);
+    }
+    glow.scale.set(triple ? 4.4 : 2.9, triple ? 2.3 : 2.0, 1);
+    dirty = true;
+  }
+
+  function unload() {
+    if (model) {
+      scene.remove(model);
+      model.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.geometry.dispose();
+        // the screens' picture and the wheel's display are shared with the next model
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (m !== screens && m !== dash) m.dispose();
+        }
+      });
+      model = null;
+    }
+    for (const lamp of lamps) {
+      scene.remove(lamp.light);
+      lamp.light.dispose();
+    }
+    lamps.length = 0;
+    for (const def of RIG_SLOTS) delete slots[def.key];
+    parts.length = 0;
+    pickables = [];
+    sideNodes.length = 0;
+    picture = null;
+    rim = null;
+    hover = null;
+    canvas.dataset.hot = "false";
+  }
+
+  const loader = new GLTFLoader();
+
+  /* Swap the rig for another layout. The frame loop stops, so the last picture
+     of the old rig stays on the canvas while it fades out over the new one's
+     poster, and the view comes back when the new model has arrived. */
+  function load(next: RigLayout) {
+    const mine = ++loads;
+    current = next;
+    ready = false;
+    tween = null;
+    start();
+    unload();
+    opts.onStatus("loading");
+    contact.uniforms.k.value = 0;
+    loadShadow(next.shadow, mine);
+
+    loader.load(
+      next.model,
+      (gltf) => {
+        if (dead || mine !== loads) return;
+        const loaded = gltf.scene;
+        model = loaded;
+        scene.add(loaded);
+        loaded.updateMatrixWorld(true);
+        const eyeNode = loaded.getObjectByName(RIG_EYE_NODE);
+        if (eyeNode) eyeNode.getWorldPosition(eye);
+        else eye.copy(vec(FALLBACK_EYE));
+
+        for (const def of RIG_SLOTS) {
+          const root = loaded.getObjectByName(def.node);
+          if (!root) continue;
+          const meshes: Slot["meshes"] = [];
+          root.traverse((o) => {
+            const mesh = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+            if (!mesh.isMesh) return;
+            const side = underSide(mesh, root);
+            const name = mesh.material.name;
+            if (name === "screen") {
+              (mesh as THREE.Mesh).material = screens;
+              screenLights(mesh, side);
+              if (!side) picture = new THREE.Box3().setFromObject(mesh);
+            } else if (name === "dash_screen") {
+              (mesh as THREE.Mesh).material = dash;
+            } else {
+              mesh.material = mesh.material.clone();
+              mesh.material.envMap = room.texture;
+              mesh.material.envMapIntensity = REFLECT[name] ?? 0.55;
+              if (name === "seat_accent") mesh.material.color.multiplyScalar(0.5);
+              mesh.userData.rest = mesh.material.emissive.clone();
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+              meshes.push(mesh);
+            }
+            mesh.userData.slot = def.key;
+            mesh.userData.side = side;
+            parts.push(mesh);
+          });
+          slots[def.key] = {
+            key: def.key, root, meshes,
+            box: new THREE.Box3(), center: new THREE.Vector3(), radius: 0, anchor: new THREE.Vector3(),
+            hover: 0, shown: -1,
+          };
+        }
+        loaded.traverse((o) => {
+          if (isSideNode(modelName(o))) sideNodes.push(o);
         });
-        const box = new THREE.Box3().setFromObject(root);
-        const center = box.getCenter(new THREE.Vector3());
-        slots[def.key] = {
-          key: def.key, root, meshes, box, center,
-          radius: box.getSize(new THREE.Vector3()).length() / 2,
-          anchor: captionAnchor(def.key, box, center),
-          hover: 0, shown: -1,
-        };
-      }
-      if (slots.rim) rim = { root: slots.rim.root, rest: slots.rim.root.quaternion.clone() };
+        if (slots.rim) rim = { root: slots.rim.root, rest: slots.rim.root.quaternion.clone() };
 
-      ready = true;
-      resize();
-      goHome(0);
-      opts.onStatus("live");
-      start();
-    },
-    undefined,
-    () => {
-      if (!dead) opts.onStatus("failed");
-    },
-  );
+        // Everything aimed at the screens follows the middle one to where this layout has it.
+        const glass = picture;
+        if (glass) {
+          const mid = glass.getCenter(new THREE.Vector3());
+          seatAim.set(mid.x, mid.y - SEAT.drop, glass.min.z);
+          glow.position.set(mid.x, mid.y - 0.02, glass.min.z - 0.45);
+        } else {
+          seatAim.copy(vec(SEAT.look));
+        }
+        showScreens();
+
+        ready = true;
+        resize();
+        saved = null;
+        if (mode === "seat") sit();
+        else goHome(0);
+        opts.onStatus("live");
+        start();
+      },
+      undefined,
+      () => {
+        if (!dead && mine === loads) opts.onStatus("failed");
+      },
+    );
+  }
 
   /* ── Camera ───────────────────────────────────────────────────────────── */
   const controls = new OrbitControls(camera, canvas);
@@ -544,12 +691,24 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
     return { yaw: Math.atan2(-d.x, -d.z), pitch: Math.asin(Math.max(-1, Math.min(1, d.y))) };
   }
 
+  /* Into the seat with no flight: where the camera lands when the rig under a
+     seated driver is swapped for another. */
+  function sit() {
+    const a = aimAt(seatAim);
+    yaw = a.yaw;
+    pitch = a.pitch;
+    controls.enabled = false;
+    camera.fov = SEAT.fov;
+    camera.updateProjectionMatrix();
+    seatLook();
+  }
+
   function setView(v: View) {
     if (!ready || v === mode) return;
     if (v === "seat") {
       saved = atHome ? null : { pos: camera.position.clone(), target: controls.target.clone() };
       mode = "seat";
-      const look = vec(SEAT.look);
+      const look = seatAim.clone();
       const a = aimAt(look);
       yaw = a.yaw;
       pitch = a.pitch;
@@ -576,7 +735,7 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
       };
       return;
     }
-    const v = VANTAGE[k];
+    const v = current.vantage[k];
     if (!v) return goHome(900);
     atHome = false;
     const dist = Math.max(0.95, fitDistance(s.radius, HOME.fov, W / H));
@@ -818,6 +977,8 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
   viewWatch.observe(stage);
   document.addEventListener("visibilitychange", start, on);
 
+  load(current);
+
   return {
     select(k, flyThere) {
       const changed = k !== selected;
@@ -826,6 +987,15 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
       if (k && changed && flyThere) focus(k);
     },
     setView,
+    setLayout(k) {
+      if (k !== current.key) load(rigLayout(k));
+    },
+    setScreens(count) {
+      if (count === screenCount) return;
+      screenCount = count;
+      // a model still on its way picks this up when it lands
+      if (ready) showScreens();
+    },
     home() {
       if (ready && mode === "orbit") goHome(900);
     },
@@ -853,13 +1023,17 @@ function createScene(nodes: SceneNodes, opts: SceneOptions): SceneHandle | null 
 const NOTE: Record<Status, string> = {
   loading: "loading the model",
   live: "drag to look around · click a part",
-  failed: "The 3D view could not start in this browser, so this is a rendered still of the same model.",
+  failed: "The 3D view could not start in this browser, so this is a rendered still of this layout as it is usually set up.",
 };
 
 export default function RigScene({
+  layout,
+  screens,
   selected,
   onSelect,
 }: {
+  layout: RigLayoutKey;
+  screens: RigScreens;
   selected: RigSlotKey | null;
   onSelect: (key: RigSlotKey) => void;
 }) {
@@ -869,6 +1043,7 @@ export default function RigScene({
   const captions = useRef<Partial<Record<RigSlotKey, HTMLButtonElement>>>({});
   const handle = useRef<SceneHandle | null>(null);
   const pick = useRef(onSelect);
+  const rig = useRef({ layout, screens });
   const [status, setStatus] = useState<Status>("loading");
   const [view, setView] = useState<View>("orbit");
 
@@ -876,11 +1051,22 @@ export default function RigScene({
     pick.current = onSelect;
   }, [onSelect]);
 
+  /* Declared before the effect that builds the scene, so that on mount the
+     scene starts on the rig asked for, and afterwards a change of rig goes to
+     the scene that is already running rather than building a new one. */
+  useEffect(() => {
+    rig.current = { layout, screens };
+    handle.current?.setLayout(layout);
+    handle.current?.setScreens(screens);
+  }, [layout, screens]);
+
   useEffect(() => {
     if (!stage.current || !canvas.current || !ring.current) return;
     const scene = createScene(
       { stage: stage.current, canvas: canvas.current, ring: ring.current, captions: captions.current },
       {
+        layout: rig.current.layout,
+        screens: rig.current.screens,
         reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         onPick: (k) => pick.current(k),
         onStatus: setStatus,
@@ -905,7 +1091,7 @@ export default function RigScene({
   return (
     <div ref={stage} className="rig-stage" data-state={status}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="rig-poster" alt="" src={RIG_POSTER_URL} />
+      <img className="rig-poster" alt="" src={rigLayout(layout).poster} />
       <canvas ref={canvas} role="img" aria-label="3D view of a generic sim rig and its seven mounting slots" />
 
       <div className="rig-overlay">

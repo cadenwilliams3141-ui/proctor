@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Build the Proctor sim rig as a GLB (Y up, metres, one named node per mounting slot) and render previews.
+"""Build a Proctor sim rig as a GLB (Y up, metres, one named node per mounting slot) and render previews.
 
-blender -b --python blender/build_rig.py -- [--no-export] [--views hero,pov] [--engine cycles|eevee|workbench]
+blender -b --python blender/build_rig.py -- [--layout cockpit|stand|desk] [--screens single|triple]
+                                            [--no-export] [--views hero,pov] [--engine cycles|eevee|workbench]
                                             [--samples 96] [--res 1600x1000] [--floor-ao]
+
+One run builds one layout: the profile cockpit, a folding wheel stand, or a desk with everything clamped
+to it. Every layout has the same seven slot nodes, so whatever reads the GLB does not care which it got.
+The side screens, and the parts of the stand that carry them, are child nodes whose names end `_side`,
+so a viewer can show one screen or three without a second model. `--screens` only affects renders.
 
 Blender axes while building: X = driver's right, Y = forward (toward the screens), Z = up. The glTF
 exporter turns that into X right, Y up, -Z forward. Every part is generic look-alike geometry: no
@@ -19,7 +25,6 @@ from mathutils import Matrix, Vector
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'out')
-STEM = 'proctor_rig'
 
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 CELL = 0.04                      # 40-series aluminium profile
@@ -33,19 +38,47 @@ def arg(name, default=None):
     return default
 
 
-# ----------------------------------------------------------------------------- layout (metres)
+# ----------------------------------------------------------------------------- layouts (metres)
+#
+# Where things are, per layout. `rim` is the centre of the wheel rim and `tilt` the steering column's
+# angle; `pedals` is the middle of the pedal set's base plate, top face; `shifter` and `handbrake` are
+# the top of their mounting plates. `mon` places the middle screen's apex and says how big the panels
+# are, how far the side ones turn in, and what carries them: a beam on a freestanding stand, or a foot
+# on the desk. `screens` is what a render of the layout shows unless told otherwise.
 
-EYE = Vector((0.0, -0.02, 1.10))          # driver's eye point
-MON_Y, MON_Z = 0.60, 1.07                 # centre screen apex: 620 mm from the eye
-MON_R = 1.5                               # 1500R
-MON_ARC, MON_H = 0.80, 0.335              # visible arc length and height of a 34" 21:9 panel
-MON_SIDE = math.radians(55)               # side screens turned in
+LAYOUTS = {
+    'cockpit': dict(
+        eye=(0.0, -0.02, 1.10), rim=(0.0, 0.40, 0.70), tilt=10, pedals=(0.0, 0.98, 0.262), pedal_tilt=12,
+        shifter=(0.335, 0.30, 0.446), handbrake=(-0.335, 0.30, 0.446),
+        mon=dict(y=0.60, z=1.07, r=1.5, arc=0.80, h=0.335, side=55, mount='beam'), screens='triple'),
+    'stand': dict(
+        eye=(0.0, -0.02, 1.22), rim=(0.0, 0.38, 0.80), tilt=8, pedals=(0.0, 0.97, 0.105), pedal_tilt=15,
+        shifter=(0.36, 0.50, 0.627), handbrake=(-0.36, 0.50, 0.627),
+        mon=dict(y=0.74, z=1.13, r=1.5, arc=0.80, h=0.335, side=55, mount='beam'), screens='single'),
+    'desk': dict(
+        eye=(0.0, -0.02, 1.22), rim=(0.0, 0.36, 0.823), tilt=0, pedals=(0.0, 0.92, 0.008), pedal_tilt=0,
+        shifter=(0.44, 0.555, 0.746), handbrake=(-0.44, 0.555, 0.746),
+        mon=dict(y=0.90, z=1.045, r=60.0, arc=0.598, h=0.336, side=42, mount='foot'), screens='single'),
+}
+LAYOUT = str(arg('--layout', 'cockpit'))
+L = LAYOUTS[LAYOUT]
+SCREENS = str(arg('--screens', L['screens']))
+# The cockpit keeps the plain file names it had before there was more than one layout.
+TAG = '' if LAYOUT == 'cockpit' else '_' + LAYOUT
+
+EYE = Vector(L['eye'])                    # driver's eye point
+MON_Y, MON_Z = L['mon']['y'], L['mon']['z']   # middle screen apex
+MON_R = L['mon']['r']                     # 1.5 is a 1500R panel; 60 is flat for every purpose here
+MON_ARC, MON_H = L['mon']['arc'], L['mon']['h']   # visible width along the panel, and height
+MON_SIDE = math.radians(L['mon']['side'])     # side screens turned in
+MON_MOUNT = L['mon']['mount']
 MON_BEAM = 0.16                           # stand beam centre, behind the screen apex
-TILT = math.radians(10)                   # steering column
-COL = Matrix.Translation((0.0, 0.40, 0.70)) @ Matrix.Rotation(-TILT, 4, 'X')   # rim centre, +Y down the column
-PED = Matrix.Translation((0.0, 0.98, 0.262)) @ Matrix.Rotation(math.radians(12), 4, 'X')   # pedal base, top face
-SHIFT = Matrix.Translation((0.335, 0.30, 0.446))
-HBRAKE = Matrix.Translation((-0.335, 0.30, 0.446))
+TILT = math.radians(L['tilt'])            # steering column
+COL = Matrix.Translation(L['rim']) @ Matrix.Rotation(-TILT, 4, 'X')   # rim centre, +Y down the column
+PED = Matrix.Translation(L['pedals']) @ Matrix.Rotation(math.radians(L['pedal_tilt']), 4, 'X')   # pedal base, top face
+SHIFT = Matrix.Translation(L['shifter'])
+HBRAKE = Matrix.Translation(L['handbrake'])
+DESK_TOP, DESK_EDGE = 0.74, 0.47          # desk surface height, and the edge the driver sits at
 ALONG_Y = Matrix.Rotation(-math.pi / 2, 4, 'X')     # turns a Z-axis primitive to lie along +Y
 YZ_TO_X = Matrix(((0, 0, 1, 0), (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 0, 1)))   # prism (x, y, z) -> (y, z, x)
 
@@ -63,6 +96,7 @@ MATERIALS = {
     'plastic':       dict(color='#111216', rough=0.55),
     'rubber':        dict(color='#0c0c0d', rough=0.9),
     'grip_tape':     dict(color='#0e0e10', rough=1.0),
+    'laminate':      dict(color='#30323c', rough=0.55),
     'seat_fabric':   dict(color='#202127', rough=0.95),
     'seat_bolster':  dict(color='#111215', rough=0.62),
     'seat_shell':    dict(color='#0e0e10', rough=0.28, coat=0.6),
@@ -158,8 +192,12 @@ class Part:
         for f in self.bm.faces[n0:]:
             f.material_index = remap[min(f.material_index, len(remap) - 1)]
 
-    def finish(self):
+    def finish(self, parent=None):
+        """Turn the part into an object. With `parent`, it becomes that node's child; empty, it becomes nothing."""
         bm = self.bm
+        if not len(bm.faces):
+            bm.free()
+            return None
         bm.normal_update()
         for f in bm.faces:
             f.smooth = True
@@ -172,6 +210,8 @@ class Part:
         for n in self.mats:
             me.materials.append(material(n))
         ob = bpy.data.objects.new(self.name, me)
+        if parent is not None:
+            ob.parent = parent
         ob.matrix_world = self.matrix
         bpy.context.scene.collection.objects.link(ob)
         wn = ob.modifiers.new('weighted_normal', 'WEIGHTED_NORMAL')
@@ -202,13 +242,14 @@ def rot(axis, deg):
     return Matrix.Rotation(math.radians(deg), 4, axis)
 
 
-def box(sx, sy, sz, bevel=0.0015):
+def box(sx, sy, sz, bevel=0.0015, segs=1):
+    """A box with its edges broken: one segment is a chamfer, three or more a soft cushion edge."""
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1.0)
     bmesh.ops.scale(bm, vec=(sx, sy, sz), verts=bm.verts[:])
     b = min(bevel, 0.45 * min(sx, sy, sz))
     if b > 0:
-        bmesh.ops.bevel(bm, geom=bm.edges[:], offset=b, segments=1, profile=0.5, affect='EDGES')
+        bmesh.ops.bevel(bm, geom=bm.edges[:], offset=b, segments=segs, profile=0.5, affect='EDGES')
     return bm
 
 
@@ -400,6 +441,15 @@ def monitor_matrix(s):
     return at(target - Rz @ Vector((-s * xe, ye, 0))) @ Rz
 
 
+def curved_slab(R, phi0, phi1, z0, z1, r_in, r_out, n=24):
+    rows = []
+    for i in range(n + 1):
+        phi = phi0 + (phi1 - phi0) * i / n
+        rows.append([Vector((r * math.sin(phi), r * math.cos(phi) - R, z))
+                     for r, z in ((r_in, z0), (r_in, z1), (r_out, z1), (r_out, z0))])
+    return grid(rows, close_v=True, cap=True)
+
+
 def seat_mesh():
     # (y, z) of the surface the driver touches, then half width, flat half width, bolster height
     stations = [
@@ -456,21 +506,8 @@ def seat_mesh():
     return out
 
 
-def build_frame():
-    P = Part('slot_frame')
-    RX, Y0, Y1, RZ = 0.27, -0.30, 1.16, 0.11
-    # base rails on levelling feet
-    for s in (-1, 1):
-        beam(P, 1, 4, (s * RX, Y0, RZ), (s * RX, Y1, RZ), Z)
-        for y in (Y0 + 0.07, 0.42, Y1 - 0.07):
-            P.add(lathe([(0.026, 0.0), (0.03, 0.004), (0.03, 0.011), (0.012, 0.016), (0.007, 0.018), (0.007, 0.03)], 20),
-                  'rubber', at(s * RX, y, 0))
-    for y, z in ((-0.22, 0.17), (0.22, 0.17), (0.74, 0.17), (1.10, 0.07)):
-        beam(P, 2, 1, (-0.25, y, z), (0.25, y, z), Z, caps=False)
-        for s in (-1, 1):
-            bolt(P, (s * 0.29, y, z), (s, 0, 0))
-
-    # seat: sliders, side brackets, bucket
+def bucket_seat(P):
+    """Bucket seat on sliders, bolted to the base rails through side brackets."""
     for s in (-1, 1):
         P.add(box(0.032, 0.46, 0.016, 0.002), 'steel_black', at(s * 0.20, 0.0, 0.198))
         P.add(box(0.024, 0.42, 0.012, 0.002), 'steel_brushed', at(s * 0.20, 0.01, 0.212))
@@ -482,6 +519,44 @@ def build_frame():
     P.add(tube_path([(-0.20, 0.25, 0.212), (-0.20, 0.29, 0.212), (-0.17, 0.31, 0.215), (0.17, 0.31, 0.215),
                      (0.20, 0.29, 0.212), (0.20, 0.25, 0.212)], 0.005, 8), 'chrome')        # slider release bar
     P.add(seat_mesh(), ['seat_fabric', 'seat_bolster', 'seat_accent', 'seat_shell'], recalc=False)
+
+
+def office_chair(P, y=0.17, top=0.47):
+    """Task chair on a five-star base. No armrests: they foul a wheel and a shifter, and most people
+    who drive from one take them off."""
+    hx, hy = 0.0, y - 0.01
+    for i in range(5):
+        spoke = at(hx, hy, 0) @ rot('Z', 90 + i * 72)
+        P.add(box(0.30, 0.046, 0.028, 0.006), 'plastic', spoke @ at(0.18, 0, 0.078))
+        P.add(box(0.03, 0.036, 0.03, 0.004), 'plastic', spoke @ at(0.315, 0, 0.058))
+        P.add(cyl(0.027, 0.024, 16, bevel=0.004), 'rubber', spoke @ at(0.315, 0, 0.027) @ rot('X', 90))
+    P.add(cyl(0.04, 0.07, 20, bevel=0.006), 'plastic', at(hx, hy, 0.095))
+    P.add(cyl(0.028, 0.14, 20), 'plastic', at(hx, hy, 0.19))
+    P.add(cyl(0.018, top - 0.34, 20), 'chrome', at(hx, hy, 0.26 + (top - 0.34) / 2))         # gas lift
+    P.add(box(0.24, 0.22, 0.035, 0.006), 'steel_black', at(hx, hy, top - 0.0875))            # tilt mechanism
+    P.add(tube_path([(0.10, hy, top - 0.09), (0.24, hy + 0.01, top - 0.09), (0.275, hy + 0.02, top - 0.10)],
+                    0.006, 8), 'plastic')                                                      # height lever
+    P.add(box(0.49, 0.47, 0.07, 0.028, segs=3), 'seat_fabric', at(0, y, top - 0.035))
+    # the back: a shallow curve open toward the sitter, leaning away from them
+    back = at(0, y - 0.245, top + 0.09) @ rot('X', 10) @ rot('Z', 180)
+    P.add(curved_slab(0.55, -0.42, 0.42, 0.0, 0.50, 0.55, 0.59, 16), 'seat_fabric', back)
+    P.add(box(0.07, 0.20, 0.028, 0.006), 'plastic', at(0, y - 0.21, top - 0.085))
+    P.add(box(0.07, 0.028, 0.36, 0.006), 'plastic', at(0, y - 0.325, top + 0.09) @ rot('X', 10))
+
+
+def cockpit_frame(P):
+    """Aluminium profile frame: base rails, wheel uprights with a tilting deck, pedal deck, side arms."""
+    RX, Y0, Y1, RZ = 0.27, -0.30, 1.16, 0.11
+    # base rails on levelling feet
+    for s in (-1, 1):
+        beam(P, 1, 4, (s * RX, Y0, RZ), (s * RX, Y1, RZ), Z)
+        for y in (Y0 + 0.07, 0.42, Y1 - 0.07):
+            P.add(lathe([(0.026, 0.0), (0.03, 0.004), (0.03, 0.011), (0.012, 0.016), (0.007, 0.018), (0.007, 0.03)], 20),
+                  'rubber', at(s * RX, y, 0))
+    for y, z in ((-0.22, 0.17), (0.22, 0.17), (0.74, 0.17), (1.10, 0.07)):
+        beam(P, 2, 1, (-0.25, y, z), (0.25, y, z), Z, caps=False)
+        for s in (-1, 1):
+            bolt(P, (s * 0.29, y, z), (s, 0, 0))
 
     # wheel uprights and tilting deck
     UY, UTOP = 0.60, 0.72
@@ -514,55 +589,136 @@ def build_frame():
         for z in (0.08, 0.15):
             bolt(P, (s * 0.33, 0.30, z), (s, 0, 0))
 
-    # freestanding triple-screen stand
-    SX, SY = 0.50, 0.82
+
+def wheel_stand(P):
+    """Folding stand in steel tube: floor rails, two telescoping posts, a tilting wheel plate, a pedal
+    plate, and an arm each side for a shifter and a handbrake."""
+    RX = 0.24
     for s in (-1, 1):
-        beam(P, 1, 2, (s * SX, SY, 0.04), (s * SX, SY, 1.30), Y)
-        beam(P, 2, 1, (s * SX, 0.42, 0.02), (s * SX, 1.22, 0.02), Z)
+        P.add(box(0.04, 0.96, 0.03, 0.004), 'steel_black', at(s * RX, 0.78, 0.015))
+        for y in (0.31, 1.25):
+            P.add(box(0.05, 0.03, 0.036, 0.004), 'rubber', at(s * RX, y, 0.018))
+        P.add(box(0.046, 0.046, 0.40, 0.004), 'steel_black', at(s * RX, 0.60, 0.23))         # outer post
+        P.add(box(0.034, 0.034, 0.30, 0.003), 'steel_brushed', at(s * RX, 0.60, 0.54))       # inner post
+        P.add(cyl(0.02, 0.022, 16, bevel=0.004), 'plastic', at(s * (RX + 0.034), 0.60, 0.40) @ rot('Y', 90))
+        P.add(box(0.006, 0.12, 0.07, 0.002), 'steel_black', COL @ at(s * (RX - 0.02), 0.23, -0.105))
+        for y in (0.20, 0.26):
+            bolt(P, COL @ Vector((s * (RX - 0.023), y, -0.115)), (-s, 0, 0), r=0.005, h=0.004)
+        # pedal plate cheeks, and the short posts that hold its far edge up
+        P.add(box(0.006, 0.36, 0.05, 0.002), 'steel_black', PED @ at(s * 0.217, 0, -0.034))
+        P.add(box(0.03, 0.03, 0.10, 0.003), 'steel_black', at(s * RX, 1.13, 0.08))
+        # arm and plate for the shifter or the handbrake
+        P.add(box(0.16, 0.035, 0.035, 0.004), 'steel_black', at(s * 0.337, 0.58, 0.6035))
+        P.add(box(0.11, 0.20, 0.006, 0.0015), 'steel_black', at(s * 0.36, 0.50, 0.624))
+    for y in (0.36, 0.80, 1.20):
+        P.add(box(2 * RX, 0.04, 0.03, 0.004), 'steel_black', at(0, y, 0.015))
+    P.add(box(0.52, 0.26, 0.006, 0.0015), 'steel_black', COL @ at(0, 0.23, -0.078))           # wheel plate
+    P.add(box(0.48, 0.36, 0.005, 0.0015), 'steel_black', PED @ at(0, 0, -0.0065))             # pedal plate
+
+
+def desk(P):
+    """A desk on two T-legs."""
+    W, D, T = 1.60, 0.75, 0.03
+    yc = DESK_EDGE + D / 2
+    P.add(box(W, D, T, 0.004), 'laminate', at(0, yc, DESK_TOP - T / 2))
+    col = DESK_TOP - T - 0.05
+    for s in (-1, 1):
+        x = s * (W / 2 - 0.11)
+        P.add(box(0.07, D - 0.10, 0.03, 0.004), 'steel_black', at(x, yc, 0.015))
+        P.add(box(0.06, 0.09, col, 0.004), 'steel_black', at(x, yc + 0.05, 0.03 + col / 2))
+        P.add(box(0.07, D - 0.16, 0.02, 0.003), 'steel_black', at(x, yc, DESK_TOP - T - 0.01))
+    P.add(box(W - 0.28, 0.03, 0.07, 0.004), 'steel_black', at(0, yc + 0.11, DESK_TOP - T - 0.12))
+
+
+def desk_clamp(P, x, width, depth, plate, screws):
+    """Clamp-on mount: a plate on the desk, a lip down its edge, a jaw under it and thumb screws."""
+    top = DESK_TOP
+    P.add(box(width, depth, plate, 0.0015), 'steel_black', at(x, DESK_EDGE - 0.004 + depth / 2, top + plate / 2))
+    P.add(box(width, 0.006, 0.08 + plate, 0.0015), 'steel_black', at(x, DESK_EDGE - 0.007, top + plate - (0.08 + plate) / 2))
+    P.add(box(width, 0.075, 0.006, 0.0015), 'steel_black', at(x, DESK_EDGE + 0.0275, top - 0.077))
+    for dx in ([0.0] if screws == 1 else [-width * 0.28, width * 0.28]):
+        P.add(cyl(0.005, 0.05, 12), 'bolt', at(x + dx, DESK_EDGE + 0.03, top - 0.055))
+        P.add(cyl(0.016, 0.006, 16, bevel=0.001), 'plastic', at(x + dx, DESK_EDGE + 0.03, top - 0.033))
+        P.add(cyl(0.016, 0.014, 16, bevel=0.003), 'plastic', at(x + dx, DESK_EDGE + 0.03, top - 0.089))
+
+
+def screen_stand(P, PS):
+    """Freestanding stand: two uprights and a beam for the middle screen in P, and a hinged wing for each
+    side screen in PS."""
+    SX, SY = 0.50, MON_Y + 0.22
+    for s in (-1, 1):
+        beam(P, 1, 2, (s * SX, SY, 0.04), (s * SX, SY, MON_Z + 0.23), Y)
+        beam(P, 2, 1, (s * SX, SY - 0.40, 0.02), (s * SX, SY + 0.40, 0.02), Z)
         gusset(P, (s * SX, SY - 0.04, 0.04), -Y, Z)
         gusset(P, (s * SX, SY + 0.04, 0.04), Y, Z)
         M = monitor_matrix(s)
-        beam(P, 1, 2, (-s * 0.40, MON_BEAM, 0), (s * 0.37, MON_BEAM, 0), Z, xf=M)
+        beam(PS, 1, 2, (-s * 0.40, MON_BEAM, 0), (s * 0.37, MON_BEAM, 0), Z, xf=M)
         inner = M @ Vector((-s * 0.40, MON_BEAM, 0))
         end = Vector((s * 0.56, MON_Y + MON_BEAM, MON_Z))
         mid = (inner + end) / 2
-        P.add(cyl(0.013, 0.10, 16, bevel=0.002), 'steel_brushed', at(mid))                 # hinge pin
+        PS.add(cyl(0.013, 0.10, 16, bevel=0.002), 'steel_brushed', at(mid))                # hinge pin
         for dz in (-0.03, 0.03):
-            P.add(box((inner - end).length + 0.07, 0.05, 0.005, 0.001), 'steel_black',
-                  frame_from(Z, (inner - end).cross(Z), mid + Vector((0, 0, dz))))
+            PS.add(box((inner - end).length + 0.07, 0.05, 0.005, 0.001), 'steel_black',
+                   frame_from(Z, (inner - end).cross(Z), mid + Vector((0, 0, dz))))
     beam(P, 1, 2, (-0.56, MON_Y + MON_BEAM, MON_Z), (0.56, MON_Y + MON_BEAM, MON_Z), Z)
     for s in (-1, 1):
         gusset(P, (s * (SX + 0.02), SY - 0.04, MON_Z), (s, 0, 0), Y, size=0.04)
-    return P.finish()
+
+
+def with_side(P, PS):
+    """Finish a part and its `_side` child. Returns the (object, triangles) pairs that exist."""
+    main = P.finish()
+    side = PS.finish(parent=main[0])
+    return [main] + ([side] if side else [])
+
+
+def build_frame():
+    """Whatever carries the rest: the frame or the desk, the seat, and the screen stand if there is one."""
+    P, PS = Part('slot_frame'), Part('frame_side')
+    if LAYOUT == 'cockpit':
+        cockpit_frame(P)
+        bucket_seat(P)
+        screen_stand(P, PS)
+    elif LAYOUT == 'stand':
+        wheel_stand(P)
+        office_chair(P)
+        screen_stand(P, PS)
+    else:
+        desk(P)
+        desk_clamp(P, 0.0, 0.20, 0.25, 0.008, 2)                        # under the wheelbase
+        for s in (-1, 1):
+            desk_clamp(P, s * 0.44, 0.12, 0.20, 0.006, 1)               # shifter, handbrake
+        P.add(box(0.58, 0.44, 0.004, 0.001), 'rubber', at(0, 0.94, 0.002))   # mat under the pedals
+        office_chair(P)
+    return with_side(P, PS)
 
 
 # ----------------------------------------------------------------------------- screens
 
-def curved_slab(R, phi0, phi1, z0, z1, r_in, r_out, n=24):
-    rows = []
-    for i in range(n + 1):
-        phi = phi0 + (phi1 - phi0) * i / n
-        rows.append([Vector((r * math.sin(phi), r * math.cos(phi) - R, z))
-                     for r, z in ((r_in, z0), (r_in, z1), (r_out, z1), (r_out, z0))])
-    return grid(rows, close_v=True, cap=True)
-
-
 def build_monitors():
-    P = Part('slot_monitors', uv=True)
+    """The middle screen in slot_monitors; the two side screens in its child, monitors_side."""
+    P, PS = Part('slot_monitors', uv=True), Part('monitors_side', uv=True)
     half = (MON_ARC / 2) / MON_R
     body = (MON_ARC / 2 + 0.005) / MON_R
     z0, z1 = -MON_H / 2, MON_H / 2
     for s in (-1, 0, 1):
+        T = P if s == 0 else PS
         M = monitor_matrix(s)
-        P.add(curved_slab(MON_R, -body, body, z0 - 0.020, z1 + 0.005, MON_R, MON_R + 0.016), 'bezel', M)
-        P.add(curved_slab(MON_R, -body * 0.62, body * 0.62, -0.125, 0.105, MON_R + 0.015, MON_R + 0.048, 14),
+        T.add(curved_slab(MON_R, -body, body, z0 - 0.020, z1 + 0.005, MON_R, MON_R + 0.016), 'bezel', M)
+        T.add(curved_slab(MON_R, -body * 0.62, body * 0.62, -0.125, 0.105, MON_R + 0.015, MON_R + 0.048, 14),
               'plastic', M)
-        P.add(box(0.11, 0.006, 0.11, 0.001), 'steel_black', M @ at(0, 0.051, 0))
-        P.add(box(0.05, MON_BEAM - 0.02 - 0.054, 0.05, 0.002), 'steel_black',
-              M @ at(0, (0.054 + MON_BEAM - 0.02) / 2, 0))
+        T.add(box(0.11, 0.006, 0.11, 0.001), 'steel_black', M @ at(0, 0.051, 0))
+        if MON_MOUNT == 'beam':
+            T.add(box(0.05, MON_BEAM - 0.02 - 0.054, 0.05, 0.002), 'steel_black',
+                  M @ at(0, (0.054 + MON_BEAM - 0.02) / 2, 0))
+        else:
+            # its own foot on the desk: a neck down from the back of the panel, and a base plate
+            drop = MON_Z - DESK_TOP
+            T.add(box(0.05, 0.03, drop + 0.04, 0.004), 'plastic', M @ at(0, 0.069, 0.02 - drop / 2))
+            T.add(box(0.26, 0.20, 0.012, 0.004), 'plastic', M @ at(0, 0.05, 0.006 - drop))
         for dx in (-0.04, 0.04):
             for dz in (-0.04, 0.04):
-                bolt(P, M @ Vector((dx, 0.054, dz)), M.to_3x3() @ Vector((0, 1, 0)), r=0.004, h=0.003)
+                bolt(T, M @ Vector((dx, 0.054, dz)), M.to_3x3() @ Vector((0, 1, 0)), r=0.004, h=0.003)
         # the picture: its own material, UVs run left to right across all three screens
         n = 24
         rows = []
@@ -578,8 +734,8 @@ def build_monitors():
                 c = lp.vert.co
                 u = (math.atan2(c.x, c.y + MON_R) + half) / (2 * half)
                 lp[uv].uv = ((s + 1 + u) / 3.0, (c.z - z0) / (z1 - z0))
-        P.add(scr, 'screen', M, recalc=False)
-    return P.finish()
+        T.add(scr, 'screen', M, recalc=False)
+    return with_side(P, PS)
 
 
 # ----------------------------------------------------------------------------- wheelbase and rim
@@ -897,7 +1053,7 @@ def render_views(cam, names):
         cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
         if name == 'top':
             cam.rotation_euler = (0.0, 0.0, 0.0)
-        sc.render.filepath = os.path.join(OUT, 'preview_%s.png' % name)
+        sc.render.filepath = os.path.join(OUT, 'preview%s_%s.png' % (TAG, name))
         bpy.ops.render.render(write_still=True)
         print('rendered', sc.render.filepath)
 
@@ -937,7 +1093,7 @@ def render_floor_ao(objs):
     cam.location = (0, cy, 10)
     sc.collection.objects.link(cam)
     sc.camera = cam
-    sc.render.filepath = os.path.join(OUT, 'floor_ao.png')
+    sc.render.filepath = os.path.join(OUT, 'floor_ao%s.png' % TAG)
     sc.render.image_settings.color_mode = 'BW'
     bpy.ops.render.render(write_still=True)
     print('rendered', sc.render.filepath)
@@ -946,15 +1102,20 @@ def render_floor_ao(objs):
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     os.makedirs(OUT, exist_ok=True)
-    built = [build_frame(), build_monitors(), build_wheelbase(), build_rim(), build_pedals(),
-             build_shifter(), build_handbrake()]
+    built = build_frame() + build_monitors() + [build_wheelbase(), build_rim(), build_pedals(),
+                                                build_shifter(), build_handbrake()]
     objs = [ob for ob, _ in built]
-    print('total %d triangles' % sum(t for _, t in built))
+    print('%s: total %d triangles' % (LAYOUT, sum(t for _, t in built)))
     eye = bpy.data.objects.new('anchor_eye', None)
     eye.location = EYE
     bpy.context.scene.collection.objects.link(eye)
     if not arg('--no-export'):
-        export_glb(os.path.join(OUT, STEM + '.glb'), objs + [eye])
+        export_glb(os.path.join(OUT, 'proctor_rig%s.glb' % TAG), objs + [eye])
+    # The model always carries all three screens. A render shows the layout as it is usually set up.
+    if SCREENS == 'single':
+        for ob in objs:
+            if ob.name.endswith('_side'):
+                ob.hide_render = True
     if arg('--floor-ao'):
         render_floor_ao(objs)
         return

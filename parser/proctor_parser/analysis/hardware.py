@@ -1,15 +1,21 @@
 """Hardware / rig-level observations from the raw sensor channels (module 5).
 
-This module observes the *equipment*, not the driving: brake-sensor
-calibration, ABS engagement, brake-bias changes, pedal noise floor, and
-force-feedback clipping. Ticks are concatenated across every lap of the
-session because the subject is the rig's behaviour over the whole outing, not
-any single lap.
+This module observes the *equipment*, not the driving: signals the rig sent
+that the driver did not, force-feedback clipping, column torque and brake-bias
+changes. Ticks are concatenated across every lap of the session because the
+subject is the rig's behaviour over the whole outing, not any single lap.
 
-Every Brake-vs-BrakeRaw comparison excludes stationary ticks via moving_mask:
-the sim forces Brake=1.0 with BrakeRaw=0 whenever the car is stopped
-(contract rule 1), which would otherwise read as a permanent sensor fault at
-every race start.
+ONE OWNER PER NUMBER. What the driver asked for against what the car did with
+it -- brake ceiling, Brake vs BrakeRaw, the ABS -- belongs to input_response.
+It used to be computed here as well, and the two copies drifted: the ABS share
+here counted braking from the APPLIED channel and input_response from the
+PEDAL, so the phone and the desktop printed different figures for the same
+session, and the FFB sign bug had to be fixed twice. This module now keeps only
+what is about the rig itself.
+
+Payloads carry numbers and the contract's honesty fields. The sentences a
+driver reads are written in the web app (lib/proctor/explain.ts and the
+screens), so the copy can change without a re-ingest.
 """
 
 from __future__ import annotations
@@ -23,13 +29,29 @@ METRIC_KEY = "hardware"
 
 _BASIS = "raw sensor channels across all laps in this session"
 _CAVEAT = "single-session observation; hardware trends need history"
-_NOISE_CAVEAT = "sensor-wear early-warning baseline; trend needs multiple sessions"
+_NOISE_CAVEAT = (
+    "sensor-wear early-warning baseline; trend needs multiple sessions. "
+    "A brief spike is a heuristic: a brake reading above 5% that comes and "
+    "goes within 50 ms with the throttle flat on both sides"
+)
 
-# "Worth noticing" thresholds for the areas-of-concern summary. These are watch
-# heuristics, not pass/fail limits: any pedal-noise spike is surfaced (the noise
-# floor should be silent), and FFB clipping is flagged past a small share of
-# moving ticks where lost detail starts to matter at the limit.
+# FFB clipping is flagged past a small share of moving ticks, where lost detail
+# starts to matter at the limit. A watch heuristic, not a pass/fail limit.
 _FFB_CLIP_CONCERN_PCT = 2.0
+
+# The pedal is "silent" on full-throttle ticks. The sub-5% noise count below is
+# the original measurement (69 on the golden Long Beach file) and is unchanged.
+_FULL_THROTTLE = 0.9
+_NOISE_BAND = 0.05
+_NOISE_FLOOR = 0.001
+
+# A brief spike: a brake reading above the noise band that starts and ends
+# within this long while the throttle stays flat on both sides. No foot presses
+# and releases a pedal in 50 ms, so a reading that short is the sensor, not the
+# driver. Left-foot braking also overlaps full throttle, but it stays on far
+# longer than this and so is never counted.
+_SPIKE_MAX_MS = 50
+_DEFAULT_TICK_RATE = 60
 
 # dcBrakeBias is carried into ParsedLap.raw as "brake_bias" (RAW_CHANNEL_MAP).
 # We still look for it under either the contract key or its raw channel name so
@@ -56,82 +78,21 @@ def compute(session: ParsedSession) -> dict:
             "caveat": _CAVEAT,
         }
 
-    brake = _concat(session, "brake")
     brake_raw = _concat(session, "brake_raw")
     throttle = _concat(session, "throttle")
-    abs_active = _concat(session, "abs_active")
     ffb_stops = _concat(session, "ffb_stops")
     steer_torque = _concat(session, "steer_torque")
     moving = moving_mask(speed)
-
-    brake_vs_raw = _brake_vs_raw(brake, brake_raw, moving)
-    noise = _pedal_noise_floor(throttle, brake_raw)
-    ffb = _ffb(ffb_stops, moving)
+    tick_rate = session.meta.tick_rate or _DEFAULT_TICK_RATE
 
     return {
         "basis": _BASIS,
-        "brake_vs_raw": brake_vs_raw,
-        "abs": _abs_block(brake, abs_active, moving),
-        "brake_bias": _brake_bias(session),
-        "pedal_noise_floor": noise,
-        "ffb": ffb,
+        "pedal_noise_floor": _pedal_noise_floor(throttle, brake_raw, moving, tick_rate),
+        "ffb": _ffb(ffb_stops, moving),
         "steer_torque": _steer_torque(steer_torque, moving),
-        "areas_of_concern": _areas_of_concern(noise, ffb),
+        "brake_bias": _brake_bias(session),
         "caveat": _CAVEAT,
     }
-
-
-def _brake_vs_raw(brake: np.ndarray, brake_raw: np.ndarray, moving: np.ndarray) -> dict:
-    """Brake command vs sensor reading over moving ticks only (contract rule 1)."""
-    stationary_excluded = int(np.count_nonzero(~moving))
-    if not moving.any():
-        return {
-            "insufficient_data": True,
-            "reason": "no moving ticks to compare",
-            "stationary_ticks_excluded": stationary_excluded,
-        }
-
-    b = brake[moving]
-    r = brake_raw[moving]
-    diff = np.abs(b - r)
-
-    # The driver's demonstrated brake ceiling: the most the sensor ever
-    # delivered while moving this session. Self-envelope — the sim Brake
-    # channel itself tops out wherever the driver did, so "sensor at command
-    # saturation" would read null on real files. Not a hardware limit claim.
-    return {
-        "max_abs_diff": round(float(diff.max()), 4),
-        "mean_abs_diff": round(float(diff.mean()), 4),
-        "brake_ceiling_pct": round(100.0 * float(r.max()), 1),
-        "ceiling_note": "your own max this session, not a hardware limit",
-        "stationary_ticks_excluded": stationary_excluded,
-    }
-
-
-def _abs_block(brake: np.ndarray, abs_active: np.ndarray, moving: np.ndarray) -> dict:
-    """ABS engagement share of braking ticks + distinct activation events."""
-    active = abs_active.astype(bool)
-    # Rising edges = distinct activations (False -> True), over all ticks.
-    events = int(np.count_nonzero(np.diff(active.astype(np.int8)) == 1))
-
-    braking = moving & (brake > 0.2)
-    n_braking = int(np.count_nonzero(braking))
-    if n_braking == 0:
-        return {
-            "insufficient_data": True,
-            "reason": "no moving braking ticks (brake > 0.2)",
-            "activation_events": events,
-        }
-
-    engaged_pct = round(100.0 * float(active[braking].mean()), 1)
-    out = {
-        "engaged_pct_of_braking": engaged_pct,
-        "activation_events": events,
-        "braking_ticks": n_braking,
-    }
-    if engaged_pct == 0.0 and events == 0:
-        out["finding"] = "no ABS engagement detected"
-    return out
 
 
 def _brake_bias(session: ParsedSession) -> dict:
@@ -158,23 +119,79 @@ def _brake_bias(session: ParsedSession) -> dict:
     }
 
 
-def _pedal_noise_floor(throttle: np.ndarray, brake_raw: np.ndarray) -> dict:
-    """Brake-sensor floor while hard on throttle (the pedal should be silent)."""
-    qualifying = (throttle > 0.9) & (brake_raw < 0.05)
+def _pedal_noise_floor(
+    throttle: np.ndarray,
+    brake_raw: np.ndarray,
+    moving: np.ndarray,
+    tick_rate: int,
+) -> dict:
+    """Brake-sensor readings while flat on the throttle -- signals that were not the driver.
+
+    Two measurements, kept apart because they answer different questions:
+
+    spike_ticks   the original noise floor: full-throttle ticks where the
+                  sensor read anything at all below 5%. Unchanged, so the
+                  golden count stays comparable across versions.
+    brief_spikes  readings ABOVE 5% that came and went too quickly to be a
+                  foot. The noise floor above cannot see these at all -- its
+                  qualifying ticks stop at 5%, so a fault that jumps the brake
+                  to 30% for one frame was excluded rather than counted.
+    """
+    full = throttle > _FULL_THROTTLE
+    qualifying = full & (brake_raw < _NOISE_BAND)
     total = int(np.count_nonzero(qualifying))
     if total == 0:
         return {
             "insufficient_data": True,
-            "reason": "no full-throttle straight ticks (throttle > 0.9, brake_raw < 0.05)",
+            "reason": "no full-throttle ticks (throttle > 0.9) to listen to the brake on",
             "caveat": _NOISE_CAVEAT,
         }
 
     vals = brake_raw[qualifying]
-    return {
-        "spike_ticks": int(np.count_nonzero(vals > 0.001)),
+    spike_ticks = int(np.count_nonzero(vals > _NOISE_FLOOR))
+    brief = _brief_spikes(full & moving, brake_raw, tick_rate)
+    out = {
+        "spike_ticks": spike_ticks,
         "max_spike": round(float(vals.max()), 4),
         "qualifying_ticks": total,
+        "brief_spikes": brief,
+        "flagged": spike_ticks > 0 or brief["events"] > 0,
         "caveat": _NOISE_CAVEAT,
+    }
+    if not out["flagged"]:
+        out["finding"] = "no brake signal while you were flat on the throttle"
+    return out
+
+
+def _brief_spikes(full: np.ndarray, brake_raw: np.ndarray, tick_rate: int) -> dict:
+    """Brake readings above the noise band too short to be a foot.
+
+    A run of ticks with brake_raw above 5% counts when it lasts no longer than
+    _SPIKE_MAX_MS AND the throttle is flat on every tick of it and on the tick
+    either side. `full` already excludes stationary ticks (moving_mask).
+    """
+    max_ticks = max(1, round(_SPIKE_MAX_MS / 1000 * tick_rate))
+    above = brake_raw > _NOISE_BAND
+    edges = np.diff(np.concatenate(([0], above.astype(np.int8), [0])))
+    starts = np.flatnonzero(edges == 1)
+    ends = np.flatnonzero(edges == -1)  # exclusive
+
+    n = len(brake_raw)
+    events = 0
+    peak = 0.0
+    for a, b in zip(starts, ends):
+        if b - a > max_ticks or a == 0 or b >= n:
+            continue
+        if not (full[a - 1] and full[b] and full[a:b].all()):
+            continue
+        events += 1
+        peak = max(peak, float(brake_raw[a:b].max()))
+
+    return {
+        "events": events,
+        "peak_pct": round(100.0 * peak, 1) if events else None,
+        "max_duration_ms": _SPIKE_MAX_MS,
+        "min_reading_pct": round(100.0 * _NOISE_BAND, 1),
     }
 
 
@@ -197,7 +214,11 @@ def _ffb(ffb_stops: np.ndarray, moving: np.ndarray) -> dict:
         return {"insufficient_data": True, "reason": "no moving ticks"}
 
     clipping_pct = round(100.0 * float((np.abs(ffb_stops[moving]) >= 0.99).mean()), 2)
-    out = {"clipping_pct": clipping_pct}
+    out = {
+        "clipping_pct": clipping_pct,
+        "flagged": clipping_pct >= _FFB_CLIP_CONCERN_PCT,
+        "flag_threshold_pct": _FFB_CLIP_CONCERN_PCT,
+    }
     if clipping_pct == 0.0:
         out["finding"] = "no FFB clipping detected"
     return out
@@ -245,42 +266,3 @@ def _steer_torque(steer_torque: np.ndarray | None, moving: np.ndarray) -> dict:
             "hardware rating"
         ),
     }
-
-
-def _areas_of_concern(noise: dict, ffb: dict) -> dict:
-    """Descriptive brake-pedal / sensor watch items drawn from the blocks above.
-
-    Observations, never a verdict or health score: each entry names what a
-    channel showed and where the watch heuristic sits, and an all-clear session
-    returns an explicit "nothing to flag" finding rather than an empty silence.
-    """
-    concerns: list[dict] = []
-
-    spike_ticks = noise.get("spike_ticks")
-    if isinstance(spike_ticks, int) and spike_ticks > 0:
-        concerns.append({
-            "area": "brake sensor noise",
-            "observation": (
-                f"{spike_ticks} of {noise.get('qualifying_ticks')} full-throttle "
-                f"ticks read a nonzero brake (peak {noise.get('max_spike')}), "
-                "where the pedal should be silent"
-            ),
-            "watch": _NOISE_CAVEAT,
-        })
-
-    clip = ffb.get("clipping_pct")
-    if isinstance(clip, (int, float)) and clip >= _FFB_CLIP_CONCERN_PCT:
-        concerns.append({
-            "area": "force-feedback clipping",
-            "observation": (
-                f"FFB torque clipped against the stops on {clip}% of moving "
-                "ticks — detail is lost wherever it saturates"
-            ),
-            "watch": f"flagged past {_FFB_CLIP_CONCERN_PCT:.0f}% of moving ticks",
-        })
-
-    out: dict = {"concerns": concerns}
-    if not concerns:
-        out["finding"] = "no brake-pedal or sensor concerns detected this session"
-    out["caveat"] = "watch items, not diagnoses; a trend needs multiple sessions"
-    return out

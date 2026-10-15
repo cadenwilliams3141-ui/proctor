@@ -210,15 +210,22 @@ def test_hardware_reports_column_torque_in_newton_metres():
     assert 0.0 <= block["at_own_max_pct"] <= 100.0
 
 
-def test_hardware_keeps_every_existing_block():
-    """The golden numbers live in these keys; the new block must not disturb them."""
-    payload = hardware.compute(_session())
-    for key in (
-        "basis", "brake_vs_raw", "abs", "brake_bias",
-        "pedal_noise_floor", "ffb", "areas_of_concern", "caveat",
-    ):
-        assert key in payload
-    assert payload["brake_vs_raw"]["ceiling_note"] == "your own max this session, not a hardware limit"
+def test_golden_numbers_keep_their_homes():
+    """Where each CLAUDE.md golden number lives. Moving one breaks this, on purpose.
+
+    Brake ceiling (89.8% on Long Beach) is input_response.brake.pedal_ceiling_pct
+    -- the same max-BrakeRaw-while-moving it was under hardware.brake_vs_raw,
+    which no longer exists. The 69 noise spikes are still
+    hardware.pedal_noise_floor.spike_ticks.
+    """
+    from proctor_parser.analysis import input_response
+
+    session = _session()
+    hw = hardware.compute(session)
+    for key in ("basis", "brake_bias", "pedal_noise_floor", "ffb", "steer_torque", "caveat"):
+        assert key in hw
+    assert "spike_ticks" in hw["pedal_noise_floor"]
+    assert input_response.compute(session)["brake"]["pedal_ceiling_pct"] == 80.0
 
 
 def test_hardware_torque_absent_is_absent_not_zero():

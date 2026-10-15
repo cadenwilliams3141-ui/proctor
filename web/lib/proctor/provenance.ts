@@ -79,7 +79,7 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
   },
   "brake.ceiling": {
     provenance: "measured",
-    note: "Your own maximum brake application while moving, not a hardware limit. Samples below 5 m/s are excluded because the sim forces brake to 1.0 when stopped.",
+    note: "Your hardest brake press while moving — your maximum this session, not the pedal's. Below 5 m/s is excluded because the sim forces the brake on when stopped.",
   },
   "lap.reference": {
     provenance: "measured",
@@ -95,7 +95,11 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
   },
   "input.response": {
     provenance: "measured",
-    note: "Both sides of each control are recorded: the pedal sensor under your foot and the pressure the car applied, the throttle you asked for and the wheel speeds that resulted, the lock you turned and the lateral force that came back. The gap between them is measured, not inferred.",
+    note: "Both sides are recorded channels: pedal against applied pressure, throttle against wheel speeds, lock against lateral g. The gap is measured, not inferred.",
+  },
+  "pedal.signal": {
+    provenance: "measured",
+    note: "Read only while you were flat on the throttle, so a brake signal there came from the rig, not from you. One session is a baseline; watch whether the count grows.",
   },
   "stint.trend": {
     provenance: "derived",

@@ -510,8 +510,6 @@ export function inputResponseFrom(metrics: MetricPayloads): InputResponseData | 
     brake: take("brake", "brake"),
     throttle: take("throttle", "throttle"),
     steering: take("steering", "steering"),
-    wheel: take("wheel", "force-feedback"),
-    findings: Array.isArray(ir.findings) ? ir.findings.map(String) : [],
     caveat: String(ir.caveat ?? ""),
   };
 }
@@ -697,76 +695,87 @@ export function contactPatchFrom(metrics: MetricPayloads): ContactPatchData | nu
 }
 
 
-/** The rig block, flattened to what the Rig screen renders.
+/** The rig block, flattened to what the Physics screen renders.
  *
  *  Every field is nullable, and null reaches the screen as an em dash. The
  *  screen used to carry these numbers as literals in its own source; it does
- *  not any more, because a hardcoded 93.4 survives a session change. */
+ *  not any more, because a hardcoded 93.4 survives a session change.
+ *
+ *  LEGACY PAYLOADS. Sessions ingested before 2026-10-15 carry brake_vs_raw,
+ *  abs and areas_of_concern here and no `flagged` keys. The ceiling is kept
+ *  (same definition as input_response's; see lib/proctor/pedals.ts), the ABS is
+ *  not (different definition), and the flags are recovered from the
+ *  areas_of_concern list that module wrote at the time — never re-derived here
+ *  from a threshold copied into this file. */
 export function hardwareFrom(metrics: MetricPayloads): HardwareData | null {
   const h = block(metrics, "hardware");
   if (!ran(h)) return null;
 
   const num = (v: unknown): number | null => {
     const n = Number(v);
-    return Number.isFinite(n) ? n : null;
+    return v != null && Number.isFinite(n) ? n : null;
   };
   const sub = (key: string): Payload => {
     const v = h[key];
     return v && typeof v === "object" ? (v as Payload) : {};
   };
+  const str = (v: unknown) => (v == null ? undefined : String(v));
 
   const bvr = sub("brake_vs_raw");
-  const abs = sub("abs");
   const noise = sub("pedal_noise_floor");
+  const brief = noise.brief_spikes && typeof noise.brief_spikes === "object"
+    ? (noise.brief_spikes as Payload)
+    : null;
   const ffb = sub("ffb");
   const torque = sub("steer_torque");
   const bias = sub("brake_bias");
-  const aoc = sub("areas_of_concern");
+  const legacyAreas = new Set(
+    Array.isArray(sub("areas_of_concern").concerns)
+      ? (sub("areas_of_concern").concerns as Payload[]).map((c) => String(c.area ?? ""))
+      : [],
+  );
+  // A per-card pedal flag is just "count > 0", decided on screen. FFB's needs
+  // the module's threshold, so it travels as a boolean — or, on a legacy
+  // payload, as the area name that module listed when it was flagged.
+  const flag = (v: unknown, legacyArea: string) =>
+    typeof v === "boolean" ? v : legacyAreas.has(legacyArea);
 
   return {
     brake_ceiling_pct: num(bvr.brake_ceiling_pct),
-    max_abs_diff: num(bvr.max_abs_diff),
-    stationary_ticks_excluded: num(bvr.stationary_ticks_excluded),
-    brake_reason: bvr.reason == null ? undefined : String(bvr.reason),
-    abs: {
-      engaged_pct_of_braking: num(abs.engaged_pct_of_braking),
-      activation_events: num(abs.activation_events),
-      braking_ticks: num(abs.braking_ticks),
-      finding: abs.finding == null ? undefined : String(abs.finding),
-      reason: abs.reason == null ? undefined : String(abs.reason),
-    },
+    brake_reason: str(bvr.reason),
     pedal_noise: {
       spike_ticks: num(noise.spike_ticks),
       max_spike: num(noise.max_spike),
       qualifying_ticks: num(noise.qualifying_ticks),
-      reason: noise.reason == null ? undefined : String(noise.reason),
+      brief: brief
+        ? {
+            events: num(brief.events) ?? 0,
+            peak_pct: num(brief.peak_pct),
+            max_duration_ms: num(brief.max_duration_ms) ?? 0,
+            min_reading_pct: num(brief.min_reading_pct) ?? 0,
+          }
+        : null,
+      reason: str(noise.reason),
     },
     ffb: {
       clipping_pct: num(ffb.clipping_pct),
-      finding: ffb.finding == null ? undefined : String(ffb.finding),
-      reason: ffb.reason == null ? undefined : String(ffb.reason),
+      flagged: flag(ffb.flagged, "force-feedback clipping"),
+      flag_threshold_pct: num(ffb.flag_threshold_pct),
+      reason: str(ffb.reason),
     },
     steerTorque: {
       available: torque.available === true,
       median_nm: num(torque.median_nm),
       peak_nm: num(torque.peak_nm),
       at_own_max_pct: num(torque.at_own_max_pct),
-      reason: torque.reason == null ? undefined : String(torque.reason),
+      reason: str(torque.reason),
     },
     brake_bias: {
       available: bias.available === true,
       values: Array.isArray(bias.values) ? nums(bias.values) : undefined,
       changed: bias.changed_during_session === true,
-      reason: bias.reason == null ? undefined : String(bias.reason),
+      reason: str(bias.reason),
     },
-    concerns: Array.isArray(aoc.concerns)
-      ? (aoc.concerns as Payload[]).map((c) => ({
-          area: String(c.area ?? ""),
-          observation: String(c.observation ?? ""),
-          watch: String(c.watch ?? ""),
-        }))
-      : [],
-    concerns_finding: aoc.finding == null ? null : String(aoc.finding),
   };
 }
 

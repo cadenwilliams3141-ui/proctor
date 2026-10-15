@@ -2,6 +2,7 @@
 
 import json
 
+import numpy as np
 import pytest
 
 from proctor_parser import parse_ibt
@@ -15,15 +16,16 @@ def _session(**kwargs):
 
 # --- hardware -------------------------------------------------------------
 
-def test_hardware_brake_vs_raw_excludes_stationary():
+def test_hardware_owns_only_the_rig():
+    """Driver-vs-car numbers live in input_response; this module does not repeat them.
+
+    Two copies drifted before: the ABS share here counted braking off the
+    applied channel and input_response off the pedal, so two screens printed
+    different figures for one session.
+    """
     payload = hardware.compute(_session())
-    bvr = payload["brake_vs_raw"]
-    # The synthetic's forced stationary auto-brake ticks exist and must be
-    # excluded; with them gone there is no moving Brake-vs-BrakeRaw divergence.
-    assert bvr["stationary_ticks_excluded"] > 0
-    assert bvr["max_abs_diff"] < 0.01
-    # Synthetic braking maxes at 0.8 while moving -> demonstrated ceiling 80%.
-    assert bvr["brake_ceiling_pct"] == 80.0
+    for gone in ("brake_vs_raw", "abs", "areas_of_concern"):
+        assert gone not in payload
 
 
 def test_hardware_pedal_noise_floor_clean():
@@ -31,14 +33,10 @@ def test_hardware_pedal_noise_floor_clean():
     # Full-throttle straights are silent on the synthetic: zero spikes.
     assert noise["spike_ticks"] == 0
     assert noise["qualifying_ticks"] > 0
-
-
-def test_hardware_abs_all_zeros_is_honest():
-    abs_block = hardware.compute(_session())["abs"]
-    # BrakeABSactive is all zeros but braking ticks exist: honest 0%, 0 events.
-    assert abs_block["engaged_pct_of_braking"] == 0.0
-    assert abs_block["activation_events"] == 0
-    assert abs_block["finding"] == "no ABS engagement detected"
+    assert noise["brief_spikes"]["events"] == 0
+    assert noise["brief_spikes"]["peak_pct"] is None
+    assert noise["flagged"] is False
+    assert noise["finding"] == "no brake signal while you were flat on the throttle"
 
 
 def test_hardware_brake_bias_available():
@@ -50,26 +48,82 @@ def test_hardware_brake_bias_available():
     assert bias["changed_during_session"] is False
 
 
-def test_hardware_areas_of_concern_clean_session():
-    aoc = hardware.compute(_session())["areas_of_concern"]
-    # Silent pedal, no FFB clipping on the synthetic: nothing to flag, said so.
-    assert aoc["concerns"] == []
-    assert "no brake-pedal or sensor concerns" in aoc["finding"]
-    assert json.loads(json.dumps(aoc))
-
-
-def test_hardware_areas_of_concern_flags_pedal_noise():
+def test_hardware_flags_sub_band_pedal_noise():
     ch = make_core_channels()
     br = ch["BrakeRaw"].copy()
     # Nonzero brake-sensor reading on full-throttle straights = a noise spike.
     br[ch["Throttle"] > 0.9] = 0.02
     ch["BrakeRaw"] = br
-    session = parse_ibt(build_ibt(ch))[0]
+    noise = hardware.compute(parse_ibt(build_ibt(ch))[0])["pedal_noise_floor"]
+    assert noise["spike_ticks"] > 0
+    assert noise["flagged"] is True
+    assert "finding" not in noise  # a real signal -> not the all-clear path
+    assert json.loads(json.dumps(noise))
 
-    aoc = hardware.compute(session)["areas_of_concern"]
-    assert any(c["area"] == "brake sensor noise" for c in aoc["concerns"])
-    assert "finding" not in aoc  # a real concern -> not the all-clear path
-    assert json.loads(json.dumps(aoc))
+
+def _full_throttle_moving(ch):
+    """Indices of a long full-throttle, moving stretch in lap 2 of the synthetic."""
+    full = (ch["Throttle"] > 0.9) & (ch["Speed"] > 5.0)
+    idx = np.flatnonzero(full)
+    return idx[(idx > 2 * 720 + 100) & (idx < 2 * 720 + 600)]
+
+
+def test_hardware_counts_a_brief_spike_the_noise_floor_cannot_see():
+    """A one-frame jump to 30% is the fault a driver wants told about.
+
+    The sub-5% noise floor excludes it by construction -- its qualifying ticks
+    stop at 5% -- so before this check it went uncounted entirely.
+    """
+    ch = make_core_channels()
+    at = _full_throttle_moving(ch)[50]
+    br = ch["BrakeRaw"].copy()
+    br[at : at + 2] = 0.3  # 2 ticks = 33 ms at 60 Hz: no foot does that
+    ch["BrakeRaw"] = br
+    noise = hardware.compute(parse_ibt(build_ibt(ch))[0])["pedal_noise_floor"]
+    assert noise["brief_spikes"]["events"] == 1
+    assert noise["brief_spikes"]["peak_pct"] == 30.0
+    assert noise["spike_ticks"] == 0, "the original sub-5% count must not move"
+    assert noise["flagged"] is True
+
+
+def test_hardware_left_foot_overlap_is_not_a_spike():
+    """Brake applied before the throttle lifts, and held: the driver, not the sensor."""
+    ch = make_core_channels()
+    at = _full_throttle_moving(ch)[100]
+    br = ch["BrakeRaw"].copy()
+    th = ch["Throttle"].copy()
+    br[at : at + 30] = 0.5      # half a second of brake...
+    th[at + 3 : at + 30] = 0.0  # ...that started 3 ticks before the lift
+    ch["BrakeRaw"] = br
+    ch["Throttle"] = th
+    noise = hardware.compute(parse_ibt(build_ibt(ch))[0])["pedal_noise_floor"]
+    assert noise["brief_spikes"]["events"] == 0
+
+
+def test_hardware_brief_spike_while_stationary_is_ignored():
+    ch = make_core_channels()
+    at = _full_throttle_moving(ch)[50]
+    br = ch["BrakeRaw"].copy()
+    sp = ch["Speed"].copy()
+    br[at : at + 2] = 0.3
+    sp[at - 5 : at + 5] = 0.0
+    ch["BrakeRaw"] = br
+    ch["Speed"] = sp
+    noise = hardware.compute(parse_ibt(build_ibt(ch))[0])["pedal_noise_floor"]
+    assert noise["brief_spikes"]["events"] == 0
+
+
+def test_hardware_ffb_flag_follows_its_threshold():
+    clean = hardware.compute(_session())["ffb"]
+    assert clean["flagged"] is False
+
+    ch = make_core_channels()
+    stops = ch["SteeringWheelPctTorqueSignStops"].copy()
+    stops[: len(stops) // 4] = 1.0
+    ch["SteeringWheelPctTorqueSignStops"] = stops
+    ffb = hardware.compute(parse_ibt(build_ibt(ch))[0])["ffb"]
+    assert ffb["clipping_pct"] >= ffb["flag_threshold_pct"]
+    assert ffb["flagged"] is True
 
 
 def test_hardware_ffb_clipping_counts_both_steering_directions():

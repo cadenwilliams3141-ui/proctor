@@ -43,6 +43,62 @@ SWEEP_SESSION=1 SWEEP_TIER=deep node scripts/responsive-sweep.mjs
 Worth running at least `SWEEP_SESSION=1` (nine clean laps) and
 `SWEEP_SESSION=3` (**none** clean). The second is the one that catches spinners
 that never resolve, because a session with no reference lap never seats a lap A.
+Also sweep `SWEEP_TIER=everything`, which is the most content the layout ever
+holds — every fold open at once.
+
+### What it looks at, and what it once did not
+
+Sideways: page errors, and anything past the right edge with no scroll container
+behind it. Downwards, since 2026-09-05: `v-spill` (a box shorter than its own
+content that no ancestor can scroll to) and `text-overlap` (two runs of body
+text drawn on top of each other).
+
+**The vertical pair exists because this script once passed a screen that was
+visibly broken.** On 2026-09-01 it reported "0 problems everywhere" over ~180
+page loads. A driver then photographed the Where-it-went detail panel printing
+its honesty note straight across its own peak-lateral and tyre-temperature
+readings — a panel squeezed below its content height by a flex parent, spilling
+over the note beneath it. Every check in the list looked sideways; nothing
+looked down. A sweep that cannot see the bug in the screenshot is not evidence,
+however many page loads it makes.
+
+Two lessons are baked into how those checks are written, both learned by getting
+them wrong first:
+
+* **Overflowing a box is not by itself a fault.** A scrub handle taller than its
+  4px rail overflows on purpose and nothing is lost. `v-spill` therefore follows
+  the content to where it actually reaches and asks whether the first ancestor
+  that decides its fate scrolls (fine) or hides it *and* the content really does
+  pass that edge (a bug).
+* **`getBoundingClientRect` reports where a box WOULD be, not what the reader
+  sees.** A row scrolled out of a pane still has a rect, and that rect can sit
+  squarely on the footer below the pane. Every rect used by `text-overlap` is
+  intersected with the client box of every clipping ancestor first, or every
+  scrolling list on the page invents overlaps — the same mistake the right-edge
+  check made in its first version, when it kept 51 findings that were all fine.
+
+### Sweep every VIEW, not just every screen
+
+Analyze is four layouts behind `?view=`, sharing nothing but the selection. For
+its first year the sweep opened only the default, so `ribbon`, `map` and `line`
+— 2,100 lines between them — had never been looked at. The run that first
+included them found all three running off the right edge of a 768px tablet, the
+map view with 104 elements past the edge and its whole right half unreachable.
+`DESKTOP_SCREENS` carries the views explicitly for that reason; a new view
+belongs in that list on the day it ships.
+
+### Two traps in the run itself
+
+* **A stale server is worse than no server.** `next start` keeps serving HTML
+  that references the CSS hash of the build it started with. Rebuild underneath
+  it and every page renders unstyled, the stylesheet 400s, and the sweep dutifully
+  reports findings about a layout that does not exist. Kill the old process
+  before each run — and if `npx next start` prints `EADDRINUSE`, the sweep you
+  are about to run is measuring the OLD build.
+* **Playwright may not own the browser.** Where the machine already has Chromium
+  (a `PLAYWRIGHT_BROWSERS_PATH` install), a freshly installed `playwright` looks
+  for a build number it does not have. Point `SWEEP_CHROME` at the binary that is
+  actually there rather than downloading another.
 
 ### Caveat on step 3
 

@@ -101,7 +101,7 @@ export function techniqueForInputResponse(ir: InputResponseData | null): Techniq
     notes.push({
       because: "the ABS took pressure back on some share of your braking",
       body:
-        "ABS engaging means the pressure being asked for exceeded what the front tyres could hold at that moment. Conventionally it is treated as a ceiling being found rather than a fault: it is doing its job, but while it is modulating, the pedal is no longer the thing deciding how hard the car stops.",
+        "ABS engaging means more pressure was asked for than the tyres could hold at that moment. It is usually read as a ceiling being found rather than a fault — but while it modulates, the pedal no longer decides how hard the car stops.",
     });
   }
 
@@ -110,7 +110,7 @@ export function techniqueForInputResponse(ir: InputResponseData | null): Techniq
     notes.push({
       because: "a wheel ran ahead of the ground for some share of your time on power",
       body:
-        "A driven wheel turning faster than the car is travelling is converting engine torque into heat and tyre wear instead of forward motion. Past a few percent of slip, most tyres deliver less drive, not more — which is why traction is usually described as something a car is given rather than something it is asked for.",
+        "A driven wheel turning faster than the car is travelling turns engine torque into heat and tyre wear instead of drive. Past a few percent of slip, most tyres deliver less drive, not more.",
     });
   }
 
@@ -119,7 +119,7 @@ export function techniqueForInputResponse(ir: InputResponseData | null): Techniq
     notes.push({
       because: "lateral grip stopped rising past your most productive steering band",
       body:
-        "Once lateral force stops growing with lock, additional steering is adding slip angle without adding grip — the front tyres are past their peak. This is the same event the column torque reports, seen on the other axis, and the two agreeing is the strongest version of the finding.",
+        "Once lateral force stops growing with lock, extra steering adds slip angle without adding grip — the front tyres are past their peak. Column torque reports the same event; the two agreeing is the strongest version of the finding.",
     });
   }
   return notes;

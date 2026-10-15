@@ -231,6 +231,11 @@ def test_input_response_brake_pedal_against_applied():
     # Synthetic Brake and BrakeRaw agree while moving: nothing was held back.
     assert brake["mean_held_back_pct"] == pytest.approx(0.0, abs=1e-6)
     assert brake["pedal_ceiling_pct"] == pytest.approx(80.0, abs=0.1)
+    # The forced stationary auto-brake ticks (Brake=1, BrakeRaw=0) exist and
+    # are excluded; with them gone, nothing was held back.
+    assert brake["stationary_ticks_excluded"] > 0
+    assert brake["abs"]["engaged_pct_of_braking"] == 0.0
+    assert brake["abs"]["activation_events"] == 0
     assert brake["abs"]["finding"] == "the ABS never engaged this session"
 
 
@@ -270,32 +275,19 @@ def test_input_response_steering_bands_carry_lateral_g():
     assert steering["peak_steer_deg"] > 0
 
 
-def test_input_response_wheel_clipping_counts_both_directions():
-    """Same signed-channel bug as hardware._ffb, same fix, its own guard.
+def test_input_response_carries_numbers_not_prose():
+    """The words a driver reads are written in the web app, not stored per session.
 
-    The two modules read SteeringWheelPctTorqueSignStops independently, so a
-    fix to one does not protect the other. Both panels are read side by side
-    on the Forces screen, and disagreeing about whether the wheel clipped is
-    worse than either number alone.
+    These fields were computed on every ingest and rendered nowhere; FFB
+    clipping is hardware's, and per-lap brake response is stint's.
     """
-    shares = []
-    for sign in (1.0, -1.0):
-        ch = make_core_channels()
-        stops = ch["SteeringWheelPctTorqueSignStops"].copy()
-        stops[: len(stops) // 4] = sign
-        ch["SteeringWheelPctTorqueSignStops"] = stops
-        wheel = input_response.compute(parse_ibt(build_ibt(ch))[0])["wheel"]
-        assert wheel["measured"] is True
-        assert "finding" not in wheel, "all-clear reported over a clipped session"
-        shares.append(wheel["clipping_pct_of_moving"])
-
-    assert shares[0] > 0.0
-    assert shares[0] == shares[1], f"sign changed the answer: {shares}"
-
-
-def test_input_response_findings_are_plain_sentences():
-    findings = input_response.compute(_session())["findings"]
-    assert findings and all(isinstance(f, str) and f for f in findings)
+    payload = input_response.compute(_session())
+    for gone in ("wheel", "per_lap", "findings"):
+        assert gone not in payload
+    assert "ceiling_note" not in payload["brake"]
+    assert "note" not in payload["steering"]
+    assert payload["throttle"]["slip"]["threshold_pct"] == 4.0
+    assert payload["basis"] and payload["caveat"]
 
 
 def test_input_response_payload_is_json_serializable():

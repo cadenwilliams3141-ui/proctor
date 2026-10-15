@@ -21,15 +21,17 @@
  * is room to read it. */
 
 import { useMemo } from "react";
-import { Ban } from "lucide-react";
+import { Ban, TriangleAlert } from "lucide-react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import Explain from "@/components/proctor/ui/Explain";
 import Panel from "@/components/proctor/ui/Panel";
 import TechniqueNotes from "@/components/proctor/ui/TechniqueNote";
 import { CH, dim, inkA } from "@/lib/proctor/channels";
+import { equipmentReadings } from "@/lib/proctor/equipment";
 import { explainGrip, explainInputResponse } from "@/lib/proctor/explain";
 import { fixed } from "@/lib/proctor/format";
+import { brakeCeiling } from "@/lib/proctor/pedals";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
 import { techniqueForSteerTorque } from "@/lib/proctor/technique";
@@ -70,7 +72,16 @@ export default function MobileRig() {
 
   /* Every entry reads a module or reports itself unmeasured. `null` renders as
      an em dash with the module's own reason — never as a zero, and never as a
-     number this file made up. */
+     number this file made up.
+
+     SAME SOURCES AS THE DESKTOP. The ABS share here used to come off the
+     hardware module, which counted braking from the applied channel, while the
+     desktop read input_response, which counts it from the pedal — so the two
+     screens could print different figures for one session. Both now read
+     input_response, and the brake ceiling and equipment cards come from the
+     same helpers the desktop uses. */
+  const ceiling = brakeCeiling(hw, ir);
+  const abs = ir?.brake.measured ? ir.brake.abs : undefined;
   const stats: {
     label: string;
     value: number | null;
@@ -79,31 +90,34 @@ export default function MobileRig() {
     bar: number | null;
     color: string;
     note: string;
+    flagged?: boolean;
+    decimals?: number;
   }[] = [
     {
       label: "brake ceiling",
-      value: hw?.brake_ceiling_pct ?? null,
+      value: ceiling.pct,
       unit: "% of pedal",
-      bar: hw?.brake_ceiling_pct ?? null,
+      bar: ceiling.pct,
       color: "var(--color-text)",
-      note:
-        hw?.brake_reason ??
-        (hw?.brake_ceiling_pct == null
-          ? "The hardware module did not run on this session."
-          : "Your own maximum while moving — not a limit of the pedal."),
+      note: ceiling.reason ?? "Your hardest press while moving — your maximum, not the pedal's.",
     },
     {
       label: "ABS engagement",
-      value: hw?.abs.engaged_pct_of_braking ?? null,
+      value: abs?.engaged_pct_of_braking ?? null,
       unit: "% of braking",
-      bar: hw?.abs.engaged_pct_of_braking ?? null,
+      bar: abs?.engaged_pct_of_braking ?? null,
       color: CH.warn,
       note:
-        hw?.abs.finding ??
-        hw?.abs.reason ??
-        (hw?.abs.activation_events != null
-          ? `${hw.abs.activation_events} separate activations this session.`
-          : "Not measured for this session."),
+        ir == null
+          ? (bundle.absences.find((a) => a.key === "input_response")?.short ??
+            "Not measured for this session.")
+          : !ir.brake.measured
+            ? ir.brake.reason
+            : abs == null
+              ? "The file carries no ABS channel."
+              : abs.engaged_pct_of_braking === 0
+                ? "Never engaged this session."
+                : `${abs.activation_events} separate activations.`,
     },
     {
       label: "peak grip used",
@@ -134,35 +148,30 @@ export default function MobileRig() {
             ? "The angle between where the car pointed and where it went, from the car's own velocity."
             : (cp.slip.reason ?? "Not measured for this session."),
     },
-    {
-      label: "wheel against its stops",
-      value: hw?.ffb.clipping_pct ?? null,
-      unit: "% of moving",
-      bar: hw?.ffb.clipping_pct ?? null,
-      color: CH.a,
-      note:
-        hw?.ffb.finding ??
-        hw?.ffb.reason ??
-        "While the wheel is saturated the force stops changing, so that detail never reached your hands.",
-    },
-    {
-      label: "pedal noise floor",
-      value: hw?.pedal_noise.spike_ticks ?? null,
-      unit:
-        hw?.pedal_noise.qualifying_ticks != null
-          ? `of ${hw.pedal_noise.qualifying_ticks.toLocaleString()} ticks`
-          : "spikes",
-      bar:
-        hw?.pedal_noise.spike_ticks != null && hw.pedal_noise.qualifying_ticks
-          ? (hw.pedal_noise.spike_ticks / hw.pedal_noise.qualifying_ticks) * 100
-          : null,
-      color: "var(--color-text)",
-      note:
-        hw?.pedal_noise.reason ??
-        (hw?.pedal_noise.max_spike != null
-          ? `Peak reading ${hw.pedal_noise.max_spike} where the pedal should be silent.`
-          : "Not measured for this session."),
-    },
+    // The rig's own signals, worded once in lib/proctor/equipment.
+    ...(hw
+      ? equipmentReadings(hw).map((r) => ({
+          label: r.label,
+          value: r.value,
+          unit: r.unit,
+          bar: r.bar,
+          color: r.flagged ? CH.warn : r.key === "ffb" ? CH.a : "var(--color-text)",
+          note: r.note,
+          flagged: r.flagged,
+          decimals: r.decimals,
+        }))
+      : [
+          {
+            label: "your equipment",
+            value: null,
+            unit: "",
+            bar: null,
+            color: "var(--color-text)",
+            note:
+              bundle.absences.find((a) => a.key === "hardware")?.short ??
+              "The hardware module did not run on this session.",
+          },
+        ]),
   ];
 
   const answer = [
@@ -173,7 +182,11 @@ export default function MobileRig() {
   return (
     <div>
       <header style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
-        <h1 style={{ font: "500 24px var(--font-heading)", margin: 0 }}>Forces</h1>
+        {/* "Physics", not "Forces". The tab that opens this screen says
+            Physics, the desktop top bar says Physics, and this heading sat
+            directly above a tab bar whose active tab read Physics — one screen
+            wearing two names, six pixels apart. */}
+        <h1 style={{ font: "500 24px var(--font-heading)", margin: 0 }}>Physics</h1>
         <div style={{ fontSize: 12, color: dim(45), marginTop: 2 }}>
           from your foot to the ground, in the order it happened
         </div>
@@ -210,6 +223,9 @@ export default function MobileRig() {
               >
                 {s.label}
               </span>
+              {s.flagged && (
+                <TriangleAlert size={11} strokeWidth={2} color={CH.warn} aria-label="worth watching" />
+              )}
               <span style={{ flex: 1 }} />
               <span
                 className="num"
@@ -218,7 +234,7 @@ export default function MobileRig() {
                   color: s.value == null ? dim(35) : s.color,
                 }}
               >
-                {s.value == null ? "—" : fixed(s.value, s.value >= 100 ? 0 : 2)}
+                {s.value == null ? "—" : fixed(s.value, s.decimals ?? (s.value >= 100 ? 0 : 2))}
               </span>
               <span style={{ fontSize: 10, color: dim(38) }}>{s.unit}</span>
             </div>
@@ -249,6 +265,8 @@ export default function MobileRig() {
             </div>
           </Panel>
         ))}
+
+        {hw && <Caveat>{noteFor("pedal.signal")}</Caveat>}
 
         <Panel padding="var(--space-4)" foot={<Caveat>{noteFor("traction.envelope")}</Caveat>}>
           <div style={{ font: "500 12.5px var(--font-heading)", marginBottom: "var(--space-2)" }}>

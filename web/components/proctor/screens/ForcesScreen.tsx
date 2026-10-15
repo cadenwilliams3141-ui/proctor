@@ -33,11 +33,17 @@
  * THE NUMBERS ARE REAL. The cards here once carried a brake ceiling of "93.4"
  * and an FFB figure of "1.87" as literals in this file's own source. They come
  * off the modules now, and where a module could not measure one, it says so
- * rather than printing a number. */
+ * rather than printing a number. *
+ * YOUR EQUIPMENT sits after the chain, unnumbered, because it is not part of
+ * it: the brake sensor reading while your foot was on the throttle, and the
+ * wheel clipping at its limit, are the rig talking — not you, not the car.
+ * It replaced a "worth keeping an eye on" panel that repeated two cards
+ * from step 01 word for word. */
 
 import { useMemo } from "react";
 import { Ban, CircleAlert, Gauge, TriangleAlert } from "lucide-react";
 
+import Absences from "@/components/proctor/ui/Absences";
 import Answer, { Evidence, HeroNumber, Step } from "@/components/proctor/ui/Answer";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Explain from "@/components/proctor/ui/Explain";
@@ -52,9 +58,12 @@ import {
   explainPattern,
   wheelName,
 } from "@/lib/proctor/explain";
+import { equipmentReadings } from "@/lib/proctor/equipment";
 import { fixed } from "@/lib/proctor/format";
+import { brakeCeiling } from "@/lib/proctor/pedals";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
+import { atLeast, hiddenNote } from "@/lib/tier";
 import {
   techniqueForGrade,
   techniqueForInputResponse,
@@ -71,8 +80,31 @@ import {
   type TrackEvent,
 } from "@/lib/proctor/types";
 
+/* Absences this screen states in its own words, where the reader went looking
+   for the number. The summary block at the foot skips them, so one missing
+   measurement is reported once rather than twice.
+
+   Tier-dependent, and that is the whole difficulty. A section a lower detail
+   level does not render is not voicing anything — the same rule that took
+   `input_response` off ReportScreen's list when it moved behind a fold. Steps
+   03 and 05 are the only places contact_patch is voiced, and both are
+   deep-only, so at "glance" that key MUST fall through to the summary block.
+   Get this wrong and turning the detail down silently deletes a negative
+   result, which is the one thing the honesty rules exist to prevent. */
+function voicedHere(deep: boolean): ReadonlySet<string> {
+  const keys = [
+    "input_response", // → step 02's ResponseRow, always rendered
+    "hardware", // → the equipment section's Missing, always rendered
+    "grip", // → step 04's Missing, always rendered
+    "traction_circle", // → TractionCircle's own empty state, always rendered
+  ];
+  // Steps 03 and 05 are the only voices contact_patch has.
+  if (deep) keys.push("contact_patch");
+  return new Set(keys);
+}
+
 export default function ForcesScreen() {
-  const { bundle } = useProctor();
+  const { bundle, state } = useProctor();
 
   const lockups = useMemo(
     () => (bundle ? bundle.events.filter((e) => e.kind === "lockup") : []),
@@ -91,6 +123,26 @@ export default function ForcesScreen() {
   const grip = bundle.grip;
   const ir = bundle.inputResponse;
   const cp = bundle.contactPatch;
+
+  const deep = atLeast(state.tier, "deep");
+
+  /* "Glance" promises "the answer and little else" (lib/tier.ts) and on this
+     screen it was delivering 10,827 characters — byte for byte what "deep"
+     showed, because nothing here read the tier at all. The chain's first two
+     steps ARE the answer, and step 04 carries the traction circle that was
+     deliberately surfaced on 2026-09-01, so those stay. What comes off is the
+     three sections a reader at a glance did not ask for: the torque the wheel
+     returned, the slip angle, and the road's slope underneath both.
+
+     COUNTED, NOT ASSUMED. The Decision of 2026-07-23 requires the "N panels
+     hidden" note to be RIGHT — claiming a panel is hidden when none is teaches
+     the reader to ignore the note. GradeSection renders nothing at all unless
+     the grade was measured, so a hardcoded 3 would over-count on every session
+     without elevation. The count is derived from the same conditions the
+     sections themselves use. */
+  const gradeDrawn = Boolean(cp?.grade?.measured);
+  const hidden = deep ? 0 : 2 + (gradeDrawn ? 1 : 0);
+  const note = hiddenNote(state.tier, hidden);
 
   /* The answer this screen exists to give, in sentences. Grip first because it
      is the end of the chain — what the ground actually gave — and the inputs
@@ -132,7 +184,7 @@ export default function ForcesScreen() {
         title="What the car did with it"
         sub="where the electronics or the tyres took some of it back"
       >
-        <ResponseRow ir={ir} hw={hw} absences={bundle.absences} />
+        <ResponseRow ir={ir} absences={bundle.absences} />
         <TechniqueNotes notes={techniqueForInputResponse(ir)} />
         <Evidence
           label="Show every moment a wheel let go"
@@ -151,15 +203,22 @@ export default function ForcesScreen() {
         </Evidence>
       </Step>
 
-      {/* ═══ 03 What came back through the wheel ════════════════════════════ */}
-      <Step
-        n={3}
-        title="What came back through the wheel"
-        sub="the front tyres, reported in newton-metres at your hands"
-      >
-        <TorqueSection cp={cp} hw={hw} absences={bundle.absences} />
-        <TechniqueNotes notes={techniqueForSteerTorque(cp)} />
-      </Step>
+      {/* ═══ 03 What came back through the wheel ════════════════════════════
+          Deep and up. The technique note travels WITH its section rather than
+          being gated separately: a note hangs off a measured finding, so a note
+          left on screen after its measurement was hidden would be the only
+          thing said about the subject — which is exactly what the 2026-08-27
+          rule forbids. */}
+      {deep && (
+        <Step
+          n={3}
+          title="What came back through the wheel"
+          sub="the front tyres, reported in newton-metres at your hands"
+        >
+          <TorqueSection cp={cp} hw={hw} absences={bundle.absences} />
+          <TechniqueNotes notes={techniqueForSteerTorque(cp)} />
+        </Step>
+      )}
 
       {/* ═══ 04 What the ground gave ════════════════════════════════════════ */}
       <Step
@@ -210,18 +269,32 @@ export default function ForcesScreen() {
       </Step>
 
       {/* ═══ 05 Where the car pointed against where it went ═════════════════ */}
-      <Step
-        n={5}
-        title="Where the car pointed, against where it went"
-        sub="slip angle, measured from the car's own velocity"
-      >
-        <SlipSection cp={cp} absences={bundle.absences} />
-        <TechniqueNotes notes={techniqueForSlip(cp)} />
-      </Step>
+      {deep && (
+        <Step
+          n={5}
+          title="Where the car pointed, against where it went"
+          sub="slip angle, measured from the car's own velocity"
+        >
+          <SlipSection cp={cp} absences={bundle.absences} />
+          <TechniqueNotes notes={techniqueForSlip(cp)} />
+        </Step>
+      )}
 
       {/* ── The road under all of it ──────────────────────────────────────── */}
-      <GradeSection cp={cp} />
-      <TechniqueNotes notes={techniqueForGrade(cp)} />
+      {deep && (
+        <>
+          <GradeSection cp={cp} />
+          <TechniqueNotes notes={techniqueForGrade(cp)} />
+        </>
+      )}
+
+      {/* ── Your equipment ──────────────────────────────────────────────────
+          Every tier. A pedal sending signals that were not the driver is the
+          one thing on this screen about the rig rather than the lap, and it is
+          what a driver needs to hear about before trusting step 01. */}
+      <Step title="Your equipment" sub="signals from the rig, not from you">
+        <EquipmentCards hw={hw} absences={bundle.absences} />
+      </Step>
 
       {/* ── The walls ─────────────────────────────────────────────────────── */}
       <Panel padding="var(--space-4)" style={{ marginTop: "var(--space-6)" }}>
@@ -238,28 +311,20 @@ export default function ForcesScreen() {
         </div>
       </Panel>
 
-      {hw && hw.concerns.length > 0 && (
-        <Panel
-          title="Worth keeping an eye on"
-          sub="watch items, not diagnoses"
-          padding="var(--space-4)"
-          style={{ marginTop: "var(--space-4)" }}
-        >
-          {hw.concerns.map((c) => (
-            <div key={c.area} style={{ display: "flex", gap: 9, alignItems: "flex-start", marginBottom: 10 }}>
-              <TriangleAlert size={13} strokeWidth={1.9} color={CH.warn} style={{ flex: "none", marginTop: 2 }} />
-              <div>
-                <div style={{ font: "500 12px var(--font-heading)", marginBottom: 2 }}>{c.area}</div>
-                <div style={{ fontSize: 11.5, color: dim(62), lineHeight: 1.55 }}>{c.observation}</div>
-                <div style={{ fontSize: 10.5, color: dim(38), marginTop: 2 }}>{c.watch}</div>
-              </div>
-            </div>
-          ))}
-        </Panel>
+      {/* ── What is not here ───────────────────────────────────────────────
+          This screen folded charts behind <Evidence> and now gates three
+          sections by tier, and it had NO summary block at all — so an absence
+          whose only voice was one of those sections was reported nowhere the
+          moment either mechanism hid it. Absences are never tier-gated, so
+          this block renders at every detail level and `voicedHere` widens as
+          the tier narrows. */}
+      {note && (
+        <div style={{ marginTop: "var(--space-6)", fontSize: 10.5, color: dim(42) }}>{note}</div>
       )}
-      {hw && hw.concerns.length === 0 && hw.concerns_finding && (
-        <Caveat maxWidth={700}>{hw.concerns_finding}</Caveat>
-      )}
+
+      <section style={{ marginTop: "var(--space-8)" }}>
+        <Absences absences={bundle.absences} exclude={voicedHere(deep)} />
+      </section>
     </div>
   );
 }
@@ -289,6 +354,8 @@ function Stat({
   bar,
   note,
   color = "var(--color-text)",
+  flagged = false,
+  decimals,
   i = 0,
 }: {
   label: string;
@@ -297,20 +364,30 @@ function Stat({
   bar: number | null;
   note: string;
   color?: string;
+  /** Worth watching: warn tone and a marker, so it reads before the note does. */
+  flagged?: boolean;
+  /** Fixed places; omitted, 2 below 100 and 0 above (the old behaviour). */
+  decimals?: number;
   i?: number;
 }) {
+  if (flagged) color = CH.warn;
   return (
     <Panel
       padding="var(--space-4)"
       style={{ animation: "fadeUp .4s both", animationDelay: `${(0.05 + i * 0.05).toFixed(2)}s` }}
     >
-      <Eyebrow size={9.5}>{label}</Eyebrow>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <Eyebrow size={9.5}>{label}</Eyebrow>
+        {flagged && (
+          <TriangleAlert size={12} strokeWidth={2} color={CH.warn} aria-label="worth watching" />
+        )}
+      </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 2 }}>
         <span
           className="num"
           style={{ font: "500 26px var(--font-heading)", color: value == null ? dim(35) : color }}
         >
-          {value == null ? "—" : fixed(value, value >= 100 ? 0 : 2)}
+          {value == null ? "—" : fixed(value, decimals ?? (value >= 100 ? 0 : 2))}
         </span>
         <span style={{ fontSize: 10.5, color: dim(38) }}>{unit}</span>
       </div>
@@ -344,24 +421,16 @@ const GRID = {
 /** Step 1: the driver's side of the chain — what was asked for, nothing else. */
 function InputCards({ hw, ir }: { hw: HardwareData | null; ir: InputResponseData | null }) {
   const lock = ir?.steering.measured ? ir.steering.peak_steer_deg : null;
+  const ceiling = brakeCeiling(hw, ir);
   return (
     <div style={GRID}>
       <Stat
         i={0}
         label="brake ceiling"
-        value={hw?.brake_ceiling_pct ?? null}
+        value={ceiling.pct}
         unit="% of pedal travel"
-        bar={hw?.brake_ceiling_pct ?? null}
-        note={
-          hw?.brake_reason ??
-          (hw?.brake_ceiling_pct == null
-            ? "The hardware module did not run on this session."
-            : `Your own maximum while moving${
-                hw.stationary_ticks_excluded != null
-                  ? `, with ${hw.stationary_ticks_excluded.toLocaleString()} stationary ticks excluded`
-                  : ""
-              } — not a limit of the pedal.`)
-        }
+        bar={ceiling.pct}
+        note={ceiling.reason ?? "Your hardest press while moving — your maximum, not the pedal's."}
       />
       <Stat
         i={1}
@@ -369,58 +438,44 @@ function InputCards({ hw, ir }: { hw: HardwareData | null; ir: InputResponseData
         value={lock ?? null}
         unit="° of steering"
         bar={lock == null ? null : Math.min(100, (lock / 180) * 100)}
-        note={
-          lock == null
-            ? "Not measured for this session."
-            : "The most steering you asked for at any point while moving."
-        }
-      />
-      <Stat
-        i={2}
-        label="pedal noise floor"
-        value={hw?.pedal_noise.spike_ticks ?? null}
-        unit={
-          hw?.pedal_noise.qualifying_ticks != null
-            ? `of ${hw.pedal_noise.qualifying_ticks.toLocaleString()} full-throttle ticks`
-            : "spikes"
-        }
-        bar={
-          hw?.pedal_noise.spike_ticks != null && hw.pedal_noise.qualifying_ticks
-            ? (hw.pedal_noise.spike_ticks / hw.pedal_noise.qualifying_ticks) * 100
-            : null
-        }
-        note={
-          hw?.pedal_noise.reason ??
-          (hw?.pedal_noise.max_spike != null
-            ? `Peak reading ${hw.pedal_noise.max_spike} where the pedal should be silent.`
-            : "Not measured for this session.")
-        }
-      />
-      <Stat
-        i={3}
-        label="wheel against its stops"
-        value={hw?.ffb.clipping_pct ?? null}
-        unit="% of moving"
-        bar={hw?.ffb.clipping_pct ?? null}
-        color={CH.a}
-        note={
-          hw?.ffb.finding ??
-          hw?.ffb.reason ??
-          "While the wheel is saturated the force stops changing, so that detail never reached your hands."
-        }
+        note={lock == null ? "Not measured for this session." : "The most steering you used while moving."}
       />
     </div>
+  );
+}
+
+/** After the chain: the rig's own signals. Words from lib/proctor/equipment. */
+function EquipmentCards({ hw, absences }: { hw: HardwareData | null; absences: ModuleAbsence[] }) {
+  if (!hw) return <Missing absences={absences} k="hardware" />;
+  return (
+    <>
+      <div style={GRID}>
+        {equipmentReadings(hw).map((r, i) => (
+          <Stat
+            key={r.key}
+            i={i}
+            label={r.label}
+            value={r.value}
+            unit={r.unit}
+            bar={r.bar}
+            flagged={r.flagged}
+            decimals={r.decimals}
+            color={r.key === "ffb" ? CH.a : undefined}
+            note={r.note}
+          />
+        ))}
+      </div>
+      <Caveat maxWidth={760} style={{ marginTop: "var(--space-3)" }}>{noteFor("pedal.signal")}</Caveat>
+    </>
   );
 }
 
 /** Step 2: what came back changed. */
 function ResponseRow({
   ir,
-  hw,
   absences,
 }: {
   ir: InputResponseData | null;
-  hw: HardwareData | null;
   absences: ModuleAbsence[];
 }) {
   if (!ir) return <Missing absences={absences} k="input_response" />;
@@ -434,15 +489,18 @@ function ResponseRow({
         <Stat
           i={0}
           label="braking with the ABS in"
-          value={abs?.engaged_pct_of_braking ?? hw?.abs.engaged_pct_of_braking ?? null}
+          value={abs?.engaged_pct_of_braking ?? null}
           unit="% of braking"
-          bar={abs?.engaged_pct_of_braking ?? hw?.abs.engaged_pct_of_braking ?? null}
+          bar={abs?.engaged_pct_of_braking ?? null}
           color={CH.warn}
           note={
-            abs?.finding ??
-            hw?.abs.finding ??
-            hw?.abs.reason ??
-            "The share of your braking where the car was deciding the pressure, not your foot."
+            !ir.brake.measured
+              ? ir.brake.reason
+              : abs == null
+                ? "The file carries no ABS channel."
+                : abs.engaged_pct_of_braking === 0
+                  ? "Never engaged this session."
+                  : "Share of your braking where the ABS set the pressure, not your foot."
           }
         />
         <Stat
@@ -454,8 +512,8 @@ function ResponseRow({
           color={CH.warn}
           note={
             abs?.mean_cut_while_engaged_pct == null
-              ? "The file records that it engaged, but not how much pressure it removed."
-              : "Not the pedal failing — the car deciding the tyres could not hold what you asked for."
+              ? "The file records when it engaged, not how much it removed."
+              : "Average pressure removed while the ABS was in."
           }
         />
         <Stat
@@ -466,10 +524,13 @@ function ResponseRow({
           bar={slip?.share_of_on_power_pct ?? null}
           color={CH.loss}
           note={
-            slip?.finding ??
-            (slip == null
-              ? "Not measured for this session."
-              : `At its worst a wheel was ${fixed(slip.peak_excess_pct, 0)}% ahead of the ground.`)
+            slip == null
+              ? (ir.throttle.measured ? "The file carries no wheel-speed channels." : ir.throttle.reason)
+              : slip.share_of_on_power_pct === 0
+                ? "No wheel spun while you were on power."
+                : `At worst ${fixed(slip.peak_excess_pct, 0)}% faster than the ground${
+                    slip.threshold_pct != null ? `; counted past ${slip.threshold_pct}%` : ""
+                  }.`
           }
         />
         <Stat
@@ -480,7 +541,7 @@ function ResponseRow({
           bar={null}
           note={
             ir.brake.measured && ir.brake.decel_per_pedal_g != null
-              ? "What a fully loaded pedal bought you this session — your own figure, not the car's rating."
+              ? "Median, pedal past half travel. Your figure, not the car's rating."
               : "Not measured for this session."
           }
         />

@@ -102,7 +102,6 @@ describe("technique notes never quote the driver's numbers", () => {
       },
       throttle: { measured: true, slip: { share_of_on_power_pct: 4.2, peak_excess_pct: 31 } },
       steering: { measured: true, falloff_past_peak_g: 0.21, bands: [] },
-      wheel: { measured: true, clipping_pct_of_moving: 0 },
     } as unknown as InputResponseData;
 
     return [

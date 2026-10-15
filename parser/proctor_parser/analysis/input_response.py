@@ -1,10 +1,9 @@
 """What you asked the car for, against what the car actually did (module 14).
 
 Every control in a sim rig is a request. Between the request and the car sits a
-pedal calibration, an ABS controller, four contact patches and a force-feedback
-motor, and each of those can hand back less than was asked for. The .ibt carries
-both sides of that exchange for three of the four controls, so this module puts
-them side by side and reports the gap:
+pedal calibration, an ABS controller and four contact patches, and each of them
+can hand back less than was asked for. The .ibt carries both sides of that
+exchange, so this module puts them side by side and reports the gap:
 
     brake     you pressed BrakeRaw; the car applied Brake, with BrakeABScutPct
               naming the share the ABS took back out
@@ -12,13 +11,14 @@ them side by side and reports the gap:
               which the four wheel-speed channels show against ground speed
     steering  you turned SteeringWheelAngle; the car answered with LatAccel,
               and past some angle more lock stops buying more lateral force
-    wheel     the rig asked for a torque; SteeringWheelPctTorqueSignStops says
-              how often it was already against the stops and had nothing left
 
-The steering block deserves its caveat up front: the angle at which extra lock
-stops producing extra lateral force is measured HERE, from this session's own
-data, and it moves with tires, fuel, and track. It is a description of the
-session, not a limit to aim at.
+ONE OWNER PER NUMBER. This module owns the brake ceiling and the ABS share;
+hardware owns what the rig itself did (pedal noise, FFB clipping). The ABS share
+counts braking from the PEDAL (BrakeRaw), because "your braking" means when your
+foot was on it -- the applied channel drops out exactly where the ABS cuts it.
+
+Payloads carry numbers and the contract's honesty fields. The sentences a driver
+reads are written in the web app, so the copy can change without a re-ingest.
 
 All Brake-vs-BrakeRaw logic runs on moving ticks only (contract rule 1): the sim
 forces Brake=1.0 with BrakeRaw=0 whenever the car is stopped, which would
@@ -96,22 +96,18 @@ def compute(session: ParsedSession) -> dict:
         key: _concat(session, key)
         for key in (
             "brake", "brake_raw", "throttle", "steer", "lat_accel", "long_accel",
-            "abs_active", "abs_cut", "ffb_stops", "ffb_pct",
+            "abs_active", "abs_cut",
             "lf_speed", "rf_speed", "lr_speed", "rr_speed",
         )
     }
 
-    payload = {
+    return {
         "basis": _BASIS,
         "brake": _brake_block(ch, speed, moving),
         "throttle": _throttle_block(ch, speed, moving),
         "steering": _steering_block(ch, moving),
-        "wheel": _wheel_block(ch, moving),
-        "per_lap": _per_lap(session),
         "caveat": _CAVEAT,
     }
-    payload["findings"] = _findings(payload)
-    return payload
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -142,10 +138,6 @@ def _brake_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
         "applied_ceiling_pct": round(100.0 * float(got.max()), 1),
         "mean_held_back_pct": round(100.0 * float(held_back.mean()), 2),
         "max_held_back_pct": round(100.0 * float(held_back.max()), 2),
-        "ceiling_note": (
-            "both ceilings are your own maximum this session, not a hardware "
-            "limit — the channels top out wherever you did"
-        ),
     }
 
     abs_active = ch.get("abs_active")
@@ -165,10 +157,6 @@ def _brake_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
             abs_block["max_pressure_cut_pct"] = round(float(cut.max()), 2)
             if active_cut.size:
                 abs_block["mean_cut_while_engaged_pct"] = round(float(active_cut.mean()), 2)
-            abs_block["cut_note"] = (
-                "BrakeABScutPct is the share of the pressure you asked for that "
-                "the ABS took back out — the gap between the pedal and the car"
-            )
         if share == 0.0 and rising == 0:
             abs_block["finding"] = "the ABS never engaged this session"
         out["abs"] = abs_block
@@ -184,10 +172,6 @@ def _brake_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
         if int(np.count_nonzero(loaded)) >= _MIN_TICKS:
             out["decel_per_pedal_g"] = round(
                 float(np.median(decel_g[loaded] / asked[loaded])), 3
-            )
-            out["decel_per_pedal_note"] = (
-                "median g of deceleration per unit of pedal, over ticks with the "
-                "pedal past half travel — a description of what the pedal bought"
             )
     return out
 
@@ -226,16 +210,11 @@ def _throttle_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
                 round(100.0 * float(excess[slipping].mean()), 2) if slipping.any() else 0.0
             ),
             "peak_excess_pct": round(100.0 * float(excess.max()), 2),
-            "threshold_note": (
-                f"a wheel turning more than {_SLIP_MARGIN:.0%} faster than the "
-                "ground while you are on power; the driven axle is not modelled, "
-                "so this is the fastest wheel of the four"
-            ),
+            # The driven axle is not modelled, so this is the fastest wheel of four.
+            "threshold_pct": round(100.0 * _SLIP_MARGIN, 1),
         }
         if not slipping.any():
-            out["slip"]["finding"] = (
-                "no wheel ran meaningfully ahead of the ground while on power"
-            )
+            out["slip"]["finding"] = "no wheel spun while you were on power"
 
     long_accel = ch.get("long_accel")
     if long_accel is not None:
@@ -280,15 +259,12 @@ def _steering_block(ch: dict, moving: np.ndarray) -> dict:
             "peak_lateral_g": round(float(np.percentile(lat_g[inside], 98)), 3),
         })
 
+    # The band where lateral g stops climbing describes THIS session; it moves
+    # with tires, fuel and track, and is not a target.
     out: dict = {
         "measured": True,
         "bands": bins,
         "peak_steer_deg": round(float(deg.max()), 1),
-        "note": (
-            "lateral force returned for each amount of lock. The band where the "
-            "figure stops climbing is where more steering stopped buying more "
-            "grip IN THIS SESSION — read it as a description, not a target"
-        ),
     }
 
     measured = [b for b in bins if b.get("measured")]
@@ -299,145 +275,8 @@ def _steering_block(ch: dict, moving: np.ndarray) -> dict:
         if beyond:
             drop = best["peak_lateral_g"] - max(b["peak_lateral_g"] for b in beyond)
             out["falloff_past_peak_g"] = round(drop, 3)
-            out["falloff_note"] = (
-                f"past {best['band']} of lock the lateral force you got back did "
-                f"not rise — it fell by {drop:.2f} g at the highest bands"
-                if drop > 0
-                else "lateral force kept rising with lock across every band measured"
-            )
     return out
 
 
 def _band_start(label: str) -> float:
     return float(label.split("-")[0].replace("°+", "").replace("°", ""))
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Wheel: force feedback the rig could not hand back
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _wheel_block(ch: dict, moving: np.ndarray) -> dict:
-    stops = ch.get("ffb_stops")
-    if stops is None:
-        return _unmeasured("the file does not carry a force-feedback saturation channel")
-
-    # Magnitude: the channel is signed (see hardware._ffb), so a bare
-    # comparison counts clipping in one steering direction only.
-    saturated = np.abs(stops[moving]) >= 0.99
-    share = 100.0 * float(saturated.mean())
-    out: dict = {
-        "measured": True,
-        "clipping_pct_of_moving": round(share, 2),
-        "note": (
-            "while the wheel is against its stops the force it hands back stops "
-            "changing, so any detail in that moment never reached your hands"
-        ),
-    }
-    torque = ch.get("ffb_pct")
-    if torque is not None:
-        out["median_torque_pct"] = round(100.0 * float(np.median(np.abs(torque[moving]))), 1)
-    if share == 0.0:
-        out["finding"] = "the wheel never ran against its stops this session"
-    return out
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Per lap, for the stint view
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _per_lap(session: ParsedSession) -> list[dict]:
-    """One row per lap: how much the car took back out, lap by lap."""
-    rows: list[dict] = []
-    for lap in session.laps:
-        if "speed" not in lap.raw or len(lap.raw["speed"]) == 0:
-            continue
-        speed = lap.raw["speed"].astype(np.float64)
-        moving = moving_mask(speed)
-        pedal = lap.raw.get("brake_raw")
-        if pedal is None:
-            continue
-        pedal = pedal.astype(np.float64)
-        braking = moving & (pedal > _BRAKING)
-        row: dict = {
-            "lap": int(lap.lap_number),
-            "clean": bool(lap.is_valid and not lap.is_out_lap and not lap.is_anomalous),
-            "braking_ticks": int(np.count_nonzero(braking)),
-        }
-        if not braking.any():
-            row["measured"] = False
-            rows.append(row)
-            continue
-
-        row["measured"] = True
-        row["peak_pedal_pct"] = round(100.0 * float(pedal[braking].max()), 1)
-
-        abs_active = lap.raw.get("abs_active")
-        if abs_active is not None:
-            row["abs_engaged_pct"] = round(
-                100.0 * float(abs_active.astype(bool)[braking].mean()), 1
-            )
-        abs_cut = lap.raw.get("abs_cut")
-        if abs_cut is not None:
-            row["mean_pressure_cut_pct"] = round(
-                float(abs_cut.astype(np.float64)[braking].mean()), 2
-            )
-
-        long_accel = lap.raw.get("long_accel")
-        if long_accel is not None:
-            decel_g = np.maximum(-long_accel.astype(np.float64)[braking], 0.0) / _G
-            loaded = pedal[braking] > 0.5
-            row["peak_decel_g"] = round(float(np.percentile(decel_g, 98)), 3)
-            if int(np.count_nonzero(loaded)) >= 10:
-                row["decel_per_pedal_g"] = round(
-                    float(np.median(decel_g[loaded] / pedal[braking][loaded])), 3
-                )
-        rows.append(row)
-    return rows
-
-
-def _findings(payload: dict) -> list[str]:
-    """Plain sentences, one per block that had something to say."""
-    out: list[str] = []
-
-    brake = payload["brake"]
-    if brake.get("measured"):
-        abs_block = brake.get("abs", {})
-        cut = abs_block.get("mean_cut_while_engaged_pct")
-        engaged = abs_block.get("engaged_pct_of_braking")
-        if engaged is not None and engaged > 0 and cut is not None:
-            out.append(
-                f"the ABS was working on {engaged:.1f}% of your braking, taking "
-                f"back {cut:.1f}% of the pressure you asked for while it was in"
-            )
-        elif engaged == 0:
-            out.append(
-                "the car applied every bit of brake pressure you asked for — the "
-                "ABS never came in"
-            )
-
-    throttle = payload["throttle"]
-    slip = throttle.get("slip") if throttle.get("measured") else None
-    if slip is not None and slip.get("share_of_on_power_pct", 0) > 0:
-        out.append(
-            f"a wheel was turning faster than the ground on "
-            f"{slip['share_of_on_power_pct']:.1f}% of your time on power"
-        )
-
-    steering = payload["steering"]
-    if steering.get("measured") and steering.get("falloff_note"):
-        out.append(steering["falloff_note"])
-
-    wheel = payload["wheel"]
-    if wheel.get("measured") and wheel.get("clipping_pct_of_moving", 0) > 0:
-        out.append(
-            f"the wheel was against its stops for "
-            f"{wheel['clipping_pct_of_moving']:.2f}% of the time you were moving, "
-            "so that much of the road never reached your hands"
-        )
-
-    if not out:
-        out.append(
-            "every input this session reached the car without the electronics or "
-            "the tires taking a measurable share back out"
-        )
-    return out

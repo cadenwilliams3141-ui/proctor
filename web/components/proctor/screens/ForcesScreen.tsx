@@ -38,6 +38,7 @@
 import { useMemo } from "react";
 import { Ban, CircleAlert, Gauge, TriangleAlert } from "lucide-react";
 
+import Absences from "@/components/proctor/ui/Absences";
 import Answer, { Evidence, HeroNumber, Step } from "@/components/proctor/ui/Answer";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Explain from "@/components/proctor/ui/Explain";
@@ -55,6 +56,7 @@ import {
 import { fixed } from "@/lib/proctor/format";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
+import { atLeast, hiddenNote } from "@/lib/tier";
 import {
   techniqueForGrade,
   techniqueForInputResponse,
@@ -71,8 +73,30 @@ import {
   type TrackEvent,
 } from "@/lib/proctor/types";
 
+/* Absences this screen states in its own words, where the reader went looking
+   for the number. The summary block at the foot skips them, so one missing
+   measurement is reported once rather than twice.
+
+   Tier-dependent, and that is the whole difficulty. A section a lower detail
+   level does not render is not voicing anything — the same rule that took
+   `input_response` off ReportScreen's list when it moved behind a fold. Steps
+   03 and 05 are the only places contact_patch is voiced, and both are
+   deep-only, so at "glance" that key MUST fall through to the summary block.
+   Get this wrong and turning the detail down silently deletes a negative
+   result, which is the one thing the honesty rules exist to prevent. */
+function voicedHere(deep: boolean): ReadonlySet<string> {
+  const keys = [
+    "input_response", // → step 02's ResponseRow, always rendered
+    "grip", // → step 04's Missing, always rendered
+    "traction_circle", // → TractionCircle's own empty state, always rendered
+  ];
+  // Steps 03 and 05 are the only voices contact_patch has.
+  if (deep) keys.push("contact_patch");
+  return new Set(keys);
+}
+
 export default function ForcesScreen() {
-  const { bundle } = useProctor();
+  const { bundle, state } = useProctor();
 
   const lockups = useMemo(
     () => (bundle ? bundle.events.filter((e) => e.kind === "lockup") : []),
@@ -91,6 +115,26 @@ export default function ForcesScreen() {
   const grip = bundle.grip;
   const ir = bundle.inputResponse;
   const cp = bundle.contactPatch;
+
+  const deep = atLeast(state.tier, "deep");
+
+  /* "Glance" promises "the answer and little else" (lib/tier.ts) and on this
+     screen it was delivering 10,827 characters — byte for byte what "deep"
+     showed, because nothing here read the tier at all. The chain's first two
+     steps ARE the answer, and step 04 carries the traction circle that was
+     deliberately surfaced on 2026-09-01, so those stay. What comes off is the
+     three sections a reader at a glance did not ask for: the torque the wheel
+     returned, the slip angle, and the road's slope underneath both.
+
+     COUNTED, NOT ASSUMED. The Decision of 2026-07-23 requires the "N panels
+     hidden" note to be RIGHT — claiming a panel is hidden when none is teaches
+     the reader to ignore the note. GradeSection renders nothing at all unless
+     the grade was measured, so a hardcoded 3 would over-count on every session
+     without elevation. The count is derived from the same conditions the
+     sections themselves use. */
+  const gradeDrawn = Boolean(cp?.grade?.measured);
+  const hidden = deep ? 0 : 2 + (gradeDrawn ? 1 : 0);
+  const note = hiddenNote(state.tier, hidden);
 
   /* The answer this screen exists to give, in sentences. Grip first because it
      is the end of the chain — what the ground actually gave — and the inputs
@@ -151,15 +195,22 @@ export default function ForcesScreen() {
         </Evidence>
       </Step>
 
-      {/* ═══ 03 What came back through the wheel ════════════════════════════ */}
-      <Step
-        n={3}
-        title="What came back through the wheel"
-        sub="the front tyres, reported in newton-metres at your hands"
-      >
-        <TorqueSection cp={cp} hw={hw} absences={bundle.absences} />
-        <TechniqueNotes notes={techniqueForSteerTorque(cp)} />
-      </Step>
+      {/* ═══ 03 What came back through the wheel ════════════════════════════
+          Deep and up. The technique note travels WITH its section rather than
+          being gated separately: a note hangs off a measured finding, so a note
+          left on screen after its measurement was hidden would be the only
+          thing said about the subject — which is exactly what the 2026-08-27
+          rule forbids. */}
+      {deep && (
+        <Step
+          n={3}
+          title="What came back through the wheel"
+          sub="the front tyres, reported in newton-metres at your hands"
+        >
+          <TorqueSection cp={cp} hw={hw} absences={bundle.absences} />
+          <TechniqueNotes notes={techniqueForSteerTorque(cp)} />
+        </Step>
+      )}
 
       {/* ═══ 04 What the ground gave ════════════════════════════════════════ */}
       <Step
@@ -210,18 +261,24 @@ export default function ForcesScreen() {
       </Step>
 
       {/* ═══ 05 Where the car pointed against where it went ═════════════════ */}
-      <Step
-        n={5}
-        title="Where the car pointed, against where it went"
-        sub="slip angle, measured from the car's own velocity"
-      >
-        <SlipSection cp={cp} absences={bundle.absences} />
-        <TechniqueNotes notes={techniqueForSlip(cp)} />
-      </Step>
+      {deep && (
+        <Step
+          n={5}
+          title="Where the car pointed, against where it went"
+          sub="slip angle, measured from the car's own velocity"
+        >
+          <SlipSection cp={cp} absences={bundle.absences} />
+          <TechniqueNotes notes={techniqueForSlip(cp)} />
+        </Step>
+      )}
 
       {/* ── The road under all of it ──────────────────────────────────────── */}
-      <GradeSection cp={cp} />
-      <TechniqueNotes notes={techniqueForGrade(cp)} />
+      {deep && (
+        <>
+          <GradeSection cp={cp} />
+          <TechniqueNotes notes={techniqueForGrade(cp)} />
+        </>
+      )}
 
       {/* ── The walls ─────────────────────────────────────────────────────── */}
       <Panel padding="var(--space-4)" style={{ marginTop: "var(--space-6)" }}>
@@ -260,6 +317,21 @@ export default function ForcesScreen() {
       {hw && hw.concerns.length === 0 && hw.concerns_finding && (
         <Caveat maxWidth={700}>{hw.concerns_finding}</Caveat>
       )}
+
+      {/* ── What is not here ───────────────────────────────────────────────
+          This screen folded charts behind <Evidence> and now gates three
+          sections by tier, and it had NO summary block at all — so an absence
+          whose only voice was one of those sections was reported nowhere the
+          moment either mechanism hid it. Absences are never tier-gated, so
+          this block renders at every detail level and `voicedHere` widens as
+          the tier narrows. */}
+      {note && (
+        <div style={{ marginTop: "var(--space-6)", fontSize: 10.5, color: dim(42) }}>{note}</div>
+      )}
+
+      <section style={{ marginTop: "var(--space-8)" }}>
+        <Absences absences={bundle.absences} exclude={voicedHere(deep)} />
+      </section>
     </div>
   );
 }

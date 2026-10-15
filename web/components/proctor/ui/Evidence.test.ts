@@ -118,6 +118,33 @@ describe("a screen that folds evidence still states its absences in the open", (
     }
   });
 
+  it("ForcesScreen keeps its Absences block outside every fold", () => {
+    /* Added 2026-09-05 with tier gating. This screen had no summary block at
+       all: every absence was voiced by exactly one section, so hiding a
+       section by tier reported its absence nowhere. */
+    const text = readFileSync("components/proctor/screens/ForcesScreen.tsx", "utf8");
+    expect(text).toContain("<Absences");
+    for (const block of evidenceBlocks(text)) {
+      expect(block).not.toContain("<Absences");
+    }
+  });
+
+  it("ForcesScreen does not count a tier-gated section as voicing contact_patch", () => {
+    /* Steps 03 and 05 are the only places contact_patch is voiced and both are
+       deep-only, so the key may be claimed as voiced ONLY under `deep`. If it
+       were listed unconditionally, turning the detail down would skip it in
+       the summary AND hide the section that states it — reported nowhere, which
+       is the failure the 2026-08-27 Decision names. */
+    const text = readFileSync("components/proctor/screens/ForcesScreen.tsx", "utf8");
+    const fn = text.slice(
+      text.indexOf("function voicedHere"),
+      text.indexOf("export default function ForcesScreen"),
+    );
+    expect(fn).toContain('if (deep) keys.push("contact_patch")');
+    const unconditional = fn.slice(0, fn.indexOf("if (deep)"));
+    expect(unconditional).not.toContain('"contact_patch"');
+  });
+
   it("a folded section is not counted as voicing its absence", () => {
     /* voicedHere lists the absence keys ReportScreen states in its own words,
        which the summary block then skips. ResponseSection moved behind a fold,

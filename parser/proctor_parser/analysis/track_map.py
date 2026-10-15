@@ -78,6 +78,18 @@ def compute(session: ParsedSession) -> dict:
         "basis": "reference lap = fastest valid non-anomalous lap (self-comparison within this session)",
         "source_lap": int(ref.lap_number),
         "projection": "local_equirectangular_meters",
+        # THE ANCHOR THE PROJECTION IS ABOUT. It was computed here and then
+        # discarded, which left the stored map as metre offsets around an origin
+        # nobody recorded: a shape, not a place. Two consequences, both real.
+        # Nothing external can ever be aligned to the map without re-ingesting
+        # every session; and the map cannot be checked against the circuit's own
+        # published position, which the file states independently in
+        # WeekendInfo. Three extra numbers, and the inverse is exact:
+        #   lon = origin_lon + x_m / (111320 * cos(radians(origin_lat)))
+        #   lat = origin_lat + y_m / 111320
+        "origin_lat": round(lat_mean, 8),
+        "origin_lon": round(lon_mean, 8),
+        "meters_per_degree": _M_PER_DEG,
         "x_m": [round(float(v), 2) for v in x],
         "y_m": [round(float(v), 2) for v in y],
         "grid_pct": [round(float(v), 4) for v in ref.grid["grid_pct"]],

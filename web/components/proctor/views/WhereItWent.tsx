@@ -74,7 +74,12 @@ export default function WhereItWent() {
               <span
                 className="num"
                 style={{
-                  font: "500 40px/1 var(--font-heading)",
+                  /* 1.15, not 1. Inter's own line box at 40px measures 45px,
+                     so a line-height of exactly 1 made the box 5px shorter
+                     than the glyphs standing in it — the number overflowed its
+                     container under a shell that clips. Measured, not guessed:
+                     1.05 was still 3px short. */
+                  font: "500 40px/1.15 var(--font-heading)",
                   color: sense === "gain" ? CH.gain : CH.loss,
                 }}
               >
@@ -231,9 +236,20 @@ export default function WhereItWent() {
           </div>
         </div>
 
-        {/* Right column */}
+        {/* Right column.
+            SCROLLS AS ONE COLUMN, and every panel in it keeps its natural
+            height. It used to be a flex column whose panels were allowed to
+            shrink, which does not fail by hiding something — it fails by
+            printing the panels ON TOP OF EACH OTHER. A squeezed panel keeps
+            drawing its full content, so the detail panel's readings ran under
+            its own honesty note and the technique block ran over both. Three
+            true panels became one unreadable one.
+
+            The three of them cannot fit above the fold on a 1280x800 laptop
+            and there is no arrangement in which they can, so the only question
+            was whether the reader gets to scroll to the rest or loses it. */}
         <div
-          className="loss-detail"
+          className="loss-detail scrollpane"
           style={{
             width: 372,
             flex: "none",
@@ -502,10 +518,13 @@ function CarState({ selected }: { selected: CornerDelta }) {
   }
 
   return (
+    /* NOT `fill`. This panel sits in a scrolling column, so it takes the height
+       its readings need and the column scrolls past it. Filling made it a flex
+       item that could be squeezed below its own content, which is what put the
+       honesty note through the middle of the tyre temperatures. */
     <Panel
-      fill
       padding="var(--space-4)"
-      style={{ minHeight: 0 }}
+      style={{ flex: "none" }}
       foot={<Caveat>{noteFor("lap.reference")}</Caveat>}
     >
       <Eyebrow size={9.5} style={{ letterSpacing: ".09em", marginBottom: "var(--space-3)" }}>

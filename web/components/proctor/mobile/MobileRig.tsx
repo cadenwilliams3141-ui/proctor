@@ -173,7 +173,11 @@ export default function MobileRig() {
   return (
     <div>
       <header style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
-        <h1 style={{ font: "500 24px var(--font-heading)", margin: 0 }}>Forces</h1>
+        {/* "Physics", not "Forces". The tab that opens this screen says
+            Physics, the desktop top bar says Physics, and this heading sat
+            directly above a tab bar whose active tab read Physics — one screen
+            wearing two names, six pixels apart. */}
+        <h1 style={{ font: "500 24px var(--font-heading)", margin: 0 }}>Physics</h1>
         <div style={{ fontSize: 12, color: dim(45), marginTop: 2 }}>
           from your foot to the ground, in the order it happened
         </div>

@@ -147,11 +147,16 @@ export default function Ribbon() {
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* Header strip */}
+      {/* Wraps. The two lap chips, the pointer hint and the lap gap are all
+          fixed-size, so on a tablet the gap figure was pushed off the right
+          edge — the one number in the header worth reading. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: "var(--space-4)",
+          rowGap: "var(--space-2)",
+          flexWrap: "wrap",
           padding: "var(--space-3) var(--space-6) var(--space-2)",
           flex: "none",
         }}
@@ -176,6 +181,7 @@ export default function Ribbon() {
       </div>
 
       <div
+        className="view-split ribbon-split"
         style={{
           flex: 1,
           minHeight: 0,
@@ -412,6 +418,7 @@ export default function Ribbon() {
 
         {/* Readout column */}
         <div
+          className="ribbon-readout"
           style={{
             width: 300,
             flex: "none",

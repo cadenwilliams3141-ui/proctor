@@ -117,6 +117,12 @@ class SessionMeta:
     tick_rate: int
     recorded_at: datetime | None
     wear_masked: bool
+    # Where the circuit is, straight from WeekendInfo. None when the file does
+    # not state it — missing is not zero, and a track at 0,0 is in the Atlantic.
+    track_latitude: float | None = None
+    track_longitude: float | None = None
+    track_altitude_m: float | None = None
+    track_north_offset_rad: float | None = None
 
 
 @dataclass
@@ -244,6 +250,10 @@ def parse_ibt(data: bytes | IbtFile, recorded_at: datetime | None = None) -> lis
                 tick_rate=tick_rate,
                 recorded_at=recorded_at,
                 wear_masked=wear_masked,
+                track_latitude=ymeta.track_latitude,
+                track_longitude=ymeta.track_longitude,
+                track_altitude_m=ymeta.track_altitude_m,
+                track_north_offset_rad=ymeta.track_north_offset_rad,
             ),
             laps=parsed_laps,
         ))

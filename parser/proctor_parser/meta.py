@@ -21,6 +21,20 @@ class YamlMeta:
     car_name: str | None = None
     car_redline_rpm: float | None = None
     driver_car_idx: int | None = None
+    # Where the circuit actually is. iRacing puts these in the same WeekendInfo
+    # block the track name comes from, and this parser read that block and threw
+    # them away — the pattern CLAUDE.md warns about for CORE_CHANNELS vs
+    # RAW_CHANNEL_MAP, one step further along. They are what turns the track map
+    # from a shape into a place: without them the stored map is metre offsets
+    # about an origin nobody recorded, and nothing external can ever be aligned
+    # to it. Kept because they are free and the file already carried them.
+    track_latitude: float | None = None
+    track_longitude: float | None = None
+    track_altitude_m: float | None = None
+    # Radians, iRacing's own field. Recorded, not yet used: the map is projected
+    # from geographic Lat/Lon rather than a track-local frame, so nothing here
+    # needs it today. It is stored rather than interpreted.
+    track_north_offset_rad: float | None = None
     # SessionNum -> SessionType ('Practice'/'Qualify'/'Race'/'Testing'…)
     session_types: dict[int, str] = field(default_factory=dict)
 
@@ -52,6 +66,10 @@ def parse_yaml_meta(yaml_text: str) -> YamlMeta:
         meta.track_name = weekend.get("TrackDisplayName")
         meta.track_length_km = _to_float(weekend.get("TrackLength"))
         meta.event_type = weekend.get("EventType")
+        meta.track_latitude = _to_float(weekend.get("TrackLatitude"))
+        meta.track_longitude = _to_float(weekend.get("TrackLongitude"))
+        meta.track_altitude_m = _to_float(weekend.get("TrackAltitude"))
+        meta.track_north_offset_rad = _to_float(weekend.get("TrackNorthOffset"))
 
         driver_info = data.get("DriverInfo") or {}
         meta.driver_car_idx = driver_info.get("DriverCarIdx")
@@ -72,6 +90,14 @@ def parse_yaml_meta(yaml_text: str) -> YamlMeta:
         meta.track_length_km = _to_float(_rx("TrackLength", yaml_text))
     if meta.event_type is None:
         meta.event_type = _rx("EventType", yaml_text)
+    if meta.track_latitude is None:
+        meta.track_latitude = _to_float(_rx("TrackLatitude", yaml_text))
+    if meta.track_longitude is None:
+        meta.track_longitude = _to_float(_rx("TrackLongitude", yaml_text))
+    if meta.track_altitude_m is None:
+        meta.track_altitude_m = _to_float(_rx("TrackAltitude", yaml_text))
+    if meta.track_north_offset_rad is None:
+        meta.track_north_offset_rad = _to_float(_rx("TrackNorthOffset", yaml_text))
     if meta.car_redline_rpm is None:
         meta.car_redline_rpm = _to_float(_rx("DriverCarRedLine", yaml_text))
     if meta.driver_car_idx is None:

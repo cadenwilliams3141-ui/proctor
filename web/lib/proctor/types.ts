@@ -406,8 +406,6 @@ export interface AbsBlock {
   mean_pressure_cut_pct?: number;
   max_pressure_cut_pct?: number;
   mean_cut_while_engaged_pct?: number;
-  cut_note?: string;
-  finding?: string;
 }
 
 export interface SteerBand {
@@ -419,7 +417,12 @@ export interface SteerBand {
   peak_lateral_g?: number;
 }
 
-/** What you asked the car for against what it did. */
+/** What you asked the car for against what it did.
+ *
+ *  Numbers only. The parser used to store a sentence beside most of these, and
+ *  none of them was ever rendered; every word a driver reads about this module
+ *  is written in lib/proctor/explain.ts and the screens, so changing the copy
+ *  needs a deploy, not a re-ingest. */
 export interface InputResponseData {
   brake: Measured<{
     braking_ticks: number;
@@ -430,7 +433,7 @@ export interface InputResponseData {
     peak_deceleration_g?: number;
     decel_per_pedal_g?: number;
     abs?: AbsBlock;
-    ceiling_note: string;
+    stationary_ticks_excluded?: number;
   }>;
   throttle: Measured<{
     on_power_ticks: number;
@@ -440,8 +443,8 @@ export interface InputResponseData {
       share_of_on_power_pct: number;
       mean_excess_pct_while_slipping: number;
       peak_excess_pct: number;
-      threshold_note: string;
-      finding?: string;
+      /** Absent on sessions ingested before 2026-10-15. */
+      threshold_pct?: number;
     };
   }>;
   steering: Measured<{
@@ -449,16 +452,7 @@ export interface InputResponseData {
     peak_steer_deg: number;
     most_lateral_g_band?: string;
     falloff_past_peak_g?: number;
-    falloff_note?: string;
-    note: string;
   }>;
-  wheel: Measured<{
-    clipping_pct_of_moving: number;
-    median_torque_pct?: number;
-    note: string;
-    finding?: string;
-  }>;
-  findings: string[];
   caveat: string;
 }
 
@@ -603,29 +597,39 @@ export interface TrackEdges {
   caveat?: string;
 }
 
-/** Rig-level readings. Every number here is a measurement, never a target. */
+/** Rig-level readings: what the equipment did, never what the driver did.
+ *
+ *  Brake ceiling and the ABS belong to InputResponseData. They were measured
+ *  here too until 2026-10-15, and the two ABS figures disagreed (this one
+ *  counted braking off the applied channel, that one off the pedal). Every
+ *  number here is a measurement, never a target, and null reaches the screen as
+ *  an em dash with the module's reason. */
 export interface HardwareData {
+  /** LEGACY. Read only by lib/proctor/pedals.ts, for sessions ingested before
+   *  input_response existed — same definition, so the fallback is honest. */
   brake_ceiling_pct: number | null;
-  max_abs_diff: number | null;
-  stationary_ticks_excluded: number | null;
-  /** Why the brake comparison produced nothing, in the module's own words.
-   *  Without it a null ceiling reaches the screen as a bare em dash, which is
-   *  the one thing an absence is never allowed to look like. */
   brake_reason?: string;
-  abs: {
-    engaged_pct_of_braking: number | null;
-    activation_events: number | null;
-    braking_ticks: number | null;
-    finding?: string;
-    reason?: string;
-  };
+  /** Brake-sensor readings while flat on the throttle: signals that were not
+   *  the driver. `spike_ticks` is the sub-5% noise floor; `brief` counts jumps
+   *  above 5% too short to be a foot (absent before 2026-10-15). */
   pedal_noise: {
     spike_ticks: number | null;
     max_spike: number | null;
     qualifying_ticks: number | null;
+    brief: {
+      events: number;
+      peak_pct: number | null;
+      max_duration_ms: number;
+      min_reading_pct: number;
+    } | null;
     reason?: string;
   };
-  ffb: { clipping_pct: number | null; finding?: string; reason?: string };
+  ffb: {
+    clipping_pct: number | null;
+    flagged: boolean;
+    flag_threshold_pct: number | null;
+    reason?: string;
+  };
   /** Column torque in newton-metres. `ffb` is the same force normalised to
    *  whatever the rig's range is set to, so it cannot be compared between
    *  sessions; this can. Both are kept for that reason. */
@@ -637,8 +641,6 @@ export interface HardwareData {
     reason?: string;
   };
   brake_bias: { available: boolean; values?: number[]; changed?: boolean; reason?: string };
-  concerns: { area: string; observation: string; watch: string }[];
-  concerns_finding: string | null;
 }
 
 /** One steering-lock band, on whichever axis the panel is reading. */

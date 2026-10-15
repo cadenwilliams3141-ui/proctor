@@ -33,6 +33,7 @@ import { excludedReason } from "@/components/proctor/shell/LapRail";
 import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
 import { explainInputResponse, explainSession, explainStint } from "@/lib/proctor/explain";
 import { fixed, fmtDay, fmtLap } from "@/lib/proctor/format";
+import { brakeCeiling } from "@/lib/proctor/pedals";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
 import { isUsable, type Lap, type StintSeries } from "@/lib/proctor/types";
@@ -688,21 +689,21 @@ function ResponseSection() {
           <>
             <PairBar
               label="Brake"
-              askedLabel="pedal, at its hardest"
+              askedLabel="your pedal, at its hardest"
               asked={brake.pedal_ceiling_pct}
-              gotLabel="pressure the car used"
+              gotLabel="pressure the car applied"
               got={brake.applied_ceiling_pct}
             />
             {brake.abs && (
               <div style={{ marginTop: "var(--space-3)", display: "flex", gap: "var(--space-6)", flexWrap: "wrap" }}>
                 <Figure
-                  label="braking with the ABS in"
+                  label="ABS active, of your braking"
                   value={fixed(brake.abs.engaged_pct_of_braking, 1)}
                   unit="%"
                 />
                 {brake.abs.mean_cut_while_engaged_pct != null && (
                   <Figure
-                    label="pressure it removed"
+                    label="pressure removed while in"
                     value={fixed(brake.abs.mean_cut_while_engaged_pct, 1)}
                     unit="%"
                   />
@@ -729,17 +730,17 @@ function ResponseSection() {
               label="Throttle"
               askedLabel="asked for, on average"
               asked={throttle.mean_throttle_pct}
-              gotLabel="put down without a wheel running away"
+              gotLabel="time on power with no wheel spinning"
               got={Math.max(0, 100 - throttle.slip.share_of_on_power_pct)}
             />
             <div style={{ marginTop: "var(--space-3)", display: "flex", gap: "var(--space-6)", flexWrap: "wrap" }}>
               <Figure
-                label="time on power with a wheel spinning"
+                label="with a wheel spinning"
                 value={fixed(throttle.slip.share_of_on_power_pct, 1)}
                 unit="%"
               />
               <Figure
-                label="worst a wheel ran ahead of the ground"
+                label="worst, faster than the ground"
                 value={fixed(throttle.slip.peak_excess_pct, 0)}
                 unit="%"
               />
@@ -818,7 +819,7 @@ function MeasuredCards({
   const { bundle } = useProctor();
   if (!bundle) return null;
 
-  const hw = bundle.hardware;
+  const ceiling = brakeCeiling(bundle.hardware, bundle.inputResponse);
   const grip = bundle.grip;
   const stint = bundle.stint;
   const flagged = bundle.laps.filter((l) => l.is_anomalous).length;
@@ -940,20 +941,18 @@ function MeasuredCards({
     {
       title: "Brake ceiling",
       Icon: Gauge,
-      value: hw?.brake_ceiling_pct != null ? hw.brake_ceiling_pct.toFixed(1) : "—",
+      value: ceiling.pct != null ? ceiling.pct.toFixed(1) : "—",
       unit: "% of pedal travel",
-      body: [
-        "The hardest you pressed the brake while moving, across every application this session.",
-        "Samples below 5 m/s are excluded: the sim forces brake to 1.0 when the car is stationary, which would otherwise read as a full-pressure application.",
-      ],
+      // The 5 m/s rule is in the caveat; it used to be stated here as well.
+      body: ["The hardest you pressed the brake while moving, across every application this session."],
       caveat: noteFor("brake.ceiling"),
       show: deep,
       unmeasured:
-        hw?.brake_ceiling_pct != null
+        ceiling.pct != null
           ? undefined
-          : hw
-            ? (hw.brake_reason ?? "The brake channels carried nothing measurable while moving.")
-            : why("hardware", "The hardware module produced nothing for this session."),
+          : bundle.inputResponse || bundle.hardware
+            ? ceiling.reason
+            : why("input_response", "Not measured for this session."),
     },
     {
       title: "Left-front surface temp",

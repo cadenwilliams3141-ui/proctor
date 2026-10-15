@@ -48,6 +48,16 @@ Product identity: observations, not verdicts. This constraint lives in the code 
 - No screen may carry a measurement as a literal in its own source. Broken three times now —
   twice on desktop, once on the phone, each found only by looking at the pixels. A number a screen
   invents survives a change of session and describes the wrong run without ever looking wrong.
+- One owner per number. `input_response` owns what the driver asked for against what the car
+  did (brake ceiling, Brake vs BrakeRaw, the ABS — counted off the PEDAL); `hardware` owns what
+  the rig itself did (pedal noise, brief brake jumps, FFB clipping, column torque, bias). Both
+  used to compute the ABS share and FFB clipping, the two ABS figures used different
+  denominators, and the FFB sign bug had to be fixed twice. A second copy of a number is a
+  second place for it to be wrong.
+- Payloads carry numbers plus the contract's honesty fields; the sentences a driver reads are
+  written in the web app (`web/lib/proctor/explain.ts`, `equipment.ts`, `provenance.ts`, the
+  screens). Copy changes then ship on a Vercel deploy, with no reingest. `explain.test.ts`
+  holds a word budget (≤20 words a line) and forbids a finding repeating its technique note.
 - MCP first, CLI fallback.
 
 ## Regression tripwire (the golden fixtures — exact filenames, in OneDrive iRacing\Telemetry)
@@ -55,12 +65,17 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   (285 vars / bufLen 1099 / 124,215 samples / wear_masked=true)
 - Mugello `porsche992rgt3_mugello gp 2026-07-09 21-57-07.ibt` (287 / 1104 / 48,955 / false)
 - Road Atlanta `porsche992rgt3_roadatlanta full 2026-07-16 21-19-03.ibt` (287 / 1104 / 52,458)
-- Known-good Long Beach module outputs: brake ceiling **89.8%** (driver's own moving max);
+- Known-good Long Beach module outputs: brake ceiling **89.8%** (driver's own moving max —
+  `input_response.brake.pedal_ceiling_pct` since 2026-10-15, same max-BrakeRaw-while-moving it
+  was under the now-deleted `hardware.brake_vs_raw`);
   **left-foot braking detected** (median **−50 ms** signed release→brake, 77% brake-before-lift);
-  **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
+  **69** pedal noise spikes (`hardware.pedal_noise_floor.spike_ticks`, unchanged); pace improved
+  0.213s first-5→last-5 clean laps while ~31 L burned. Brief brake jumps
+  (`pedal_noise_floor.brief_spikes`: >5%, gone within 50 ms, throttle flat both sides) are new
+  on 2026-10-15 and have NO known-good count yet — record the Long Beach figure here once run.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (**145 collected: 139 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**188 tests**). The third suite was missing from this list
+  (**146 collected: 140 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
+  `cd web && npx vitest run` (**201 tests**). The third suite was missing from this list
   until 2026-09-05 and is the one that covers ingest and the dev tools:
   `cd render-service && python -m pytest tests -q` (**47 tests**).
   If these numbers move, you broke something.

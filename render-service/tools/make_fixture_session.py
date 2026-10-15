@@ -144,6 +144,16 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
         straight = (vals["Throttle"] > 0.9) & (br < 0.05)
         si = np.where(straight)[0][::37]
         br[si] = 0.004
+        # ...and, on the healthy session, a sensor that JUMPS: two ticks at 31%
+        # mid-straight with the throttle flat either side. No foot does that in
+        # 33 ms, so hardware's brief-spike count must find it. Without this the
+        # flagged state of that card is never rendered by anything.
+        if clean and L in (3, 8):
+            run = straight[1:-3] & straight[:-4] & straight[2:-2] & straight[3:-1] & straight[4:]
+            at = np.where(run)[0]
+            if at.size:
+                i = int(at[at.size // 2]) + 1
+                br[i : i + 2] = 0.31
         vals["BrakeRaw"] = br
 
         for k in keys:

@@ -207,7 +207,8 @@ export function Step({
   sub,
   children,
 }: {
-  n: number;
+  /** Omit for a section that sits beside the chain rather than in it. */
+  n?: number;
   title: string;
   sub?: string;
   children: React.ReactNode;
@@ -215,17 +216,19 @@ export function Step({
   return (
     <section style={{ marginTop: "var(--space-6)" }}>
       <header style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)" }}>
-        <span
-          className="num"
-          aria-hidden
-          style={{
-            font: "500 11px var(--font-heading)",
-            color: dim(30),
-            letterSpacing: ".08em",
-          }}
-        >
-          {String(n).padStart(2, "0")}
-        </span>
+        {n != null && (
+          <span
+            className="num"
+            aria-hidden
+            style={{
+              font: "500 11px var(--font-heading)",
+              color: dim(30),
+              letterSpacing: ".08em",
+            }}
+          >
+            {String(n).padStart(2, "0")}
+          </span>
+        )}
         <h2 style={{ margin: 0, font: "500 15px var(--font-heading)" }}>{title}</h2>
         {sub && <span style={{ fontSize: 11.5, color: dim(42) }}>{sub}</span>}
       </header>

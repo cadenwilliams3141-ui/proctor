@@ -262,6 +262,30 @@ for (const vp of VIEWPORTS) {
         return { top, left, bottom, right, width: right - left, height: bottom - top };
       };
 
+      /* A fixed overlay (the phone's tab bar) sits over content that scrolls
+       * beneath it by design. Text under it is only a fault if the reader can
+       * NOT scroll it out from under the bar — so the pair is skipped exactly
+       * when the page has enough scroll left to clear it. Found 2026-10-15,
+       * when a longer Physics phone screen happened to park a card note at the
+       * fold behind the "Physics" tab label: the bottom of that page scrolls
+       * clear of the bar, and the finding moved with whatever line landed
+       * there. Content that cannot be reached still fails. */
+      const fixedBar = (el) => {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          const pos = getComputedStyle(n).position;
+          if (pos === 'fixed' || pos === 'sticky') return n.getBoundingClientRect();
+        }
+        return null;
+      };
+      const sc = document.scrollingElement;
+      const scrollLeftBelow = sc.scrollHeight - window.innerHeight - window.scrollY;
+      const reachableFromUnder = (content, bar) => {
+        const r = content.getBoundingClientRect();
+        return bar.top > window.innerHeight / 2
+          ? r.bottom - bar.top <= scrollLeftBelow      // bar at the bottom: scroll down
+          : bar.bottom - r.top <= window.scrollY;      // bar at the top: scroll up
+      };
+
       const leaves = Array.from(document.querySelectorAll('p, span, div, h1, h2, h3, td, li'))
         .filter((el) => {
           if (getComputedStyle(el).position !== 'static') return false;
@@ -270,7 +294,7 @@ for (const vp of VIEWPORTS) {
           // Leaf-ish: no descendant carries text of its own.
           return !Array.from(el.children).some((c) => (c.textContent || '').trim().length > 3);
         })
-        .map((el) => ({ el, r: visibleRect(el), t: (el.textContent || '').trim() }))
+        .map((el) => ({ el, r: visibleRect(el), t: (el.textContent || '').trim(), bar: fixedBar(el) }))
         .filter(({ r }) => r.width > 4 && r.height > 4);
 
       const collisions = [];
@@ -278,6 +302,10 @@ for (const vp of VIEWPORTS) {
         for (let j = i + 1; j < leaves.length; j++) {
           const a = leaves[i], b = leaves[j];
           if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+          if (!!a.bar !== !!b.bar) {
+            const [over, under] = a.bar ? [a, b] : [b, a];
+            if (reachableFromUnder(under.el, over.bar)) continue;
+          }
           const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
           const h = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
           if (w <= 1 || h <= 1) continue;

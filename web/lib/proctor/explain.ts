@@ -221,6 +221,13 @@ export function explainGrip(g: GripData): Explanation[] {
 // Inputs against the car's response
 // ─────────────────────────────────────────────────────────────────────────────
 
+/* What you asked for against what the car did with it.
+ *
+ * A headline names the number; a detail line, when there is one, adds one more
+ * fact. What a shape MEANS mechanically lives in technique.ts, under its label,
+ * and is not repeated here — it used to be, three times on one screen. FFB
+ * clipping is not here either: it is the rig, not the driving, and the Physics
+ * screen's equipment section reports it. explain.test.ts holds the word budget. */
 export function explainInputResponse(ir: InputResponseData): Explanation[] {
   const out: Explanation[] = [];
 
@@ -230,42 +237,37 @@ export function explainInputResponse(ir: InputResponseData): Explanation[] {
     if (abs && abs.engaged_pct_of_braking > 0) {
       const cut = abs.mean_cut_while_engaged_pct;
       out.push({
-        headline: `On ${abs.engaged_pct_of_braking.toFixed(1)}% of your braking, the ABS was between your foot and the brakes.`,
+        headline: `ABS was active on ${abs.engaged_pct_of_braking.toFixed(1)}% of your braking.`,
         detail:
           cut != null
-            ? `While it was working it took back ${cut.toFixed(1)}% of the pressure you were asking for. That gap is not the pedal failing — it is the car deciding the tires could not hold what you requested.`
-            : "The file records that it engaged, but not how much pressure it removed.",
+            ? `While active it removed ${cut.toFixed(1)}% of the pressure your pedal asked for.`
+            : "The file records when it engaged, not how much it removed.",
       });
     } else if (abs) {
       out.push({
-        headline: "Every bit of brake pressure you asked for reached the brakes — the ABS never engaged.",
-        detail:
-          "Either the car has no ABS, or you never asked the front tires for more than they could hold.",
+        headline: "ABS never engaged: the brakes got all the pressure you asked for.",
+        detail: "The car may have no ABS, or the tyres held everything asked of them.",
       });
     }
 
     if (b.decel_per_pedal_g != null) {
       out.push({
-        headline: `A fully loaded brake pedal bought you about ${b.decel_per_pedal_g.toFixed(2)} g of deceleration this session.`,
-        detail: `Your hardest application reached ${b.pedal_ceiling_pct.toFixed(0)}% of pedal travel${
-          b.peak_deceleration_g != null ? ` and ${b.peak_deceleration_g.toFixed(2)} g of retardation` : ""
-        }. Both are your own maximums this session, not a limit of the car or the rig.`,
+        headline: `Full pedal bought about ${b.decel_per_pedal_g.toFixed(2)} g of deceleration.`,
+        detail: `Hardest press: ${b.pedal_ceiling_pct.toFixed(0)}% pedal${
+          b.peak_deceleration_g != null ? `, ${b.peak_deceleration_g.toFixed(2)} g` : ""
+        }. Your session maximums, not limits.`,
       });
     }
   }
 
   if (ir.throttle.measured && ir.throttle.slip) {
     const slip = ir.throttle.slip;
-    if (slip.share_of_on_power_pct > 0) {
-      out.push({
-        headline: `For ${slip.share_of_on_power_pct.toFixed(1)}% of the time you were on power, a wheel was turning faster than the car was travelling.`,
-        detail: `At its worst that wheel was ${slip.peak_excess_pct.toFixed(0)}% ahead of the ground. A wheel that is spinning is a wheel converting engine torque into heat instead of forward motion.`,
-      });
-    } else {
-      out.push({
-        headline: "Every time you asked for power, the wheels put it down — no wheel ran meaningfully ahead of the ground.",
-      });
-    }
+    out.push({
+      headline:
+        slip.share_of_on_power_pct > 0
+          ? `A wheel spun on ${slip.share_of_on_power_pct.toFixed(1)}% of your time on power, at worst ${slip.peak_excess_pct.toFixed(0)}% faster than the ground.`
+          : "No wheel spun while you were on power.",
+    });
   }
 
   if (ir.steering.measured) {
@@ -273,21 +275,13 @@ export function explainInputResponse(ir: InputResponseData): Explanation[] {
     const bands = st.bands.filter((b) => b.measured && b.peak_lateral_g != null);
     if (st.most_lateral_g_band && bands.length >= 2) {
       out.push({
-        headline: `The most lateral grip you got back came at ${st.most_lateral_g_band} of steering.`,
+        headline: `Lateral grip peaked at ${st.most_lateral_g_band} of lock.`,
         detail:
           st.falloff_past_peak_g != null && st.falloff_past_peak_g > 0
-            ? `Past that, more lock did not buy more grip — the highest bands gave back ${st.falloff_past_peak_g.toFixed(2)} g less. That shape is what running out of front tire looks like in these channels, measured on your own data this session rather than assumed from a model.`
-            : "Lateral force kept rising with lock across every band you used, so nothing in this session shows the front tires giving up.",
+            ? `Past that, more lock gave ${st.falloff_past_peak_g.toFixed(2)} g less.`
+            : "It kept rising with lock in every band you used.",
       });
     }
-  }
-
-  if (ir.wheel.measured && ir.wheel.clipping_pct_of_moving > 0) {
-    out.push({
-      headline: `Your wheel was pinned against its own force limit for ${ir.wheel.clipping_pct_of_moving.toFixed(2)}% of the time you were moving.`,
-      detail:
-        "While the wheel is saturated the force it hands back stops changing, so any detail about what the front tires were doing in that moment never reached your hands. This is a rig setting, not a driving finding.",
-    });
   }
 
   return out;

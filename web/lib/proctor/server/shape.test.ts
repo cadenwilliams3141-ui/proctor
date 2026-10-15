@@ -129,20 +129,49 @@ describe("hardware", () => {
   it("passes absent readings through as null, never as zero", () => {
     const h = hardwareFrom({
       hardware: {
-        brake_vs_raw: { brake_ceiling_pct: 89.8, stationary_ticks_excluded: 412 },
-        abs: { insufficient_data: true, reason: "no moving braking ticks" },
-        pedal_noise_floor: { spike_ticks: 69, max_spike: 0.0071, qualifying_ticks: 8812 },
-        ffb: { clipping_pct: 0, finding: "no FFB clipping detected" },
+        pedal_noise_floor: {
+          spike_ticks: 69,
+          max_spike: 0.0071,
+          qualifying_ticks: 8812,
+          brief_spikes: { events: 0, peak_pct: null, max_duration_ms: 50, min_reading_pct: 5 },
+          flagged: true,
+        },
+        ffb: { clipping_pct: 0, flagged: false, flag_threshold_pct: 2, finding: "no FFB clipping detected" },
         brake_bias: { available: false, reason: "not carried" },
-        areas_of_concern: { concerns: [], finding: "nothing to flag" },
+      },
+    });
+    expect(h?.pedal_noise.spike_ticks).toBe(69);
+    // A JSON null is not a zero: no brief spike means no peak, not a 0% one.
+    expect(h?.pedal_noise.brief?.events).toBe(0);
+    expect(h?.pedal_noise.brief?.peak_pct).toBeNull();
+    expect(h?.ffb.clipping_pct).toBe(0);
+    expect(h?.ffb.flagged).toBe(false);
+    expect(h?.ffb.flag_threshold_pct).toBe(2);
+    // Owned by input_response now; nothing here pretends otherwise.
+    expect(h?.brake_ceiling_pct).toBeNull();
+  });
+
+  it("still reads a session ingested before 2026-10-15", () => {
+    // The old payload: brake_vs_raw, abs and areas_of_concern; no flags, no
+    // brief_spikes. The ceiling survives (same definition), the ABS does not
+    // (different definition), and the FFB flag comes from the area the module
+    // listed at the time rather than from a threshold copied into the web app.
+    const h = hardwareFrom({
+      hardware: {
+        brake_vs_raw: { brake_ceiling_pct: 89.8, stationary_ticks_excluded: 412 },
+        abs: { engaged_pct_of_braking: 6.2, activation_events: 41 },
+        pedal_noise_floor: { spike_ticks: 69, max_spike: 0.0071, qualifying_ticks: 8812 },
+        ffb: { clipping_pct: 3.1 },
+        areas_of_concern: {
+          concerns: [{ area: "force-feedback clipping", observation: "", watch: "" }],
+        },
       },
     });
     expect(h?.brake_ceiling_pct).toBe(89.8);
-    expect(h?.abs.engaged_pct_of_braking).toBeNull();
-    expect(h?.abs.reason).toBe("no moving braking ticks");
-    expect(h?.pedal_noise.spike_ticks).toBe(69);
-    expect(h?.ffb.clipping_pct).toBe(0);
-    expect(h?.concerns_finding).toBe("nothing to flag");
+    expect(h).not.toHaveProperty("abs");
+    expect(h?.pedal_noise.brief).toBeNull();
+    expect(h?.ffb.flagged).toBe(true);
+    expect(h?.ffb.flag_threshold_pct).toBeNull();
   });
 });
 

@@ -42,6 +42,54 @@ def _bins(lat_g: np.ndarray, long_g: np.ndarray) -> tuple[np.ndarray, np.ndarray
     return mag, angle, idx
 
 
+def envelope(laps) -> tuple[np.ndarray, np.ndarray] | None:
+    """The driver's own g-g boundary, from every moving tick of `laps`.
+
+    Returns (centers_deg, radii_g) for the populated 10° bins only -- a bin
+    with too few ticks has no boundary rather than a boundary of zero -- or
+    None when no bin is populated. Shared with trail_braking, which measures
+    how much of this same boundary a corner entry used.
+    """
+    lat_all, long_all = [], []
+    for lap in laps:
+        lg, og = _moving_g(lap)
+        lat_all.append(lg)
+        long_all.append(og)
+    if not lat_all:
+        return None
+    lat_all = np.concatenate(lat_all)
+    long_all = np.concatenate(long_all)
+    if lat_all.size == 0:
+        return None
+    radii = _bin_radii(*_bins(lat_all, long_all)[::2])
+    populated = np.array([r is not None for r in radii])
+    if not populated.any():
+        return None
+    return _CENTERS[populated], np.array([r for r in radii if r is not None], dtype=np.float64)
+
+
+def fraction_of_envelope(
+    lat_g: np.ndarray, long_g: np.ndarray, env: tuple[np.ndarray, np.ndarray]
+) -> np.ndarray:
+    """|g| at each tick as a fraction of the envelope radius at that tick's angle."""
+    centers, radii = env
+    mag, angle, _idx = _bins(lat_g, long_g)
+    radius_at = np.maximum(np.interp(angle, centers, radii, period=360.0), _EPS)
+    return mag / radius_at
+
+
+def _bin_radii(mag: np.ndarray, idx: np.ndarray) -> list[float | None]:
+    """Per-bin outer boundary: 98th percentile magnitude; too-sparse bins -> None."""
+    radii: list[float | None] = []
+    for b in range(_BINS):
+        in_bin = mag[idx == b]
+        if in_bin.size >= _MIN_TICKS_PER_BIN:
+            radii.append(float(np.percentile(in_bin, _ENVELOPE_PCT)))
+        else:
+            radii.append(None)
+    return radii
+
+
 def _insufficient(reason: str) -> dict:
     return {
         "insufficient_data": True,
@@ -68,13 +116,7 @@ def compute(session: ParsedSession) -> dict:
         return _insufficient("acceleration channels are flat (zero g throughout)")
 
     # Per-bin outer boundary: 98th percentile magnitude; too-sparse bins → null.
-    radii: list[float | None] = []
-    for b in range(_BINS):
-        in_bin = mag_all[idx_all == b]
-        if in_bin.size >= _MIN_TICKS_PER_BIN:
-            radii.append(float(np.percentile(in_bin, _ENVELOPE_PCT)))
-        else:
-            radii.append(None)
+    radii = _bin_radii(mag_all, idx_all)
 
     populated = np.array([r is not None for r in radii])
     if not populated.any():

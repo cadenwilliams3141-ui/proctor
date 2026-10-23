@@ -28,7 +28,12 @@
  */
 
 import { MATCHED_BAND_S } from "@/lib/proctor/channels";
-import type { ContactPatchData, CornerLedger, InputResponseData } from "@/lib/proctor/types";
+import type {
+  ContactPatchData,
+  CornerLedger,
+  InputResponseData,
+  TrailCorner,
+} from "@/lib/proctor/types";
 import { SECTION_LABEL } from "@/lib/proctor/types";
 
 /** Rendered under every technique block, without exception. */
@@ -120,6 +125,76 @@ export function techniqueForInputResponse(ir: InputResponseData | null): Techniq
       because: "lateral grip stopped rising past your most productive steering band",
       body:
         "Once lateral force stops growing with lock, extra steering adds slip angle without adding grip — the front tyres are past their peak. Column torque reports the same event; the two agreeing is the strongest version of the finding.",
+    });
+  }
+  return notes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trail braking into a corner
+// ─────────────────────────────────────────────────────────────────────────────
+
+/* When a grade or a load change is big enough to be worth a note. These are
+   not measurements and are never shown: they decide only whether the reading
+   beside them is a finding worth explaining. */
+const GRADE_NOTE_PCT = 1;
+const LOAD_DROP_NOTE_G = 0.1;
+
+export function techniqueForTrail(c: TrailCorner | null | undefined): TechniqueNote[] {
+  if (!c || !c.measured) return [];
+  const m = c.median;
+  const ctx = c.context;
+  const notes: TechniqueNote[] = [];
+
+  if (m.trail_s != null && m.trail_s < 0) {
+    notes.push({
+      because: "the brake was off before turn-in on your typical lap here",
+      body:
+        "Coming fully off the brake before turning in leaves a moment when the tyres are asked for neither braking nor cornering force; the g-g trace shows it as a notch toward the centre. Trail braking overlaps the two, easing pressure off as steering builds so the grip in use stays high through the transition.",
+    });
+  } else if (m.trail_s != null && m.trail_s > 0) {
+    notes.push({
+      because: "you were still braking as you turned in here",
+      body:
+        "Pressure still on at turn-in keeps load on the front tyres, which is what lets them build cornering force early. The release is conventionally a taper that eases off as steering increases, rather than a step.",
+    });
+  }
+
+  if (m.restabs != null && m.restabs >= 1) {
+    notes.push({
+      because: "the pedal went back on partway through the release",
+      body:
+        "Pressing the brake again during the release moves load forward a second time, just as the front tyres are being asked to turn. It is usually read as the release having begun sooner or faster than the corner wanted.",
+    });
+  }
+
+  if (ctx.grade_pct != null && ctx.grade_pct <= -GRADE_NOTE_PCT) {
+    notes.push({
+      because: "this braking zone runs downhill",
+      body:
+        "Downhill, gravity works against the brakes and the rear of the car carries less load, so the car rotates more readily under trail braking. Releases into downhill corners are conventionally made more gently for that reason.",
+    });
+  } else if (ctx.grade_pct != null && ctx.grade_pct >= GRADE_NOTE_PCT) {
+    notes.push({
+      because: "this braking zone runs uphill",
+      body:
+        "Uphill, gravity helps stop the car and the front loads less under braking, so the same pedal buys more deceleration and the car is steadier as it turns. Uphill entries conventionally tolerate a later, firmer trail.",
+    });
+  }
+
+  if (ctx.load_drop_g != null && ctx.load_drop_g >= LOAD_DROP_NOTE_G) {
+    notes.push({
+      because: "the load pressing the car down fell between brake onset and turn-in",
+      body:
+        "When load falls through a braking zone, the grip available falls with it, so pressure the tyres held at the top of the zone can be too much by the apex. Cars that lean on downforce are conventionally braked hardest early and released progressively as speed comes off.",
+    });
+  }
+
+  if (m.abs_in_trail_pct != null && m.abs_in_trail_pct > 0) {
+    notes.push({
+      because: "ABS was active during your trail here",
+      body:
+        "With ABS working during the trail, the system is setting the pressure rather than the pedal. Trail-braking feel is conventionally built just below the point where it engages, so the release stays under the driver's control.",
     });
   }
   return notes;

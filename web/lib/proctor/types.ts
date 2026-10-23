@@ -732,6 +732,99 @@ export interface ContactPatchData {
   perTireLoad: { available: false; reason: string; note?: string };
 }
 
+/** One clean lap's entry to one corner. Every field is a measurement off that
+ *  lap; null when the lap could not show it (no release before the corner's
+ *  end, no envelope, no ABS channel) — never a zero standing in. */
+export interface TrailLap {
+  lap: number;
+  entry_time_s: number;
+  brake_at_turn_in_pct: number | null;
+  /** Release minus turn-in. NEGATIVE: the brake was off before turning in. */
+  trail_s: number | null;
+  release_s: number | null;
+  coast_s: number | null;
+  restabs: number | null;
+  /** Lowest share of the driver's own g-g envelope between peak brake and peak lateral. */
+  transition_min_pct: number | null;
+  abs_in_trail_pct: number | null;
+}
+
+export interface TrailMedians {
+  brake_at_turn_in_pct: number | null;
+  trail_s: number | null;
+  release_s: number | null;
+  coast_s: number | null;
+  transition_min_pct: number | null;
+  abs_in_trail_pct: number | null;
+  entry_time_s: number | null;
+  restabs: number | null;
+}
+
+export type TrailLink =
+  | { measured: false; laps: number; reason: string }
+  | {
+      measured: true;
+      laps: number;
+      rho: number | null;
+      link: "longer_trail_faster" | "longer_trail_slower" | "none";
+      reason?: string;
+    };
+
+export type TrailCorner = {
+  id: number;
+  start_pct: number;
+  apex_pct: number;
+  end_pct: number;
+  laps_measured: number;
+  braked_laps: number;
+} & (
+  | { measured: false; reason: string }
+  | {
+      measured: true;
+      median: TrailMedians;
+      released_before_turn_in_laps: number;
+      held_past_apex_laps: number;
+      best_entry: TrailLap & { gain_vs_median_s: number | null };
+      trail_vs_entry: TrailLink;
+      context: {
+        grade_pct: number | null;
+        load_g_onset: number | null;
+        load_g_turn_in: number | null;
+        load_drop_g: number | null;
+        lf_temp_middle_c: number | null;
+      };
+      per_lap: TrailLap[];
+    }
+);
+
+/** How each corner was entered, against the driver's own best entry to it. */
+export interface TrailBrakingData {
+  reference_lap: number;
+  laps_used: number[];
+  corners: TrailCorner[];
+  summary: {
+    corners_measured: number;
+    released_before_turn_in?: number[];
+    deepest_dip?: { id: number; transition_min_pct: number } | null;
+    restab_corners?: number[];
+    longer_trail_faster_corners?: number[];
+    median_brake_at_turn_in_pct?: number | null;
+  };
+  /** The rules the measurements were read with. Absent on nothing — the module
+   *  always sends them — but typed optional so an older block still shapes. */
+  thresholds?: {
+    brake_on_pct: number;
+    brake_off_pct: number;
+    turn_in_pct_of_peak_lat: number;
+    restab_pct: number;
+  };
+  lf_temp_available: boolean;
+  envelope_available: boolean;
+  /** Always unavailable: the file has no brake-temperature channel. */
+  brake_temperature: { available: false; reason: string };
+  caveat: string;
+}
+
 export interface SessionBundle {
   session: SessionMeta;
   laps: Lap[];
@@ -755,6 +848,8 @@ export interface SessionBundle {
   trackEdges: TrackEdges | null;
   hardware: HardwareData | null;
   contactPatch: ContactPatchData | null;
+  /** null when the module did not run, or could not (its reason is an absence). */
+  trailBraking: TrailBrakingData | null;
   /** Sample count on the shared distance grid. */
   gridSize: number;
   /** Circuit centreline in metres, gridSize long. */

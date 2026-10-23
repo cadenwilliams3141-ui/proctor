@@ -45,6 +45,7 @@ from proctor_parser.analysis import (  # noqa: E402 — registry wiring
     track_edges,
     track_map,
     track_width,
+    trail_braking,
     traction_circle,
 )
 
@@ -53,7 +54,7 @@ for _module in (
     hardware, traction_circle, report_card,
     lockup_wheelspin, shift_analysis, tire_temps, balance,
     corner_context, grip, input_response, stint, track_width, track_edges,
-    contact_patch,
+    contact_patch, trail_braking,
 ):
     _register(_module)
 

@@ -58,6 +58,9 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   written in the web app (`web/lib/proctor/explain.ts`, `equipment.ts`, `provenance.ts`, the
   screens). Copy changes then ship on a Vercel deploy, with no reingest. `explain.test.ts`
   holds a word budget (≤20 words a line) and forbids a finding repeating its technique note.
+- Coaching targets the driver's OWN best execution, never an outside ideal: trail braking points
+  at the lap whose entry to a corner was quickest. Thresholds are self-relative where they can be
+  (turn-in = lateral g reaching 30% of that lap's own peak) and travel in the payload as numbers.
 - MCP first, CLI fallback.
 
 ## Regression tripwire (the golden fixtures — exact filenames, in OneDrive iRacing\Telemetry)
@@ -73,9 +76,12 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   0.213s first-5→last-5 clean laps while ~31 L burned. Brief brake jumps
   (`pedal_noise_floor.brief_spikes`: >5%, gone within 50 ms, throttle flat both sides) are new
   on 2026-10-15 and have NO known-good count yet — record the Long Beach figure here once run.
+  Trail braking (`trail_braking`, 2026-10-23: brake at turn-in, trail, coast, the transition dip
+  against your own g-g envelope, best entry per corner) likewise has NO known-good numbers yet —
+  run Long Beach on the rig and record a corner or two here.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (**146 collected: 140 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**201 tests**). The third suite was missing from this list
+  (**157 collected: 151 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
+  `cd web && npx vitest run` (**215 tests**). The third suite was missing from this list
   until 2026-09-05 and is the one that covers ingest and the dev tools:
   `cd render-service && python -m pytest tests -q` (**47 tests**).
   If these numbers move, you broke something.

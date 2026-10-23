@@ -11,8 +11,9 @@ import {
   techniqueForLap,
   techniqueForSlip,
   techniqueForSteerTorque,
+  techniqueForTrail,
 } from "./technique";
-import type { ContactPatchData, CornerLedger, InputResponseData } from "./types";
+import type { ContactPatchData, CornerLedger, InputResponseData, TrailCorner } from "./types";
 
 const emptyCp = (over: Partial<ContactPatchData> = {}): ContactPatchData => ({
   slip: { measured: false },
@@ -168,5 +169,44 @@ describe("the label", () => {
   it("says both what it is and what it is not", () => {
     expect(LABEL).toContain("not a reading of your file");
     expect(LABEL).toContain("cannot see why");
+  });
+});
+
+describe("trail-braking notes", () => {
+  const corner = (over: Record<string, unknown>, ctx: Record<string, unknown> = {}) =>
+    ({
+      id: 4,
+      measured: true,
+      median: { trail_s: 0.4, restabs: 0, abs_in_trail_pct: null, ...over },
+      context: { grade_pct: 0, load_drop_g: 0, ...ctx },
+    }) as unknown as TrailCorner;
+
+  it("says nothing for a corner that was not measured", () => {
+    expect(techniqueForTrail(null)).toEqual([]);
+    expect(techniqueForTrail({ id: 1, measured: false, reason: "x" } as unknown as TrailCorner)).toEqual([]);
+  });
+
+  it("hangs each note off its own finding and nothing else", () => {
+    expect(techniqueForTrail(corner({})).map((n) => n.because)).toEqual([
+      "you were still braking as you turned in here",
+    ]);
+    const all = techniqueForTrail(
+      corner({ trail_s: -0.3, restabs: 2, abs_in_trail_pct: 10 }, { grade_pct: -2, load_drop_g: 0.4 }),
+    ).map((n) => n.because);
+    expect(all).toEqual([
+      "the brake was off before turn-in on your typical lap here",
+      "the pedal went back on partway through the release",
+      "this braking zone runs downhill",
+      "the load pressing the car down fell between brake onset and turn-in",
+      "ABS was active during your trail here",
+    ]);
+  });
+
+  it("puts no measured value in any note body", () => {
+    const notes = [
+      ...techniqueForTrail(corner({ trail_s: -0.3, restabs: 2, abs_in_trail_pct: 10 }, { grade_pct: -2, load_drop_g: 0.4 })),
+      ...techniqueForTrail(corner({}, { grade_pct: 2 })),
+    ];
+    for (const n of notes) expect(n.body).not.toMatch(/\d/);
   });
 });

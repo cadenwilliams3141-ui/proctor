@@ -87,7 +87,17 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
         decel = np.gradient(speed)
         steer = 0.62 * turn * cp
         lat = steer * speed * 0.62
-        brake = np.clip(-decel * 6.0, 0, 1) * on
+        # Pressure follows the deceleration and peaks near 90%, so it TAPERS
+        # into the corner rather than sitting at a saturated 100% -- the old
+        # clip(-decel*6) held the pedal flat to the apex on every lap, which
+        # gives trail_braking nothing to tell apart. Where the brake comes off
+        # varies by lap (cp rises 0 -> 1 toward each apex; turn-in is near
+        # cp 0.6), and the quicker laps trail longer, so the fixture carries
+        # both straight-line and trailed entries and a link between them.
+        gain = 0.9 / max(float(-decel.min()), 1e-6)
+        release_cp = float(np.clip(0.95 - (pace - 1.0) / 0.028 * 0.55, 0.35, 0.95))
+        brake = np.clip(-decel * gain, 0, 1) * on
+        brake[(cp > release_cp) & (decel < 0)] = 0.0
         brake_raw = brake.copy()
         if L == 0:
             brake[:10] = 1.0

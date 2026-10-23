@@ -56,6 +56,7 @@ import {
   explainGrip,
   explainInputResponse,
   explainPattern,
+  explainTrailSession,
   wheelName,
 } from "@/lib/proctor/explain";
 import { equipmentReadings } from "@/lib/proctor/equipment";
@@ -147,9 +148,15 @@ export default function ForcesScreen() {
   /* The answer this screen exists to give, in sentences. Grip first because it
      is the end of the chain — what the ground actually gave — and the inputs
      read as the story of how it was asked for. */
+  /* Three sentences, one per subject: the grip, what the electronics did with
+     the brake, and how the brake met the steering on the way into corners.
+     Deceleration per unit of pedal used to be the third; it still has its own
+     card in step 02, so nothing measured left the screen. */
+  const trailLine = bundle.trailBraking ? explainTrailSession(bundle.trailBraking) : null;
   const answer = [
     ...(grip ? explainGrip(grip).slice(0, 1) : []),
-    ...(ir ? explainInputResponse(ir).slice(0, 2) : []),
+    ...(ir ? explainInputResponse(ir).slice(0, trailLine ? 1 : 2) : []),
+    ...(trailLine ? [trailLine] : []),
   ];
 
   return (

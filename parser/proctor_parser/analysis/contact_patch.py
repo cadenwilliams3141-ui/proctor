@@ -44,6 +44,7 @@ from __future__ import annotations
 import numpy as np
 
 from proctor_parser.analysis.corners import detect_corners
+from proctor_parser.analysis.grade import grade_per_tick
 from proctor_parser.laps import moving_mask
 from proctor_parser.session import ParsedLap, ParsedSession
 
@@ -70,8 +71,6 @@ _STEER_BINS_DEG = (0.0, 20.0, 45.0, 75.0, 110.0, 150.0, 1e9)
 # Slip angle is only meaningful with real forward speed. Below this the lateral
 # component is noise and atan2 swings wildly for no physical reason.
 _MIN_SPEED_FOR_SLIP = 8.0
-# A grade beyond this is a GPS/altitude dropout, not a road.
-_MAX_PLAUSIBLE_GRADE = 0.30
 _PEAK_PCTILE = 98
 
 
@@ -357,21 +356,15 @@ def _grade(laps: list[ParsedLap], session: ParsedSession) -> dict:
         moving = moving_mask(lap.raw["speed"])
         if int(np.count_nonzero(moving)) < _MIN_TICKS:
             continue
-        alt = lap.raw["alt"].astype(np.float64)[moving]
-        dist = lap.raw["dist"].astype(np.float64)[moving] * track_m
+        full = grade_per_tick(lap, track_m)
+        if full is None:
+            continue
+        grade = full[moving]
         long_accel = lap.raw["long_accel"].astype(np.float64)[moving]
         brake = lap.raw["brake_raw"].astype(np.float64)[moving]
-
-        d_alt = np.gradient(alt)
-        d_dist = np.gradient(dist)
-        # A lap wraps 1 -> 0 at the line, which makes one d_dist hugely negative.
-        # Guarding on magnitude drops that sample rather than inventing a cliff.
-        ok = np.isfinite(d_alt) & np.isfinite(d_dist) & (np.abs(d_dist) > 0.01)
+        ok = np.isfinite(grade)
         if not ok.any():
             continue
-        grade = np.zeros_like(d_alt)
-        grade[ok] = d_alt[ok] / d_dist[ok]
-        ok &= np.abs(grade) <= _MAX_PLAUSIBLE_GRADE
 
         braking = ok & (brake > 0.2)
         if braking.any():

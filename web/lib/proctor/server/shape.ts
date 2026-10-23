@@ -36,6 +36,8 @@ import type {
   TrackEvent,
   TrackWidthData,
   TractionData,
+  TrailBrakingData,
+  TrailCorner,
 } from "@/lib/proctor/types";
 
 type Payload = Record<string, unknown>;
@@ -514,6 +516,32 @@ export function inputResponseFrom(metrics: MetricPayloads): InputResponseData | 
   };
 }
 
+/** Trail braking, corner by corner. Null when the module did not run or could
+ *  not (no corners, no clean lap) — that case is an absence with the module's
+ *  own reason, never an empty panel. */
+export function trailBrakingFrom(metrics: MetricPayloads): TrailBrakingData | null {
+  const t = block(metrics, "trail_braking");
+  if (!ran(t) || !Array.isArray(t.corners)) return null;
+
+  return {
+    reference_lap: Number(t.reference_lap),
+    laps_used: nums(t.laps_used),
+    corners: t.corners as TrailCorner[],
+    summary: (t.summary as TrailBrakingData["summary"]) ?? { corners_measured: 0 },
+    thresholds: (t.thresholds as TrailBrakingData["thresholds"]) ?? undefined,
+    lf_temp_available: t.lf_temp_available === true,
+    envelope_available: t.envelope_available === true,
+    brake_temperature: {
+      available: false,
+      reason: String(
+        (t.brake_temperature as Payload | undefined)?.reason ??
+          "the .ibt carries no brake-temperature channel",
+      ),
+    },
+    caveat: String(t.caveat ?? ""),
+  };
+}
+
 export function stintFrom(metrics: MetricPayloads): StintData | null {
   const s = block(metrics, "stint");
   if (!ran(s) || !Array.isArray(s.laps)) return null;
@@ -907,6 +935,7 @@ export function absencesFrom(
     stint: "How the run changed",
     track_width: "The road you used",
     contact_patch: "Between the car and the ground",
+    trail_braking: "Trail braking into each corner",
   };
 
   for (const [key, title] of Object.entries(TITLES)) {

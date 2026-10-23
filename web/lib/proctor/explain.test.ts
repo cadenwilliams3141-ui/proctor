@@ -107,3 +107,137 @@ describe("explainInputResponse", () => {
     expect(text).not.toMatch(/force limit|stops|clipp/i);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trail braking: the same budget, and the same separation from technique
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { explainTrailCorner, explainTrailSession } from "./explain";
+import { techniqueForTrail } from "./technique";
+import type { TrailBrakingData, TrailCorner } from "./types";
+
+const trailLap = (lap: number, entry: number, brake: number, trail: number) => ({
+  lap,
+  entry_time_s: entry,
+  brake_at_turn_in_pct: brake,
+  trail_s: trail,
+  release_s: 1.2,
+  coast_s: 0.3,
+  restabs: 1,
+  transition_min_pct: 61,
+  abs_in_trail_pct: 12,
+});
+
+const trailed: TrailCorner = {
+  id: 4,
+  start_pct: 0.4,
+  apex_pct: 0.5,
+  end_pct: 0.6,
+  laps_measured: 6,
+  braked_laps: 6,
+  measured: true,
+  median: {
+    brake_at_turn_in_pct: 22,
+    trail_s: 0.45,
+    release_s: 1.2,
+    coast_s: 0.3,
+    transition_min_pct: 61,
+    abs_in_trail_pct: 12,
+    entry_time_s: 1.4,
+    restabs: 1,
+  },
+  released_before_turn_in_laps: 0,
+  held_past_apex_laps: 0,
+  best_entry: { ...trailLap(7, 1.28, 34, 0.6), gain_vs_median_s: 0.12 },
+  trail_vs_entry: { measured: true, laps: 6, rho: -0.8, link: "longer_trail_faster" },
+  context: {
+    grade_pct: -2.1,
+    load_g_onset: 2.1,
+    load_g_turn_in: 1.6,
+    load_drop_g: 0.5,
+    lf_temp_middle_c: 88,
+  },
+  per_lap: [trailLap(7, 1.28, 34, 0.6), trailLap(3, 1.45, 18, 0.2)],
+};
+
+const straight: TrailCorner = {
+  ...trailed,
+  median: { ...trailed.median, brake_at_turn_in_pct: 0, trail_s: -0.4, restabs: 0, abs_in_trail_pct: null },
+  trail_vs_entry: { measured: true, laps: 6, rho: 0.1, link: "none" },
+} as TrailCorner;
+
+describe("explainTrailCorner", () => {
+  for (const [name, c] of [
+    ["a trailed corner", trailed],
+    ["a straight-line corner", straight],
+  ] as const) {
+    it(`keeps every line inside the word budget on ${name}`, () => {
+      for (const e of explainTrailCorner(c)) {
+        expect(words(e.headline), e.headline).toBeLessThanOrEqual(MAX_WORDS);
+        if (e.detail) expect(words(e.detail), e.detail).toBeLessThanOrEqual(MAX_WORDS);
+      }
+    });
+  }
+
+  it("points at the driver's own quickest entry, never at an outside ideal", () => {
+    const text = explainTrailCorner(trailed)
+      .map((e) => `${e.headline} ${e.detail ?? ""} ${e.lookAt ?? ""}`)
+      .join(" ");
+    expect(text).toMatch(/lap 7/);
+    expect(text).not.toMatch(/\bshould\b|\btry\b|\bbrake later\b|\bideal\b/i);
+  });
+
+  it("states a missing link as a result, and an unmeasured corner by its reason", () => {
+    const none = explainTrailCorner(straight).map((e) => e.headline).join(" ");
+    expect(none).toMatch(/no consistent link/);
+    const unmeasured = explainTrailCorner({
+      ...trailed,
+      measured: false,
+      reason: "taken without braking on every clean lap",
+    } as TrailCorner);
+    expect(unmeasured[0].headline).toBe("Turn 4: taken without braking on every clean lap.");
+  });
+
+  it("calls a near-tie a tie instead of naming a quickest lap", () => {
+    const tie = {
+      ...trailed,
+      best_entry: { ...trailed.best_entry, gain_vs_median_s: 0.002 },
+    } as TrailCorner;
+    const lines = explainTrailCorner(tie).map((e) => e.headline);
+    expect(lines.join(" ")).toMatch(/No entry into Turn 4 stood out/);
+    expect(lines.join(" ")).not.toMatch(/quickest entry/);
+    for (const l of lines) expect(words(l)).toBeLessThanOrEqual(MAX_WORDS);
+  });
+
+  it("never says what its technique notes say", () => {
+    const findings = explainTrailCorner(trailed).flatMap((e) =>
+      sentences(`${e.headline} ${e.detail ?? ""}`),
+    );
+    const notes = techniqueForTrail(trailed).flatMap((n) => sentences(n.body));
+    expect(notes.length).toBeGreaterThan(0);
+    for (const s of findings) expect(notes).not.toContain(s);
+  });
+});
+
+describe("explainTrailSession", () => {
+  const tb = (summary: TrailBrakingData["summary"]) =>
+    ({ summary }) as unknown as TrailBrakingData;
+
+  it("stays inside the budget however many corners were entered off the brake", () => {
+    const e = explainTrailSession(
+      tb({
+        corners_measured: 12,
+        median_brake_at_turn_in_pct: 18,
+        released_before_turn_in: [1, 2, 3, 5, 6, 8, 9, 11],
+        deepest_dip: { id: 5, transition_min_pct: 40 },
+      }),
+    );
+    expect(e).not.toBeNull();
+    expect(words(e!.headline)).toBeLessThanOrEqual(MAX_WORDS);
+    expect(words(e!.detail!)).toBeLessThanOrEqual(MAX_WORDS);
+  });
+
+  it("says nothing rather than something empty when no corner was braked", () => {
+    expect(explainTrailSession(tb({ corners_measured: 0 }))).toBeNull();
+  });
+});

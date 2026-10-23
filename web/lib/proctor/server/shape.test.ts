@@ -17,6 +17,7 @@ import {
   hardwareFrom,
   inputResponseFrom,
   stintFrom,
+  trailBrakingFrom,
   trackBoundaryFrom,
   trackEdgesFrom,
   trackWidthFrom,
@@ -429,7 +430,7 @@ describe("absences are classified by what would fix them", () => {
         "track_map", "traction_circle", "tire_temps", "lockup_wheelspin",
         "shift_analysis", "hardware", "balance", "report_card", "grip",
         "track_edges", "input_response", "stint", "track_width",
-        "contact_patch",
+        "contact_patch", "trail_braking",
       ].map((k) => [k, k === "tire_temps" ? { ...ok, curve: [1, 2] } : ok]),
     );
     const a = absencesFrom(metrics, { wear_masked: false });
@@ -519,5 +520,34 @@ describe("contactPatchFrom", () => {
   it("is null when the module never ran", () => {
     expect(contactPatchFrom({})).toBeNull();
     expect(contactPatchFrom({ contact_patch: { insufficient_data: true } })).toBeNull();
+  });
+});
+
+describe("trail braking", () => {
+  it("is null when the module never ran or could not", () => {
+    expect(trailBrakingFrom({})).toBeNull();
+    expect(
+      trailBrakingFrom({ trail_braking: { insufficient_data: true, reason: "no corners detected" } }),
+    ).toBeNull();
+  });
+
+  it("passes corners through and always states the brake-temperature wall", () => {
+    const t = trailBrakingFrom({
+      trail_braking: {
+        reference_lap: 7,
+        laps_used: [1, 2, 3],
+        corners: [{ id: 1, measured: false, reason: "taken without braking on every clean lap" }],
+        summary: { corners_measured: 0 },
+        thresholds: { brake_on_pct: 10, brake_off_pct: 5, turn_in_pct_of_peak_lat: 30, restab_pct: 5 },
+        lf_temp_available: true,
+        envelope_available: true,
+        brake_temperature: { available: false, reason: "no channel" },
+        caveat: "one session",
+      },
+    });
+    expect(t?.reference_lap).toBe(7);
+    expect(t?.corners).toHaveLength(1);
+    expect(t?.brake_temperature).toEqual({ available: false, reason: "no channel" });
+    expect(t?.thresholds?.turn_in_pct_of_peak_lat).toBe(30);
   });
 });

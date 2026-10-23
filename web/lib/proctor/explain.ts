@@ -34,6 +34,8 @@ import type {
   TrackBoundary,
   TrackEdges,
   TrackWidthData,
+  TrailBrakingData,
+  TrailCorner,
 } from "@/lib/proctor/types";
 
 /** A plain-English reading of one thing the session showed.
@@ -285,6 +287,100 @@ export function explainInputResponse(ir: InputResponseData): Explanation[] {
   }
 
   return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trail braking: each corner's entry against your own best entry to it
+// ─────────────────────────────────────────────────────────────────────────────
+
+const sec = (s: number) => `${Math.abs(s).toFixed(2)} s`;
+
+/** Below this, the quickest entry did not beat the typical one: a tie. Entry
+ *  time is counted in telemetry ticks (16.7 ms at 60 Hz), so a smaller gap is
+ *  not a difference the file can resolve. Shared with the corner panel, so the
+ *  sentence and the table cannot disagree about whether a lap stood out. */
+export const TRAIL_TIE_S = 0.005;
+
+/* How the brake met the steering on the way into one corner.
+ *
+ * The target is the driver's OWN quickest entry, never an external ideal: the
+ * file cannot see why a lap was braked the way it was, so the honest thing to
+ * point at is the lap where it worked best. What the shape means mechanically
+ * is technique.ts's job, under its label. Same budget as the rest of this file:
+ * a headline that names the number and at most one short line of fact. */
+export function explainTrailCorner(c: TrailCorner): Explanation[] {
+  const t = turn(c.id);
+  if (!c.measured) {
+    return [{ headline: `${t}: ${c.reason}.` }];
+  }
+
+  const m = c.median;
+  const out: Explanation[] = [];
+
+  const headline =
+    m.trail_s == null
+      ? `Into ${t} you typically held the brake past the apex.`
+      : m.trail_s > 0
+        ? `Into ${t} you typically carried ${(m.brake_at_turn_in_pct ?? 0).toFixed(0)}% brake at turn-in, off it ${sec(m.trail_s)} later.`
+        : `Into ${t} you were typically off the brake ${sec(m.trail_s)} before turning in.`;
+  out.push({
+    headline,
+    detail:
+      m.transition_min_pct != null
+        ? `Between braking and cornering you used as little as ${m.transition_min_pct.toFixed(0)}% of your own grip envelope.`
+        : undefined,
+  });
+
+  const best = c.best_entry;
+  if (best.gain_vs_median_s != null && best.gain_vs_median_s <= TRAIL_TIE_S) {
+    // A tie is a result too: there is no quicker entry here to point at.
+    out.push({
+      headline: `No entry into ${t} stood out: your quickest was within ${ms(TRAIL_TIE_S)} of your typical one.`,
+    });
+  } else if (best.gain_vs_median_s != null) {
+    out.push({
+      headline: `Your quickest entry, lap ${best.lap}, reached the apex ${sec(best.gain_vs_median_s)} sooner than your typical lap.`,
+      detail:
+        best.trail_s == null
+          ? "On it you held the brake past the apex."
+          : best.trail_s > 0
+            ? `On it you carried ${(best.brake_at_turn_in_pct ?? 0).toFixed(0)}% brake at turn-in, off it ${sec(best.trail_s)} later.`
+            : `On it you were off the brake ${sec(best.trail_s)} before turning in.`,
+      lookAt: `Lap ${best.lap}, the entry to ${t}.`,
+    });
+  }
+
+  const link = c.trail_vs_entry;
+  if (link.measured) {
+    out.push({
+      headline:
+        link.link === "longer_trail_faster"
+          ? `Across ${link.laps} laps, your longer trails into ${t} went with quicker entries.`
+          : link.link === "longer_trail_slower"
+            ? `Across ${link.laps} laps, your longer trails into ${t} went with slower entries.`
+            : `Across ${link.laps} laps, trail length and entry time showed no consistent link here.`,
+    });
+  }
+  return out;
+}
+
+/** The whole session's entries in one sentence, for the Physics answer. */
+export function explainTrailSession(tb: TrailBrakingData): Explanation | null {
+  const s = tb.summary;
+  if (!s.corners_measured || s.median_brake_at_turn_in_pct == null) return null;
+  const before = s.released_before_turn_in ?? [];
+  return {
+    headline: `Across ${s.corners_measured} braked corners you carried a median ${s.median_brake_at_turn_in_pct.toFixed(0)}% brake at turn-in.`,
+    detail:
+      before.length === 0
+        ? "You were still on the brake at turn-in into every one."
+        : before.length <= 3
+          ? `Into ${before.map(turn).join(", ")} you were typically off the brake before turning in.`
+          : `Into ${before.length} of them you were typically off the brake before turning in.`,
+    lookAt: s.deepest_dip
+      ? `${turn(s.deepest_dip.id)}: the deepest dip between braking and cornering.`
+      : undefined,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

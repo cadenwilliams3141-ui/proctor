@@ -101,6 +101,10 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
     provenance: "measured",
     note: "Read only while you were flat on the throttle, so a brake signal there came from the rig, not from you. One session is a baseline; watch whether the count grows.",
   },
+  "trail.method": {
+    provenance: "derived",
+    note: "Your clean laps only, against your own quickest entry. The grip envelope is your own g-g boundary this session, not a tyre model.",
+  },
   "stint.trend": {
     provenance: "derived",
     note: "A drift across the laps of one run, fitted over your clean laps in the order you drove them. It names no cause: tires, brakes, fuel load, track surface and simply learning the lap all move these numbers, and one session cannot separate them.",

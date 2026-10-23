@@ -14,6 +14,7 @@ import { Info } from "lucide-react";
 import { CH, INK, deltaColor, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtCornerGeometry, fmtDelta, kmh, toG } from "@/lib/proctor/format";
 import { pathFor, pathLength, project, windowExtent, wrapIndex } from "@/lib/proctor/geometry";
+import { explainTrailCorner } from "@/lib/proctor/explain";
 import { observation } from "@/lib/proctor/ledger";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
@@ -167,6 +168,19 @@ export default function CornerSheet() {
         <div style={{ fontSize: 12.5, lineHeight: 1.55, color: dim(62), marginTop: "var(--space-2)" }}>
           {observation(sel)}
         </div>
+
+        {/* How the brake met the steering on the way in: the headline only.
+            The full comparison with the quickest entry lives on the desktop
+            corner panel, where there is room for its table. */}
+        {(() => {
+          const tc = bundle.trailBraking?.corners.find((x) => x.id === c.id);
+          const line = tc ? explainTrailCorner(tc)[0]?.headline : null;
+          return line ? (
+            <div style={{ fontSize: 12, lineHeight: 1.55, color: dim(55), marginTop: "var(--space-2)" }}>
+              {line}
+            </div>
+          ) : null;
+        })()}
 
         <svg
           viewBox="0 0 330 200"

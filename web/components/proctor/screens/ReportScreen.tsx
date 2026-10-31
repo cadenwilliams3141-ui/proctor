@@ -213,7 +213,7 @@ const BOTTOM = 186;
 const LEFT = 46;
 const RIGHT = 1168;
 
-function LapChart({ best, sd }: { best: number | null; sd: number }) {
+export function LapChart({ best, sd }: { best: number | null; sd: number }) {
   const { bundle, state, dispatch } = useProctor();
   const [hover, setHover] = useState<number | null>(null);
 
@@ -451,7 +451,7 @@ function Key({ color, label }: { color: string; label: string }) {
 // Stint: how the run changed
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TREND_ROWS: { key: string; label: string; good: "down" | "up" | "neither" }[] = [
+export const TREND_ROWS: { key: string; label: string; good: "down" | "up" | "neither" }[] = [
   { key: "lap_time_s", label: "Lap time", good: "down" },
   { key: "decel_per_pedal_g", label: "Deceleration per unit of pedal", good: "up" },
   { key: "peak_braking_g", label: "Peak braking", good: "neither" },

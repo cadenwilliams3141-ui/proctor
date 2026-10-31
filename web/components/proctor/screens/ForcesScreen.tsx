@@ -452,7 +452,7 @@ function InputCards({ hw, ir }: { hw: HardwareData | null; ir: InputResponseData
 }
 
 /** After the chain: the rig's own signals. Words from lib/proctor/equipment. */
-function EquipmentCards({ hw, absences }: { hw: HardwareData | null; absences: ModuleAbsence[] }) {
+export function EquipmentCards({ hw, absences }: { hw: HardwareData | null; absences: ModuleAbsence[] }) {
   if (!hw) return <Missing absences={absences} k="hardware" />;
   return (
     <>
@@ -1238,7 +1238,7 @@ function ringStep(maxG: number): number {
   return Math.ceil(maxG / 5);
 }
 
-function TractionCircle() {
+export function TractionCircle() {
   const { bundle } = useProctor();
 
   const geom = useMemo(() => {

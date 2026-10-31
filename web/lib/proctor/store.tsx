@@ -46,6 +46,11 @@ export type Screen =
   | "anatomy"
   | "upload";
 export type AnalysisView = "track" | "loss" | "ribbon" | "map" | "line";
+/** Physics and Report each open on an overview — pictures and big numbers —
+ *  with the full breakdown one switch away. The breakdown is a separate part
+ *  rather than a fold because it carries caveats and absences, which may never
+ *  sit behind a disclosure (components/proctor/ui/Answer.tsx). */
+export type ScreenPart = "overview" | "full";
 
 export interface ProctorState {
   /** Which session the whole surface is reading. "latest" is resolved
@@ -55,6 +60,7 @@ export interface ProctorState {
   sessionId: string;
   screen: Screen;
   view: AnalysisView;
+  part: ScreenPart;
   lapA: number | null;
   lapB: number | null;
   /** 0..1 along the lap. */
@@ -86,6 +92,7 @@ type Action =
   | { t: "session"; id: string }
   | { t: "screen"; screen: Screen }
   | { t: "view"; view: AnalysisView }
+  | { t: "part"; part: ScreenPart }
   | { t: "lapA"; lap: number }
   | { t: "lapB"; lap: number }
   | { t: "cursor"; cursor: number }
@@ -122,9 +129,13 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       return {
         ...s,
         screen: a.screen,
+        // Each screen opens on its overview; the breakdown is asked for.
+        part: a.screen === s.screen ? s.part : "overview",
         sheet: null,
         setup: s.setup === "rig" && a.screen !== "hardware" ? null : s.setup,
       };
+    case "part":
+      return { ...s, part: a.part };
     case "view":
       // Lap A, lap B, cursor and the selected corner all persist across a view
       // change. Switching how you look at the lap must not lose your place.
@@ -170,6 +181,7 @@ const INITIAL: ProctorState = {
   sessionId: "latest",
   screen: "analyze",
   view: "track",
+  part: "overview",
   lapA: null,
   lapB: null,
   cursor: 0.34,
@@ -208,6 +220,7 @@ export function ProctorProvider({
   initialTier = DEFAULT_TIER,
   initialScreen = "analyze",
   initialView = "track",
+  initialPart = "overview",
   skipSplash = false,
   initialSetup = null,
   children,
@@ -217,6 +230,7 @@ export function ProctorProvider({
   /** From ?screen= — an analysis view is worth being able to link to. */
   initialScreen?: Screen;
   initialView?: AnalysisView;
+  initialPart?: ScreenPart;
   skipSplash?: boolean;
   /** The setup step this visit opens on, decided on the server from a cookie
    *  (lib/setup.ts). The phone app never passes one. */
@@ -229,6 +243,7 @@ export function ProctorProvider({
     tier: initialTier,
     screen: initialScreen,
     view: initialView,
+    part: initialPart,
     splash: !skipSplash && initialSetup == null,
     setup: initialSetup,
   });

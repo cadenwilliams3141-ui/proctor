@@ -2124,3 +2124,247 @@ button[disabled] {
     height: 38px !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OVERVIEWS — the first page of Physics and Report (PhysicsOverview,
+   ReportOverview). Pictures and big numbers; a few words under each. The full
+   breakdown is the other part of each screen, switched from the top bar.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ov {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4) var(--space-6) var(--space-8);
+}
+.ov-hero {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+/* Beside the grip plot the six tiles run two across and share its height. */
+.ov-hero > .ov-tiles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+}
+.ov-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: var(--space-3);
+}
+.ov-tiles-row {
+  margin-top: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+}
+.ov-tile {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px 13px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+}
+.ov-tile[data-flagged="true"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ch-warn) 55%, transparent);
+}
+.ov-tile-label {
+  font: 600 10px var(--font-heading);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+.ov-tile-value {
+  font: 600 28px/1.05 var(--font-heading);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ov-tile-unit {
+  margin-left: 4px;
+  font: 500 12px var(--font-heading);
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.ov-tile-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  overflow: hidden;
+}
+.ov-tile-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+.ov-tile-sub {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.ov-row2 {
+  margin-top: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.ov-panel {
+  min-width: 0;
+  padding: 12px 14px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.ov-h {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  font: 600 13px var(--font-heading);
+}
+.ov-h-sub {
+  font: 400 11px var(--font-body);
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.ov-h-count {
+  font: 600 12px var(--font-heading);
+}
+.ov-lines {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.ov-key {
+  margin-top: 6px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+.ov-hidden {
+  margin-top: var(--space-4);
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+.ov-wall {
+  margin-top: var(--space-4);
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 48%, transparent);
+}
+.ov-wall-item {
+  cursor: help;
+  text-decoration: underline dotted color-mix(in srgb, var(--color-text) 30%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* Corner entry columns (Physics) */
+.ov-entries {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.ov-entry {
+  flex: 1 0 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 2px 5px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+  color: var(--color-text);
+}
+.ov-entry-bar {
+  width: 14px;
+  height: 92px;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  overflow: hidden;
+}
+.ov-entry-bar > span {
+  display: block;
+  width: 100%;
+  background: var(--ch-loss);
+  border-radius: 3px;
+}
+.ov-entry-pct {
+  font: 600 11px var(--font-heading);
+}
+.ov-entry-trail {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.ov-entry-id {
+  font: 600 10.5px var(--font-heading);
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+/* Report: header, where-time-goes */
+.ov-head {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-6);
+}
+.ov-where {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr);
+  gap: var(--space-4);
+  align-items: center;
+}
+.ov-top {
+  display: grid;
+  gap: 6px;
+}
+.ov-toprow {
+  display: grid;
+  grid-template-columns: 22px auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: baseline;
+  text-align: left;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--ch-loss) 9%, transparent);
+  color: var(--color-text);
+  font-size: 13px;
+}
+.ov-toprow-rank {
+  grid-row: span 2;
+  font: 600 18px var(--font-heading);
+  color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.ov-toprow-id {
+  font: 600 14px var(--font-heading);
+}
+.ov-toprow-sub {
+  grid-column: 2 / span 2;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+@media (max-width: 1100px) {
+  .ov-hero,
+  .ov-row2,
+  .ov-where {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ov-hero > .ov-tiles .ov-tile {
+  justify-content: center;
+  gap: 7px;
+}
+.ov-hero > .ov-tiles .ov-tile-value {
+  font-size: 34px;
+}

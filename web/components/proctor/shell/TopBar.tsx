@@ -1,10 +1,10 @@
 "use client";
 
-import { ListOrdered, Map as MapIcon, AudioWaveform, Route, Spline } from "lucide-react";
+import { ListOrdered, Map as MapIcon, AudioWaveform, LayoutDashboard, Rows3, Route, Spline } from "lucide-react";
 
 import { dim } from "@/lib/proctor/channels";
 import { IS_FIXTURE } from "@/lib/proctor/data-source";
-import { useProctor, type AnalysisView, type Screen } from "@/lib/proctor/store";
+import { useProctor, type AnalysisView, type Screen, type ScreenPart } from "@/lib/proctor/store";
 import { TIER_BLURB, TIERS } from "@/lib/tier";
 
 const TITLE: Record<Screen, { title: string; sub: string }> = {
@@ -36,6 +36,14 @@ const VIEWS: { id: AnalysisView; label: string; Icon: typeof ListOrdered }[] = [
   { id: "ribbon", label: "Ribbon", Icon: AudioWaveform },
   { id: "map", label: "Map & delta", Icon: MapIcon },
   { id: "line", label: "Racing line", Icon: Spline },
+];
+
+/* Physics and Report each have an overview and the full breakdown. Two parts
+   rather than a fold: the breakdown carries caveats and absences, which may
+   never sit behind a disclosure. */
+const PARTS: { id: ScreenPart; label: string; Icon: typeof ListOrdered }[] = [
+  { id: "overview", label: "Overview", Icon: LayoutDashboard },
+  { id: "full", label: "Full breakdown", Icon: Rows3 },
 ];
 
 export default function TopBar() {
@@ -103,6 +111,40 @@ export default function TopBar() {
                 type="button"
                 className="pk tb-view-btn"
                 onClick={() => dispatch({ t: "view", view: id })}
+                aria-pressed={active}
+                aria-label={label}
+                title={label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 10px",
+                  borderRadius: 7,
+                  border: 0,
+                  font: "500 12px var(--font-heading)",
+                  color: active ? "var(--color-text)" : dim(52),
+                  background: active ? dim(6) : "transparent",
+                  boxShadow: active ? `inset 0 0 0 1px ${dim(12)}` : "none",
+                }}
+              >
+                <Icon size={14} strokeWidth={1.7} />
+                <span className="tb-view-label">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {(state.screen === "rig" || state.screen === "report") && (
+        <div style={{ display: "flex", gap: 2, flex: "none" }}>
+          {PARTS.map(({ id, label, Icon }) => {
+            const active = state.part === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                className="pk tb-view-btn"
+                onClick={() => dispatch({ t: "part", part: id })}
                 aria-pressed={active}
                 aria-label={label}
                 title={label}

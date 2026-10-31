@@ -54,6 +54,14 @@ export function inkA(alpha: number): string {
   return `rgba(233, 233, 237, ${alpha})`;
 }
 
+/** A channel colour at some opacity, as an rgba literal SVG attributes accept
+ *  (they cannot resolve var() or reliably color-mix()). Takes one of the hexes
+ *  above, so the colour itself is still only written here. */
+export function alpha(hex: string, a: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
 /** Loss/gain colouring for a delta, with a dead band where the two laps
  *  genuinely matched. Below the band a delta is not a finding. */
 export const MATCHED_BAND_S = 0.004;

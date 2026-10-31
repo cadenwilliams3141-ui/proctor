@@ -91,9 +91,9 @@ const VIEWPORTS = [
    Sweeping only the default meant three of the four had never been looked at,
    and they are 2,100 lines between them. */
 const DESKTOP_SCREENS = [
-  'sessions', 'report',
+  'sessions', 'report', 'report&part=full',
   'analyze', 'analyze&view=loss', 'analyze&view=ribbon', 'analyze&view=map', 'analyze&view=line',
-  'live', 'rig', 'hardware', 'anatomy', 'upload',
+  'live', 'rig', 'rig&part=full', 'hardware', 'anatomy', 'upload',
 ];
 const PHONE_SCREENS   = ['sessions', 'analyze', 'live', 'rig'];
 

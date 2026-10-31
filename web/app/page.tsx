@@ -1,5 +1,5 @@
 import AppShell from "@/components/proctor/AppShell";
-import { ProctorProvider, type AnalysisView, type Screen } from "@/lib/proctor/store";
+import { ProctorProvider, type AnalysisView, type Screen, type ScreenPart } from "@/lib/proctor/store";
 import { openingStep, SETUP_PARAM } from "@/lib/setup";
 import { readSetupDone } from "@/lib/setup-server";
 import { readTier } from "@/lib/tier-server";
@@ -13,7 +13,9 @@ import { readTier } from "@/lib/tier-server";
  * component cannot hold.
  *
  * ?screen= and ?view= make a particular reading of a lap linkable — "look at
- * T6 on the ribbon" is a thing one driver says to another.
+ * T6 on the ribbon" is a thing one driver says to another. ?session= picks the
+ * session (otherwise the newest), and ?part=full opens Physics or Report on
+ * the full breakdown rather than the overview.
  *
  * A first plain visit opens on the guided setup instead: how much detail, then
  * the rig. Whether that has been through is a cookie, read here for the same
@@ -49,9 +51,13 @@ export default async function Page({
     ? (one(q.view) as AnalysisView)
     : "track";
 
+  const part: ScreenPart = one(q.part) === "full" ? "full" : "overview";
+  const session = one(q.session);
+  const sessionId = session && /^\d+$/.test(session) ? session : "latest";
+
   // Arriving via a shared link means someone already told you what you are
   // about to look at; the launch screen or a setup would just be in the way.
-  const linked = q.screen != null || q.view != null;
+  const linked = q.screen != null || q.view != null || q.session != null;
   const setup = openingStep({
     done: await readSetupDone(),
     linked,
@@ -60,9 +66,11 @@ export default async function Page({
 
   return (
     <ProctorProvider
+      sessionId={sessionId}
       initialTier={tier}
       initialScreen={screen}
       initialView={view}
+      initialPart={part}
       skipSplash={linked}
       initialSetup={setup}
     >

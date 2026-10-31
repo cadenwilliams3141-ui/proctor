@@ -4,7 +4,7 @@ import { openingStep, SETUP_PARAM } from "@/lib/setup";
 import { readSetupDone } from "@/lib/setup-server";
 import { readTier } from "@/lib/tier-server";
 
-/* The desktop app. One shell, eight screens, four analysis views.
+/* The desktop app. One shell, eight screens, five analysis views.
  *
  * The tier is read on the server from its cookie so the first paint is already
  * at the right detail level — no flash of the default tier before the client
@@ -31,7 +31,7 @@ const SCREENS: Screen[] = [
   "anatomy",
   "upload",
 ];
-const VIEWS: AnalysisView[] = ["loss", "ribbon", "map", "line"];
+const VIEWS: AnalysisView[] = ["track", "loss", "ribbon", "map", "line"];
 
 export default async function Page({
   searchParams,
@@ -47,7 +47,7 @@ export default async function Page({
     : "analyze";
   const view = VIEWS.includes(one(q.view) as AnalysisView)
     ? (one(q.view) as AnalysisView)
-    : "loss";
+    : "track";
 
   // Arriving via a shared link means someone already told you what you are
   // about to look at; the launch screen or a setup would just be in the way.

@@ -45,7 +45,7 @@ export type Screen =
   | "hardware"
   | "anatomy"
   | "upload";
-export type AnalysisView = "loss" | "ribbon" | "map" | "line";
+export type AnalysisView = "track" | "loss" | "ribbon" | "map" | "line";
 
 export interface ProctorState {
   /** Which session the whole surface is reading. "latest" is resolved
@@ -169,7 +169,7 @@ function reducer(s: ProctorState, a: Action): ProctorState {
 const INITIAL: ProctorState = {
   sessionId: "latest",
   screen: "analyze",
-  view: "loss",
+  view: "track",
   lapA: null,
   lapB: null,
   cursor: 0.34,
@@ -207,7 +207,7 @@ export function ProctorProvider({
   sessionId = "latest",
   initialTier = DEFAULT_TIER,
   initialScreen = "analyze",
-  initialView = "loss",
+  initialView = "track",
   skipSplash = false,
   initialSetup = null,
   children,

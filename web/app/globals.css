@@ -1757,3 +1757,370 @@ button[disabled] {
     padding: var(--space-4);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CORNERS — the corner-by-corner view (components/proctor/views/CornerReview).
+
+   Three regions: the corner card down the left, the track to scale on the
+   right, and the telemetry for the same stretch under the track. The lap strip
+   runs across the top. Below 1100px it stacks — track first, because the
+   picture is the point — and the whole view scrolls as one page.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cr {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head head"
+    "card map"
+    "card tel";
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6) var(--space-4);
+}
+
+.cr-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.cr-lapline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: none;
+}
+.cr-eyebrow {
+  font: 600 10px var(--font-heading);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 48%, transparent);
+}
+.cr-linkbtn {
+  margin-left: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  background: transparent;
+  color: var(--color-accent-300);
+  font-size: 11.5px;
+}
+.cr-laps {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+/* Right-aligned while it fits, scrollable from its START when it does not.
+   justify-content: flex-end would push the overflow off the LEFT edge, where
+   no scrollbar can reach it, and the first laps of a long run would vanish. */
+.cr-laps > :first-child {
+  margin-left: auto;
+}
+.cr-lapchip {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  font-size: 11.5px;
+}
+.cr-lapchip-n {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.cr-lapchip[data-out="true"] {
+  opacity: 0.55;
+}
+.cr-lapchip[data-on="true"] {
+  background: color-mix(in srgb, var(--ch-b) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ch-b) 55%, transparent);
+  color: var(--color-text);
+  opacity: 1;
+}
+.cr-lapchip[data-on="true"] .cr-lapchip-n {
+  color: var(--ch-b);
+}
+.cr-lapchip[data-ref="true"] {
+  opacity: 1;
+  cursor: default;
+  background: color-mix(in srgb, var(--ch-a) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ch-a) 45%, transparent);
+}
+.cr-lapchip[data-ref="true"] .cr-lapchip-n {
+  color: var(--ch-a);
+}
+.cr-lapchip-tag {
+  font: 600 9px var(--font-heading);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ch-a);
+}
+
+/* ── The corner card ─────────────────────────────────────────────────────── */
+.cr-card {
+  grid-area: card;
+  min-height: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.cr-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cr-step {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.cr-card-sub {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+.cr-phase {
+  padding: 9px 10px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+  transition: background 0.12s;
+}
+.cr-phase:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+.cr-phase[data-worst="true"] {
+  background: color-mix(in srgb, var(--ch-loss) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ch-loss) 30%, transparent);
+}
+.cr-phase-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+.cr-phase-tag {
+  font: 600 10px var(--font-heading);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+.cr-phase-tag[data-sense="loss"] {
+  background: color-mix(in srgb, var(--ch-loss) 16%, transparent);
+  color: var(--ch-loss);
+}
+.cr-phase-tag[data-sense="gain"] {
+  background: color-mix(in srgb, var(--ch-gain) 16%, transparent);
+  color: var(--ch-gain);
+}
+.cr-phase-tag[data-worst="true"] {
+  background: var(--ch-loss);
+  color: var(--color-bg);
+}
+.cr-fact {
+  font-size: 13px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--color-text) 66%, transparent);
+}
+.cr-fact + .cr-fact {
+  margin-top: 2px;
+}
+.cr-across {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+.cr-hidden {
+  margin-top: var(--space-3);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text) 42%, transparent);
+}
+.cr-foot {
+  margin-top: var(--space-3);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text) 34%, transparent);
+}
+
+/* ── The track ──────────────────────────────────────────────────────────── */
+.cr-map {
+  grid-area: map;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface) 70%, var(--color-bg));
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.cr-map-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.cr-map-key {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(4px);
+}
+.cr-map-marks {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  max-width: calc(100% - 200px);
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 58%, transparent);
+}
+.cr-map-note {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  max-width: 300px;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+.cr-chips {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 10px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.cr-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 6px;
+  font: 600 11.5px var(--font-heading);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+.cr-chip[data-sense="loss"] .num {
+  color: var(--ch-loss);
+}
+.cr-chip[data-sense="gain"] .num {
+  color: var(--ch-gain);
+}
+.cr-chip[data-on="true"] {
+  color: var(--color-bg);
+  background: var(--color-text);
+}
+.cr-chip[data-on="true"][data-sense="loss"] {
+  background: var(--ch-loss);
+}
+.cr-chip[data-on="true"][data-sense="gain"] {
+  background: var(--ch-gain);
+}
+.cr-chip[data-on="true"] .num {
+  color: var(--color-bg);
+}
+
+/* ── The telemetry under it ─────────────────────────────────────────────── */
+.cr-tel {
+  grid-area: tel;
+  min-width: 0;
+  padding: 10px 12px 8px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.cr-readout {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 14px;
+  margin-bottom: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+@media (max-width: 1100px) {
+  .cr {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(360px, 58vh) auto auto;
+    grid-template-areas:
+      "head"
+      "map"
+      "card"
+      "tel";
+    overflow-y: auto;
+    align-content: start;
+  }
+  .cr-head {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .cr-laps {
+    flex-basis: 100%;
+  }
+  .cr-laps > :first-child {
+    margin-left: 0;
+  }
+  /* Stacked, the card is a row of the page rather than a pane of its own: it
+     takes its full height and the page scrolls. Left at min-height 0 the grid
+     squeezed it to a sliver and the telemetry panel slid over its phases. */
+  .cr-card {
+    min-height: auto;
+    overflow: visible;
+  }
+}
+
+/* The word under each nav glyph. Hidden where the rail turns into a row
+   across the top of a narrow window, where there is no room under a glyph. */
+.rail-label {
+  font: 500 9.5px/1 var(--font-heading);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .icon-rail .rail-label {
+    display: none;
+  }
+  .icon-rail .rail-item {
+    width: 38px !important;
+    height: 38px !important;
+  }
+}

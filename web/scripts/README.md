@@ -77,6 +77,13 @@ them wrong first:
   scrolling list on the page invents overlaps — the same mistake the right-edge
   check made in its first version, when it kept 51 findings that were all fine.
 
+* **A shape past the edge of its own `<svg>` is not lost.** The corner map draws
+  the road on past its frame so it reads as continuing, and the first sweep of
+  that view flagged the road and nothing else. An `<svg>` clips its children
+  unless its overflow is visible, so shapes inside an on-screen, clipping `<svg>`
+  are let off. `<text>` is not: a label cut off at the edge of a drawing is a
+  real loss.
+
 ### Sweep every VIEW, not just every screen
 
 Analyze is four layouts behind `?view=`, sharing nothing but the selection. For

@@ -84,14 +84,15 @@ const VIEWPORTS = [
   { name: 'desktop',   w: 1920, h: 1080, ua: DESKTOP, app: '/'  },
 ];
 
-/* The Analyze screen is FOUR layouts, not one. ?view= picks between them and
-   they share nothing but the selection — a ranked list beside a detail column,
+/* The Analyze screen is FIVE layouts, not one. ?view= picks between them and
+   they share nothing but the selection — the corner-by-corner track view (the
+   default, so plain 'analyze' sweeps it), a ranked list beside a detail column,
    a shared-axis lane stack, a map with a delta trace, and a drawn racing line.
    Sweeping only the default meant three of the four had never been looked at,
    and they are 2,100 lines between them. */
 const DESKTOP_SCREENS = [
   'sessions', 'report',
-  'analyze', 'analyze&view=ribbon', 'analyze&view=map', 'analyze&view=line',
+  'analyze', 'analyze&view=loss', 'analyze&view=ribbon', 'analyze&view=map', 'analyze&view=line',
   'live', 'rig', 'hardware', 'anatomy', 'upload',
 ];
 const PHONE_SCREENS   = ['sessions', 'analyze', 'live', 'rig'];
@@ -170,11 +171,26 @@ for (const vp of VIEWPORTS) {
         }
         return null;
       };
+      /* An SVG shape drawn past its own <svg> is geometry the SVG clips, not
+         content the reader is missing — the corner map draws the road on past
+         its frame on purpose, so it reads as continuing rather than ending.
+         Only SHAPES are let off, and only when the <svg> itself is on screen
+         and clips (overflow is not visible). <text> is still checked: a label
+         cut off at the edge of a drawing is a real loss. Added 2026-10-31 when
+         the first sweep of the corner view flagged its road and nothing else. */
+      const SHAPES = new Set(['path', 'line', 'polyline', 'polygon', 'circle', 'ellipse', 'rect', 'g']);
+      const clippedBySvg = (el) => {
+        if (!SHAPES.has(el.tagName.toLowerCase()) || !el.ownerSVGElement) return false;
+        const svg = el.ownerSVGElement;
+        if (getComputedStyle(svg).overflow === 'visible') return false;
+        return svg.getBoundingClientRect().right <= window.innerWidth + 1.5;
+      };
       const over = [];
       for (const el of Array.from(document.querySelectorAll('*'))) {
         const r = el.getBoundingClientRect();
         if (r.width > 0 && r.right > window.innerWidth + 1.5) {
           if (scrollableAncestor(el) === 'SCROLLS') continue;   // reachable, fine
+          if (clippedBySvg(el)) continue;                        // never painted
           over.push({
             tag: el.tagName.toLowerCase(),
             cls: (typeof el.className === 'string' ? el.className : '').slice(0, 40),

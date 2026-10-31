@@ -49,6 +49,57 @@ from tests.synthetic import build_ibt, make_core_channels
 R_LAT, R_LON = 33.80, -84.27          # Road-Atlanta-ish corner of the world
 N_CORNERS = 6
 
+# ── Where the corners ARE ───────────────────────────────────────────────────
+# The speed profile has twelve slow points (two per period of sin(6τ)), and the
+# GPS path used to be a smooth blob that ignored them: the corners the parser
+# found from speed and steering sat on near-straight road, so every zoomed
+# corner view drew a gentle arc and the line through it said nothing. Here the
+# path is BUILT from the corners instead — a heading change per corner, centred
+# on the same apex the speed profile slows for, summing to one full turn so the
+# loop closes. Signs alternate with the steering sign, so a corner the car
+# steers left through also bends left on the map.
+TRACK_M = 4000.0
+CORNER_DEG = np.array([150, -50, 100, -40, 130, -70, 110, -30, 90, -60, 100, -70], float)
+assert abs(CORNER_DEG.sum() - 360.0) < 1e-9
+
+
+def _centreline(n=24000, power=8):
+    """Closed centreline (x, y, left-normal) in metres, sampled over d in [0, 1)."""
+    d = (np.arange(n) + 0.5) / n
+    k = np.minimum((d * 12).astype(int), 11)
+    shape = np.abs(np.sin(N_CORNERS * 2 * np.pi * d)) ** power
+    ds = TRACK_M / n
+    per_corner = shape[k == 0].sum() * ds          # every bump has the same shape
+    heading = np.cumsum(np.radians(CORNER_DEG)[k] * shape / per_corner) * ds
+    x = np.cumsum(np.cos(heading)) * ds
+    y = np.cumsum(np.sin(heading)) * ds
+    x -= d * x[-1]                                  # close the small drift
+    y -= d * y[-1]
+    return d, x, y, -np.sin(heading), np.cos(heading)
+
+
+_GEO = _centreline()
+
+
+def _racing_offset(d, reach):
+    """Out-in-out through every corner, in metres left of the centreline.
+
+    sin(φ)·(−cos 2φ) is zero between corners (so the line crosses the road on
+    the straight, not in a jump), a little to the outside on the way in and out,
+    and fully inside at the apex. `reach` is how much road this lap used."""
+    k = np.minimum((d * 12).astype(int), 11)
+    phi = (d * 12 - k) * np.pi
+    inside = np.sign(CORNER_DEG)[k]                 # left turn: inside is left
+    return inside * reach * np.sin(phi) * -np.cos(2 * phi)
+
+
+def _gps(d, offset_m):
+    gd, gx, gy, nx, ny = _GEO
+    x = np.interp(d, gd, gx, period=1.0) + np.interp(d, gd, nx, period=1.0) * offset_m
+    y = np.interp(d, gd, gy, period=1.0) + np.interp(d, gd, ny, period=1.0) * offset_m
+    return (R_LAT + y / 111320.0,
+            R_LON + x / (111320.0 * np.cos(np.radians(R_LAT))))
+
 
 def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
             clean=True):
@@ -64,6 +115,7 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
     per_lap = {k: [] for k in keys}
 
     rng = np.random.default_rng(7)
+    line_rng = np.random.default_rng(11)
     for L in range(n_laps):
         # Lap 0 is the out lap; the last lap is deliberately partial.
         pace = 1.0 + 0.028 * rng.random() + (0.06 if L == 0 else 0.0)
@@ -102,7 +154,22 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
         if L == 0:
             brake[:10] = 1.0
             brake_raw[:10] = 0.0
-        rx = 900.0 + 260.0 * np.sin(3 * tau)
+        # The line this lap took. Quicker laps use more of the road through
+        # the corners; every lap wanders a little on its own. The out lap runs
+        # down the left edge and the scruffy lap down the right, which is the
+        # "one slow lap down each edge" that lets track_edges find a road
+        # wider than the racing line. A separate generator, so adding these
+        # draws does not reshuffle the pace of every lap after them.
+        if L == 0:
+            offset = np.full(m, 5.4)
+        elif slow_lap is not None and L == slow_lap:
+            offset = np.full(m, -5.4)
+        else:
+            quick = float(np.clip(1.0 - (pace - 1.0) / 0.028, 0.0, 1.0))
+            reach = 2.6 + 2.2 * quick + 0.4 * line_rng.standard_normal()
+            offset = (_racing_offset(d, reach)
+                      + 0.7 * np.sin(2 * np.pi * 3 * d + line_rng.uniform(0, 2 * np.pi)))
+        lat_gps, lon_gps = _gps(d, offset)
         stops = np.clip(np.clip(lat / 9.0, -1.4, 1.4), -1.0, 1.0)
 
         vals = {
@@ -122,8 +189,8 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
             "Yaw": np.cumsum(lat / np.clip(speed, 1, None)) * 0.016,
             "VelocityX": speed,
             "VelocityY": speed * 0.052 * turn * cp,
-            "Lat": R_LAT + (700.0 * np.sin(tau) + 150.0 * np.sin(2 * tau)) / 111320.0,
-            "Lon": R_LON + (rx * np.cos(tau)) / (111320.0 * np.cos(np.radians(R_LAT))),
+            "Lat": lat_gps,
+            "Lon": lon_gps,
             "Alt": 300.0 + 32.0 * np.sin(tau) + 9.0 * np.sin(4 * tau),
             "FuelLevel": np.full(m, 78.0 - 3.9 * L),
             "LFspeed": np.where(brake_raw > 0.55, speed * 0.42, speed),
@@ -166,7 +233,11 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
                 br[i : i + 2] = 0.31
         vals["BrakeRaw"] = br
 
-        for k in keys:
+        # Every channel this builder names, not only the ones the core set
+        # happens to carry: PlayerTrackSurface used to be built here and then
+        # silently dropped, so no fixture session ever had a measured road.
+        for k in keys + [k for k in vals if k not in base]:
+            per_lap.setdefault(k, [])
             if k in vals:
                 per_lap[k].append(np.asarray(vals[k], dtype=float))
             else:

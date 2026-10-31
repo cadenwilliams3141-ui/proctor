@@ -1,9 +1,10 @@
 "use client";
 
-/* Four views over the SAME data and the SAME selection.
+/* Five views over the SAME data and the SAME selection.
  *
  * All the explored directions were kept rather than picked between, because
- * they answer different questions: "where it went" ranks, "ribbon" correlates,
+ * they answer different questions: "corners" walks the lap one corner at a time
+ * with the track in front, "where it went" ranks, "ribbon" correlates,
  * "map & delta" locates, "racing line" shows the road you used and where on it
  * you put the car. They share one selection state — lap A, lap B, cursor,
  * selected corner — so switching view never loses your place. */
@@ -11,6 +12,7 @@
 import { useMemo } from "react";
 import { Info } from "lucide-react";
 
+import CornerReview from "@/components/proctor/views/CornerReview";
 import MapDelta from "@/components/proctor/views/MapDelta";
 import RacingLine from "@/components/proctor/views/RacingLine";
 import Ribbon from "@/components/proctor/views/Ribbon";
@@ -31,7 +33,9 @@ export default function AnalyzeScreen() {
     if (atLeast(state.tier, "deep")) return 0;
     if (state.view === "loss") return 1; // "what the car was doing here"
     if (state.view === "map") return 2; // tire strip + inputs
-    return 0; // ribbon and racing line are each one panel; nothing to gate
+    // ribbon and racing line are each one panel; the corner view counts what it
+    // hides in its own card, beside the readings it hid.
+    return 0;
   }, [state.tier, state.view]);
 
   const note = hiddenNote(state.tier, hidden);
@@ -87,6 +91,7 @@ export default function AnalyzeScreen() {
 
       {/* Keyed on the view so each arrives with its own entrance, once. */}
       <div key={state.view} style={{ flex: 1, minHeight: 0, display: "flex", animation: "fadeIn .25s both" }}>
+        {state.view === "track" && <CornerReview />}
         {state.view === "loss" && <WhereItWent />}
         {state.view === "ribbon" && <Ribbon />}
         {state.view === "map" && <MapDelta />}

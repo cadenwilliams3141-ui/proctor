@@ -1,6 +1,6 @@
 "use client";
 
-import { ListOrdered, Map as MapIcon, AudioWaveform, Spline } from "lucide-react";
+import { ListOrdered, Map as MapIcon, AudioWaveform, Route, Spline } from "lucide-react";
 
 import { dim } from "@/lib/proctor/channels";
 import { IS_FIXTURE } from "@/lib/proctor/data-source";
@@ -31,6 +31,7 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
 };
 
 const VIEWS: { id: AnalysisView; label: string; Icon: typeof ListOrdered }[] = [
+  { id: "track", label: "Corners", Icon: Route },
   { id: "loss", label: "Where it went", Icon: ListOrdered },
   { id: "ribbon", label: "Ribbon", Icon: AudioWaveform },
   { id: "map", label: "Map & delta", Icon: MapIcon },

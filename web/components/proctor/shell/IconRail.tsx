@@ -35,15 +35,18 @@ import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
 
    Anatomy is the exploded car. Its glyph is a stack of layers lifting apart,
    which is what the screen does; a car glyph would promise the driver's own. */
-const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
-  { id: "sessions", label: "Sessions", Icon: LayoutGrid },
-  { id: "report", label: "Session report", Icon: NotebookText },
-  { id: "analyze", label: "Analyze", Icon: ChartLine },
-  { id: "live", label: "Live trace", Icon: CirclePlay },
-  { id: "rig", label: "Physics", Icon: Gauge },
-  { id: "hardware", label: "Rig", Icon: Armchair },
-  { id: "anatomy", label: "Anatomy", Icon: Layers },
-  { id: "upload", label: "Upload", Icon: Upload },
+/* Each item carries a SHORT word under its glyph as well as its full name.
+   Eight unlabelled glyphs asked a driver to learn the app before using it; a
+   word under each costs 8px of width and nothing else. */
+const NAV: { id: Screen; label: string; short: string; Icon: typeof LayoutGrid }[] = [
+  { id: "sessions", label: "Sessions", short: "Sessions", Icon: LayoutGrid },
+  { id: "report", label: "Session report", short: "Report", Icon: NotebookText },
+  { id: "analyze", label: "Analyze", short: "Analyze", Icon: ChartLine },
+  { id: "live", label: "Live trace", short: "Live", Icon: CirclePlay },
+  { id: "rig", label: "Physics", short: "Physics", Icon: Gauge },
+  { id: "hardware", label: "Rig", short: "Rig", Icon: Armchair },
+  { id: "anatomy", label: "Anatomy", short: "Anatomy", Icon: Layers },
+  { id: "upload", label: "Upload", short: "Upload", Icon: Upload },
 ];
 
 export default function IconRail() {
@@ -54,7 +57,7 @@ export default function IconRail() {
       className="icon-rail"
       aria-label="Screens"
       style={{
-        width: 56,
+        width: 64,
         flex: "none",
         display: "flex",
         flexDirection: "column",
@@ -86,32 +89,36 @@ export default function IconRail() {
         P
       </button>
 
-      {NAV.map(({ id, label, Icon }) => {
+      {NAV.map(({ id, label, short, Icon }) => {
         const active = state.screen === id;
         return (
           <button
             key={id}
             type="button"
-            className="pk"
             title={label}
             aria-label={label}
             aria-current={active ? "page" : undefined}
             onClick={() => dispatch({ t: "screen", screen: id })}
+            className="pk rail-item"
             style={{
-              width: 38,
-              height: 38,
+              width: 56,
+              height: 46,
               flex: "none",
               borderRadius: "var(--radius-md)",
               border: 0,
-              display: "grid",
-              placeItems: "center",
-              color: active ? "var(--ch-a)" : dim(40),
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 3,
+              color: active ? "var(--ch-a)" : dim(46),
               background: active
                 ? "color-mix(in srgb, var(--color-accent) 14%, transparent)"
                 : "transparent",
             }}
           >
-            <Icon size={19} strokeWidth={1.6} />
+            <Icon size={18} strokeWidth={1.6} />
+            <span className="rail-label">{short}</span>
           </button>
         );
       })}

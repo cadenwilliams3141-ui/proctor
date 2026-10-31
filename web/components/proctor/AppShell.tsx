@@ -46,8 +46,11 @@ const SCREENS_WITHOUT_A_SESSION = new Set(["upload", "sessions", "hardware", "an
 export default function AppShell() {
   const { state, error } = useProctor();
 
-  // The lap rail is only meaningful where a lap is being chosen.
-  const showLapRail = state.screen === "analyze" || state.screen === "live";
+  // The lap rail is only meaningful where a lap is being chosen. The corner view
+  // chooses its lap from a strip across its own top instead, so the track gets
+  // the width the rail would have taken.
+  const showLapRail =
+    (state.screen === "analyze" && state.view !== "track") || state.screen === "live";
   const needsSession = !SCREENS_WITHOUT_A_SESSION.has(state.screen);
 
   return (

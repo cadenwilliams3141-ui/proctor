@@ -81,7 +81,7 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   run Long Beach on the rig and record a corner or two here.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
   (**157 collected: 151 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**234 tests**). The third suite was missing from this list
+  `cd web && npx vitest run` (**240 tests**). The third suite was missing from this list
   until 2026-09-05 and is the one that covers ingest and the dev tools:
   `cd render-service && python -m pytest tests -q` (**47 tests**).
   If these numbers move, you broke something.

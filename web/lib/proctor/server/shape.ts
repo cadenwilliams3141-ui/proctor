@@ -58,6 +58,18 @@ function nums(v: unknown): number[] {
   return Array.isArray(v) ? v.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : [];
 }
 
+/** Like nums(), but index-preserving: a null (unmeasured) sample stays null
+ *  instead of being dropped — dropping would shift every later sample out of
+ *  alignment with the grid — or becoming 0, which `Number(null)` would do. */
+function numsOrNull(v: unknown): (number | null)[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => {
+    if (x == null) return null;
+    const n = Number(x);
+    return Number.isFinite(n) ? n : null;
+  });
+}
+
 /** Rounded to `dp`, with non-finite values passed through as 0-length gaps
  *  removed by the caller rather than silently becoming zero. */
 export function round(values: number[], dp: number): number[] {
@@ -549,12 +561,12 @@ export function trackWidthFrom(metrics: MetricPayloads): TrackWidthData | null {
     centre_y_m: arr("centre_y_m"),
     normal_x: arr("normal_x"),
     normal_y: arr("normal_y"),
-    left_m: arr("left_m"),
-    right_m: arr("right_m"),
-    median_m: arr("median_m"),
-    p90_m: arr("p90_m"),
-    p10_m: arr("p10_m"),
-    used_width_m: arr("used_width_m"),
+    left_m: numsOrNull(tw.left_m),
+    right_m: numsOrNull(tw.right_m),
+    median_m: numsOrNull(tw.median_m),
+    p90_m: numsOrNull(tw.p90_m),
+    p10_m: numsOrNull(tw.p10_m),
+    used_width_m: numsOrNull(tw.used_width_m),
     summary: (tw.summary as TrackWidthData["summary"]) ?? {
       measured: false,
       reason: "the module produced no summary",

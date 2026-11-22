@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from proctor_parser.analysis.common import reference_lap as _reference_lap
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "delta_time"
@@ -18,16 +19,6 @@ METRIC_KEY = "delta_time"
 BASIS = "self-comparison within this session"
 DEFAULT_TRACK_LENGTH_KM = 4.0
 MIN_SPEED_MS = 1.0  # clip before inverting; speeds can legitimately reach 0
-
-
-def _reference_lap(session: ParsedSession) -> ParsedLap | None:
-    """Fastest valid non-anomalous lap; fall back to fastest valid; else None."""
-    valid = [lap for lap in session.laps if lap.is_valid and lap.lap_time_s is not None]
-    if not valid:
-        return None
-    clean = [lap for lap in valid if not lap.is_anomalous]
-    pool = clean or valid
-    return min(pool, key=lambda lap: lap.lap_time_s)
 
 
 def compute(session: ParsedSession) -> dict:

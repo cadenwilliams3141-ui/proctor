@@ -33,6 +33,7 @@ import numpy as np
 
 from proctor_parser.analysis.corners import detect_corners
 from proctor_parser.laps import moving_mask
+from proctor_parser.analysis.common import reference_lap as _reference_lap
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "grip"
@@ -484,12 +485,11 @@ def _by_lap(session: ParsedSession, arrays: dict[int, dict[str, np.ndarray]]) ->
             "peak_mu": round(float(np.percentile(a["mu"], _PEAK_PCTILE)), 3),
             "median_mu": round(float(np.median(a["mu"])), 3),
             "peak_combined_g": round(float(np.percentile(a["combined_g"], _PEAK_PCTILE)), 3),
-            "peak_lateral_g": round(
-                float(np.percentile(np.abs(a["lat"]) / _G, _PEAK_PCTILE)), 3
-            ),
-            "peak_braking_g": round(
-                float(np.percentile(np.maximum(-a["long"], 0.0) / _G, _PEAK_PCTILE)), 3
-            ),
+            # In-state percentiles, like the session block: the per-lap figures
+            # used to take the percentile over every tick of the lap, which is
+            # the dilution the header describes.
+            "peak_lateral_g": _directional_peak(np.abs(a["lat"]) / _G)[0],
+            "peak_braking_g": _directional_peak(np.maximum(-a["long"], 0.0) / _G)[0],
         })
     return out
 
@@ -608,15 +608,6 @@ def _stint_trend(session: ParsedSession, laps: list[dict]) -> dict:
             "not wear"
         )
     return out
-
-
-def _reference_lap(session: ParsedSession) -> ParsedLap | None:
-    """Fastest valid non-anomalous lap, else fastest valid (contract rule 4)."""
-    valid = [l for l in session.laps if l.is_valid and l.lap_time_s is not None]
-    if not valid:
-        return None
-    clean = [l for l in valid if not l.is_anomalous]
-    return min(clean or valid, key=lambda l: l.lap_time_s)
 
 
 def _finding(payload: dict) -> str:

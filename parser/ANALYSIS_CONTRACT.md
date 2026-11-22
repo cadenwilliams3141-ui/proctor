@@ -87,8 +87,16 @@ ParsedLap:
 - **Observations, not verdicts.** One session describes; it does not
   diagnose. Findings that need more sessions to be trustworthy must carry a
   `"caveat"` string saying so.
-- **Describe, don't prescribe.** Report what the channels show and where —
-  never why the driver did it or what to do differently.
+- **Prescribe only what the driver's own laps demonstrated** (changed
+  2026-11-22; was "describe, don't prescribe"). Only `coach` emits actions, and
+  only as STRUCTURED objects — `{kind, metric, typical, target, gain_s,
+  confidence, evidence{n, target_laps, rho, q, ...}}` — never prose. A target
+  must lie inside the range the driver actually drove in this session, must be
+  backed by enough clean passes to survive the false-discovery control, and
+  must never come from a pass that gained time off track or in a tow. Every
+  other module still describes: what the channels show and where. Never why
+  the driver did it (intent is not a channel), never a per-car ideal, never a
+  setup change.
 - **Missing ≠ zero.** Absent/insufficient data → explicit
   `{"insufficient_data": true, "reason": ...}` style fields, never silent zeros.
 - **Report negative results.** "No clipping detected" is a finding; include it.

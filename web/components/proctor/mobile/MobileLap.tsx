@@ -41,8 +41,9 @@ export default function MobileLap() {
       { label: "spread", value: sd.toFixed(3), unit: "s σ" },
       {
         label: "envelope use",
-        value: fixed(bundle.traction.laps[traceA.lap_number] ?? 0, 1),
-        unit: "%",
+        // Missing is not zero: an unscored lap reads "—", never 0%.
+        value: fixed(bundle.traction.laps[traceA.lap_number] ?? null, 1),
+        unit: bundle.traction.laps[traceA.lap_number] == null ? "" : "%",
       },
     ];
   }, [bundle, traceA]);

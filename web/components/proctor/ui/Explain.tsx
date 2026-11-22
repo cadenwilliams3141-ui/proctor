@@ -7,9 +7,9 @@
  * where in the lap it was, and where to go and look at it.
  *
  * `lookAt` is deliberately a POINTER, never an instruction. "Turn 4, on entry"
- * tells the driver where the evidence is; "brake later into Turn 4" would be a
- * guess about a decision the telemetry never recorded. See lib/proctor/explain
- * for the reasoning behind that line and why it sits where it does. */
+ * tells the driver where the evidence is. Instructions ("brake where you did on
+ * lap 7") exist, but only as coach actions with their evidence attached — see
+ * lib/proctor/coach.ts — never as a free sentence in this component. */
 
 import { Lightbulb, Crosshair } from "lucide-react";
 

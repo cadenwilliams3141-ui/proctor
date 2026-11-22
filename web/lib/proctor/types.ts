@@ -534,13 +534,14 @@ export interface TrackWidthData {
   /** Unit normal to the reference line, pointing left of travel. */
   normal_x: number[];
   normal_y: number[];
-  /** Signed lateral offsets in metres. Positive is left of travel. */
-  left_m: number[];
-  right_m: number[];
-  median_m: number[];
-  p90_m: number[];
-  p10_m: number[];
-  used_width_m: number[];
+  /** Signed lateral offsets in metres. Positive is left of travel. Null where
+   *  fewer than two laps had a usable position — unmeasured, not zero. */
+  left_m: (number | null)[];
+  right_m: (number | null)[];
+  median_m: (number | null)[];
+  p90_m: (number | null)[];
+  p10_m: (number | null)[];
+  used_width_m: (number | null)[];
   summary: {
     measured: boolean;
     reason?: string;

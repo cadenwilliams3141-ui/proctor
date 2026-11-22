@@ -6,6 +6,9 @@ import numpy as np
 
 GRID_POINTS = 1000
 
+# Channels whose values are states, not quantities: resampled by nearest tick.
+DISCRETE_CHANNELS = frozenset({"gear", "abs_active"})
+
 # The sim forces Brake=1.0 with BrakeRaw=0 whenever the car is stopped
 # (stationary auto-brake). Any Brake-vs-BrakeRaw comparison must exclude
 # ticks at or below this speed or it reports false hardware faults at
@@ -50,9 +53,27 @@ def resample_to_grid(dist_pct: np.ndarray, channels: dict[str, np.ndarray]) -> d
     out: dict[str, np.ndarray] = {
         "grid_pct": grid.astype(np.float32),
     }
+    nearest = _nearest_index(d, grid)
     for name, values in channels.items():
-        out[name] = np.interp(grid, d, np.asarray(values, dtype=np.float64)).astype(np.float32)
+        v = np.asarray(values, dtype=np.float64)
+        if name in DISCRETE_CHANNELS:
+            # A gear is 3 or 4, never 3.4; an ABS flag is on or off. Linear
+            # interpolation invents values the car never had at every change.
+            out[name] = v[nearest].astype(np.float32)
+        else:
+            out[name] = np.interp(grid, d, v).astype(np.float32)
     return out
+
+
+def _nearest_index(d: np.ndarray, grid: np.ndarray) -> np.ndarray:
+    """Index of the tick nearest each grid point along non-decreasing `d`."""
+    n = len(d)
+    if n == 0:
+        return np.zeros(len(grid), dtype=np.int64)
+    hi = np.clip(np.searchsorted(d, grid, side="left"), 0, n - 1)
+    lo = np.clip(hi - 1, 0, n - 1)
+    pick_lo = np.abs(grid - d[lo]) <= np.abs(d[hi] - grid)
+    return np.where(pick_lo, lo, hi)
 
 
 def anomalous_by_profile(grid_speeds: dict[int, np.ndarray]) -> set[int]:

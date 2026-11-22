@@ -158,9 +158,9 @@ export function buildLedger(
 
 /** The observation copy for one corner.
  *
- *  Every phrasing here describes; none prescribes. There is no "you should
- *  brake later" in this function and there must never be one — the setup and
- *  technique call stays with the driver. */
+ *  Every phrasing here describes. Actions ("brake where you did on lap 7")
+ *  only ever come from the parser's coach, with laps, n and confidence
+ *  attached, and are worded in lib/proctor/coach.ts — never here. */
 export function observation(c: CornerDelta): string {
   const ms = Math.abs(c.delta * 1000).toFixed(0);
   const where = SECTION_LABEL[c.dominant];

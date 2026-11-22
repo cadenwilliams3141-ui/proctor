@@ -3,9 +3,8 @@
 /* View 1 — "Where it went". The most important screen in the product.
  *
  * It leads with the answer (which corners cost time, in order, and how much)
- * and puts the evidence one row behind it. Everything here describes; nothing
- * prescribes. There is no "brake later" in this file and there must not be one
- * — the technique and setup call stays with the driver. */
+ * and puts the evidence one row behind it. Everything here describes. Actions
+ * come only from the coach, with their evidence, via lib/proctor/coach.ts. */
 
 import { useMemo } from "react";
 

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from proctor_parser.analysis.common import reference_lap as _reference_lap
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "track_edges"
@@ -171,15 +172,6 @@ def _insufficient(reason: str) -> dict:
         "reason": reason,
         "caveat": _CAVEAT,
     }
-
-
-def _reference_lap(laps: list[ParsedLap]) -> ParsedLap | None:
-    """Fastest valid non-anomalous lap, else fastest valid (contract rule 4)."""
-    valid = [l for l in laps if l.is_valid and l.lap_time_s is not None]
-    if not valid:
-        return None
-    clean = [l for l in valid if not l.is_anomalous]
-    return min(clean or valid, key=lambda l: l.lap_time_s)
 
 
 def compute(session: ParsedSession) -> dict:

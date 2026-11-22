@@ -17,6 +17,7 @@ from __future__ import annotations
 import numpy as np
 
 from proctor_parser.analysis.corners import detect_corners
+from proctor_parser.analysis.common import reference_lap as _reference_lap
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "corner_context"
@@ -27,15 +28,6 @@ _CAVEAT = (
     "tire temp is left-front only (the sole tire-temp channel carried); brake "
     "temperature has no channel and is not reported"
 )
-
-
-def _reference_lap(session: ParsedSession) -> ParsedLap | None:
-    """Fastest valid non-anomalous lap, falling back to fastest valid (rule 4)."""
-    valid = [l for l in session.laps if l.is_valid and l.lap_time_s is not None]
-    if not valid:
-        return None
-    clean = [l for l in valid if not l.is_anomalous]
-    return min(clean or valid, key=lambda l: l.lap_time_s)
 
 
 def _has_lf_temp(lap: ParsedLap) -> bool:

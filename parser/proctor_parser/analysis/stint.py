@@ -21,6 +21,7 @@ from __future__ import annotations
 import numpy as np
 
 from proctor_parser.laps import moving_mask
+from proctor_parser.analysis.common import directional_peak
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "stint"
@@ -100,13 +101,12 @@ def _lap_row(lap: ParsedLap) -> dict | None:
     if lat is not None and lon is not None:
         lat_g = np.abs(lat.astype(np.float64)[moving]) / _G
         lon_g = lon.astype(np.float64)[moving] / _G
-        row["peak_lateral_g"] = round(float(np.percentile(lat_g, _PEAK_PCTILE)), 3)
-        row["peak_braking_g"] = round(
-            float(np.percentile(np.maximum(-lon_g, 0.0), _PEAK_PCTILE)), 3
-        )
-        row["peak_traction_g"] = round(
-            float(np.percentile(np.maximum(lon_g, 0.0), _PEAK_PCTILE)), 3
-        )
+        # Over the ticks actually braking / accelerating / cornering only. A
+        # percentile across the whole lap reads the share of the lap spent in
+        # the state, and reads a short, hard stop as a soft one.
+        row["peak_lateral_g"] = directional_peak(lat_g, pctile=_PEAK_PCTILE)[0]
+        row["peak_braking_g"] = directional_peak(np.maximum(-lon_g, 0.0), pctile=_PEAK_PCTILE)[0]
+        row["peak_traction_g"] = directional_peak(np.maximum(lon_g, 0.0), pctile=_PEAK_PCTILE)[0]
 
     row.update(_brake_response(lap, moving))
     row.update(_tire_row(lap, moving))

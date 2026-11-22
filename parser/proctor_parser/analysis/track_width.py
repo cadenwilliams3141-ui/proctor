@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from proctor_parser.analysis.common import reference_lap as _reference_lap
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "track_width"
@@ -148,12 +149,13 @@ def compute(session: ParsedSession) -> dict:
     counts = np.count_nonzero(np.isfinite(stack), axis=0)
     measured = counts >= _MIN_LAPS
 
-    # Where fewer than two laps have a finite offset there is no band; those
-    # samples collapse to the centreline rather than reporting a made-up width.
+    # Where fewer than two laps have a finite offset there is no band. Those
+    # samples are NaN here and null in the payload: missing is not zero, and a
+    # 0.0 offset would read as "measured, on the reference line".
     def across(fn) -> np.ndarray:
         with np.errstate(all="ignore"):
             values = fn(stack, axis=0)
-        return np.where(measured, np.nan_to_num(values, nan=0.0), 0.0)
+        return np.where(measured, values, np.nan)
 
     left = across(np.nanmax)
     right = across(np.nanmin)
@@ -178,12 +180,12 @@ def compute(session: ParsedSession) -> dict:
         "centre_y_m": [round(float(v), 2) for v in y_ref],
         "normal_x": [round(float(v), 4) for v in nx],
         "normal_y": [round(float(v), 4) for v in ny],
-        "left_m": [round(float(v), 2) for v in left],
-        "right_m": [round(float(v), 2) for v in right],
-        "median_m": [round(float(v), 2) for v in median],
-        "p90_m": [round(float(v), 2) for v in p90],
-        "p10_m": [round(float(v), 2) for v in p10],
-        "used_width_m": [round(float(v), 2) for v in width],
+        "left_m": _nullable(left),
+        "right_m": _nullable(right),
+        "median_m": _nullable(median),
+        "p90_m": _nullable(p90),
+        "p10_m": _nullable(p10),
+        "used_width_m": _nullable(width),
         "sign_note": (
             "positive is to the LEFT of the reference lap's direction of travel, "
             "negative to the right"
@@ -201,8 +203,8 @@ def compute(session: ParsedSession) -> dict:
     if not measured.all():
         payload["unmeasured_samples"] = int(np.count_nonzero(~measured))
         payload["unmeasured_note"] = (
-            "samples where fewer than two laps had a usable position; the band "
-            "collapses to the centreline there rather than showing a made-up width"
+            "samples where fewer than two laps had a usable position are null — "
+            "no band is measured there, rather than a made-up width"
         )
     return payload
 
@@ -223,10 +225,6 @@ def _summary(width: np.ndarray, spread: np.ndarray) -> dict:
     }
 
 
-def _reference_lap(laps: list[ParsedLap]) -> ParsedLap | None:
-    """Fastest valid non-anomalous lap, else fastest valid (contract rule 4)."""
-    valid = [l for l in laps if l.is_valid and l.lap_time_s is not None]
-    if not valid:
-        return None
-    clean = [l for l in valid if not l.is_anomalous]
-    return min(clean or valid, key=lambda l: l.lap_time_s)
+def _nullable(values: np.ndarray, dp: int = 2) -> list[float | None]:
+    """Rounded floats with NaN written as null (JSON has no NaN)."""
+    return [round(float(v), dp) if np.isfinite(v) else None for v in values]

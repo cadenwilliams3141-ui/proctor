@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 from proctor_parser.analysis.corners import detect_corners
+from proctor_parser.analysis.common import reference_lap as _reference_lap
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "input_overlay"
@@ -19,15 +20,6 @@ METRIC_KEY = "input_overlay"
 BASIS = "self-comparison within this session"
 BRAKE_ON_THRESHOLD = 0.1   # brake fraction that counts as "on the brakes"
 ONSET_LOOKBACK_PCT = 0.15  # search this far in track-% before a corner's start
-
-
-def _reference_lap(session: ParsedSession) -> ParsedLap | None:
-    valid = [lap for lap in session.laps if lap.is_valid and lap.lap_time_s is not None]
-    if not valid:
-        return None
-    clean = [lap for lap in valid if not lap.is_anomalous]
-    pool = clean or valid
-    return min(pool, key=lambda lap: lap.lap_time_s)
 
 
 def _brake_onset(brake: np.ndarray, pct: np.ndarray, corner: dict) -> float | None:

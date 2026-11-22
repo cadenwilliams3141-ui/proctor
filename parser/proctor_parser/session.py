@@ -95,7 +95,26 @@ OPTIONAL_CHANNEL_MAP = {
     # irsdk_TrkSurf: 1-4 asphalt, 5-6 concrete, 9-10 paint, 11-14 rumble
     # (kerbs), 15-18 grass, 19-22 dirt, 23 sand, 24-25 gravel, and so on.
     "track_surface_material": "PlayerTrackSurfaceMaterial",
+    # The clock and the tape measure. Read when present, never required.
+    #
+    # SessionTime is the sim's own clock in seconds. Tick index / tick_rate is
+    # the fallback and is exact only if no tick was ever dropped; SessionTime
+    # is exact either way. LapDist is distance round the lap in METRES, which
+    # pins the track's true length more precisely than the YAML's two decimals.
+    # LapLastLapTime is the sim's official time for the lap just completed,
+    # used only to cross-check the parser's own lap times — never to replace
+    # them.
+    "session_time": "SessionTime",
+    "dist_m": "LapDist",
+    "lap_last_time": "LapLastLapTime",
 }
+
+# How far either side of a Lap-counter change to look for the LapDistPct wrap.
+# The two usually change on the same tick; the search tolerates them disagreeing.
+_CROSSING_SEARCH_TICKS = 10
+# LapLastLapTime is read this long after the crossing, by which point the sim
+# has published the completed lap's time.
+_LAST_LAP_READ_DELAY_S = 2.0
 
 
 class MissingChannelsError(ValueError):
@@ -129,6 +148,24 @@ class ParsedLap:
     is_anomalous: bool
     raw: dict[str, np.ndarray]   # per-tick arrays, all equal length
     grid: dict[str, np.ndarray]  # fixed GRID_POINTS-length arrays
+    # When the car crossed the start/finish line, in seconds relative to this
+    # lap's FIRST TICK, interpolated between the two ticks either side of the
+    # LapDistPct wrap. Negative when the line was crossed just before the Lap
+    # counter changed. None when the lap has no such crossing (an out lap that
+    # starts in the pit box, a partial final lap). See proctor_parser.timing.
+    start_crossing_s: float | None = None
+    end_crossing_s: float | None = None
+    # The sim's own LapLastLapTime for this lap, read just after it ended.
+    # A cross-check only; lap_time_s keeps its tick-count definition.
+    sim_lap_time_s: float | None = None
+
+    @property
+    def lap_time_exact_s(self) -> float | None:
+        """Crossing-to-crossing time, finer than the 1/tick_rate steps of
+        lap_time_s. None unless both crossings were found."""
+        if self.start_crossing_s is None or self.end_crossing_s is None:
+            return None
+        return self.end_crossing_s - self.start_crossing_s
 
 
 @dataclass
@@ -167,6 +204,7 @@ def parse_ibt(data: bytes | IbtFile, recorded_at: datetime | None = None) -> lis
     wear_masked = bool(np.nanstd(lf_wear) == 0.0)
 
     tick_rate = ibt.header.tick_rate
+    clock = _tick_clock(raw_full.get("session_time"), len(lap_ch), tick_rate)
     sessions: list[ParsedSession] = []
 
     for session_num, s_start, s_end in contiguous_runs(session_num_ch):
@@ -215,6 +253,18 @@ def parse_ibt(data: bytes | IbtFile, recorded_at: datetime | None = None) -> lis
                 {key: raw[key].astype(np.float64) for key in GRID_CHANNELS},
             )
 
+            start_x = _crossing_time(raw_full["dist"], clock, a, s_start, s_end)
+            end_x = (
+                None if is_partial
+                else _crossing_time(raw_full["dist"], clock, b, s_start, s_end)
+            )
+            sim_lap = None
+            if "lap_last_time" in raw_full and not is_partial and tick_rate:
+                k = b + int(round(_LAST_LAP_READ_DELAY_S * tick_rate))
+                if k < s_end:
+                    v = float(raw_full["lap_last_time"][k])
+                    sim_lap = v if np.isfinite(v) and v > 0 else None
+
             parsed_laps.append(ParsedLap(
                 lap_number=lap_number,
                 lap_time_s=lap_time_s,
@@ -224,6 +274,9 @@ def parse_ibt(data: bytes | IbtFile, recorded_at: datetime | None = None) -> lis
                 is_anomalous=incident_delta > 0,  # profile pass may add more below
                 raw=raw,
                 grid=grid,
+                start_crossing_s=None if start_x is None else start_x - float(clock[a]),
+                end_crossing_s=None if end_x is None else end_x - float(clock[a]),
+                sim_lap_time_s=sim_lap,
             ))
 
         profile_flagged = anomalous_by_profile({
@@ -249,3 +302,53 @@ def parse_ibt(data: bytes | IbtFile, recorded_at: datetime | None = None) -> lis
         ))
 
     return sessions
+
+
+def _tick_clock(session_time: np.ndarray | None, n: int, tick_rate: int) -> np.ndarray:
+    """Seconds at every tick of the file.
+
+    SessionTime when it is present and behaves like a clock (finite, strictly
+    increasing, steps near 1/tick_rate); otherwise tick index / tick_rate.
+    """
+    rate = float(tick_rate or 60)
+    fallback = np.arange(n, dtype=np.float64) / rate
+    if session_time is None or len(session_time) != n or n < 2:
+        return fallback
+    st = np.asarray(session_time, dtype=np.float64)
+    if not np.all(np.isfinite(st)):
+        return fallback
+    steps = np.diff(st)
+    # Session boundaries can reset SessionTime; a clock that ever runs
+    # backwards or stalls is not trusted for interpolation.
+    if np.any(steps <= 0):
+        return fallback
+    if abs(float(np.median(steps)) * rate - 1.0) > 0.05:
+        return fallback
+    return st
+
+
+def _crossing_time(
+    dist: np.ndarray, clock: np.ndarray, near: int, s_start: int, s_end: int
+) -> float | None:
+    """Clock time at which LapDistPct wrapped from ~1 to ~0 nearest tick `near`.
+
+    Linear interpolation between the two ticks either side of the wrap: the
+    car covered (1 - d_before) + d_after of the lap in one tick, and the line
+    sits (1 - d_before) of the way along it.
+    """
+    lo = max(s_start + 1, near - _CROSSING_SEARCH_TICKS)
+    hi = min(s_end - 1, near + _CROSSING_SEARCH_TICKS)
+    if hi < lo:
+        return None
+    d = np.asarray(dist[lo - 1:hi + 1], dtype=np.float64)
+    jumps = np.flatnonzero(np.diff(d) < -0.5)
+    if jumps.size == 0:
+        return None
+    ks = jumps + lo  # index of the first tick after each wrap
+    k = int(ks[np.argmin(np.abs(ks - near))])
+    before, after = float(dist[k - 1]), float(dist[k])
+    span = (1.0 - before) + after
+    if not np.isfinite(span) or span <= 0:
+        return None
+    frac = min(1.0, max(0.0, (1.0 - before) / span))
+    return float(clock[k - 1] + frac * (clock[k] - clock[k - 1]))

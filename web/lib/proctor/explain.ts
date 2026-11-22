@@ -1,22 +1,21 @@
-/* Plain English, in one place.
+/* Plain English, in one place — for everything that is NOT an action.
  *
  * ┌ THE LINE THIS MODULE WALKS ─────────────────────────────────────────────┐
- * │ The product rule is "observations, not verdicts — describe, don't       │
- * │ prescribe". That rule is about CAUSE and TECHNIQUE, not about being     │
- * │ vague. Telemetry cannot see intent, so it can never honestly say "brake │
- * │ later" or "you turned in too early" — those are guesses about a         │
- * │ decision the file did not record.                                       │
+ * │ The product rule changed on 2026-11-22. It used to be "describe, don't  │
+ * │ prescribe". It is now "prescribe only what your own laps have           │
+ * │ demonstrated" — and that prescribing lives in ONE place: the parser's   │
+ * │ `coach` module emits structured actions with their evidence, and        │
+ * │ lib/proctor/coach.ts turns them into sentences. Nothing in this file    │
+ * │ does.                                                                   │
  * │                                                                         │
- * │ What it CAN do, and what every sentence here does, is be specific:      │
- * │ name the thing, name its size, name where in the lap it happened, and   │
- * │ name what it is being measured against. A driver who reads "you lost    │
- * │ 0.31 s in Turn 4, nearly all of it between turn-in and the apex, and    │
- * │ you were 11 km/h slower at the slowest point" knows exactly where to    │
- * │ go and what to look at. That is as actionable as honest telemetry gets, │
- * │ and it is a great deal more useful than a number on its own.            │
+ * │ This file stays the describing half: what happened, how big it was,     │
+ * │ where in the lap, measured against what. Telemetry still cannot see     │
+ * │ intent, so nothing here guesses why a driver did anything, and nothing  │
+ * │ here says what to do with the controls — when there is something to do, │
+ * │ it comes with laps, n and a confidence attached, from coach.ts.         │
  * │                                                                         │
  * │ So: `describe()` states what happened. `lookAt()` points at the moment  │
- * │ worth studying. Neither ever says what to do with the controls.         │
+ * │ worth studying.                                                         │
  * └─────────────────────────────────────────────────────────────────────────┘
  */
 

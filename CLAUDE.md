@@ -2,7 +2,10 @@
 
 Read this before doing anything. Proctor is an iRacing .ibt telemetry analysis app.
 Core thesis: every insight compares the driver TO THEMSELVES — no per-car physics models.
-Product identity: observations, not verdicts. This constraint lives in the code AND the UI copy.
+Product identity: an after-race report that tells the driver where the time is and what to do
+about it — but ONLY what their own laps have already demonstrated. Never a guess, never a
+per-car ideal. This constraint lives in the code AND the UI copy (rule changed 2026-11-22,
+see Honesty rules).
 
 ## Start-of-session ritual (do this first, every session)
 1. Read the latest Proctor **Build Log** entry in Notion (via Notion MCP — the workspace hub is
@@ -59,9 +62,14 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   **left-foot braking detected** (median **−50 ms** signed release→brake, 77% brake-before-lift);
   **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (**140 collected: 134 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**186 tests**). If these numbers move, you broke something.
-  The count above was stale at "51" for five sessions — correct it here when you add tests.
+  (**161 collected: 150 pass, 11 golden skip** without the .ibt fixtures on the machine) AND
+  `cd web && npx vitest run` (**186 tests**) AND
+  `cd render-service && python -m pytest tests -q` (**29 pass**; needs the parser installed,
+  `pip install -e ../parser`, as CI does). If these numbers move, you broke something.
+  The count above was stale at "51" for five sessions, and at "140" (really 142) on 2026-11-22 —
+  correct it here when you add tests.
+- `tests/test_golden_modules.py` ASSERTS the four Long Beach values above (it skips without the
+  file). Before 2026-11-22 nothing did — test_golden.py checks headers only. Run it on the rig.
 
 ## Capabilities boundary (do NOT build or promise — the data isn't there)
 - Racecraft/positioning tips (no CarIdx in disk files; intent unknowable).
@@ -79,5 +87,12 @@ Check the Decisions database in Notion first. If it's there and Active, don't re
 state the prior decision and its rationale. Only revisit if the user explicitly wants to.
 
 ## Honesty rules (code + copy)
-Observations not verdicts. Describe don't prescribe. Missing ≠ zero. Report negative results.
+**Prescribe only what your own laps have demonstrated** (replaces "describe, don't prescribe",
+2026-11-22). An action must carry: the laps it comes from, the measured time difference, n, and a
+confidence level. Targets stay inside the range the driver has actually driven — never
+extrapolated. Intent ("why did you lift"), racecraft and per-car physics remain walls. Car SETUP
+stays descriptive: one session never shows a setup alternative the driver actually drove.
+Actions come from `analysis/coach.py` as structured objects with evidence; prose is built in
+`web/lib/proctor/coach.ts` from those fields only. Everything that is not an action still
+describes. Missing ≠ zero. Report negative results ("no action found" is a finding).
 Limits/ideals come from the driver's own data, labelled as such.

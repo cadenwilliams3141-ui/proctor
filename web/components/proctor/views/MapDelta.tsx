@@ -11,7 +11,7 @@ import Panel from "@/components/proctor/ui/Panel";
 import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import { CH, dim, inkA } from "@/lib/proctor/channels";
-import { fmtDelta, fmtLap, kmh } from "@/lib/proctor/format";
+import { fixed, fmtDelta, fmtLap, kmh } from "@/lib/proctor/format";
 import { areaPath, polyline, sharedExtent, wrapIndex } from "@/lib/proctor/geometry";
 import { deltaCurve } from "@/lib/proctor/ledger";
 import { noteFor } from "@/lib/proctor/provenance";
@@ -34,7 +34,9 @@ export default function MapDelta() {
     );
     const flagged = bundle.laps.filter((l) => l.is_anomalous).length;
     const partial = bundle.laps.filter((l) => l.is_out_lap).length;
-    const envelope = bundle.traction.laps[traceA.lap_number] ?? 0;
+    // Missing is not zero: a lap the traction module did not score shows "—",
+    // never 0% of the envelope.
+    const envelope = bundle.traction.laps[traceA.lap_number] ?? null;
 
     return [
       {
@@ -60,11 +62,11 @@ export default function MapDelta() {
       },
       {
         label: "envelope use",
-        value: envelope,
-        unit: "%",
-        sub: "of your own session boundary",
+        value: envelope ?? Number.NaN,
+        unit: envelope == null ? "" : "%",
+        sub: envelope == null ? "not measured for this lap" : "of your own session boundary",
         color: CH.a,
-        fmt: (v: number) => v.toFixed(1),
+        fmt: (v: number) => fixed(v, 1),
       },
       {
         label: "gap to best",

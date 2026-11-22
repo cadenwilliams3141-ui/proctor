@@ -89,6 +89,11 @@ export default function CornerScreen() {
         <p style={{ fontSize: 14, color: dim(70), maxWidth: 680 }}>
           {why?.reason ?? "This session has no corner model."}
         </p>
+        <p style={{ fontSize: 12.5, color: dim(55), maxWidth: 680, lineHeight: 1.55 }}>
+          Corners are found from your own complete laps — where your median lap slowed and turned — so a
+          session needs at least one valid lap from line to line before there is anything to show per corner.
+          The laps that are here are still on the Data screen.
+        </p>
       </div>
     );
   }

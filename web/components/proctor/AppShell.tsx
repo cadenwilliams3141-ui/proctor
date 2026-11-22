@@ -14,18 +14,15 @@
 import { CH, dim } from "@/lib/proctor/channels";
 import { useProctor } from "@/lib/proctor/store";
 
-import LapRail from "@/components/proctor/shell/LapRail";
 import IconRail from "@/components/proctor/shell/IconRail";
 import LaunchScreen from "@/components/proctor/shell/LaunchScreen";
 import SetupScreen from "@/components/proctor/shell/SetupScreen";
 import TopBar from "@/components/proctor/shell/TopBar";
 
-import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
 import AnatomyScreen from "@/components/proctor/screens/AnatomyScreen";
 import CornerScreen from "@/components/proctor/screens/CornerScreen";
-import LiveScreen from "@/components/proctor/screens/LiveScreen";
 import ReportScreen from "@/components/proctor/screens/ReportScreen";
-import ForcesScreen from "@/components/proctor/screens/ForcesScreen";
+import DataScreen, { type DataTab } from "@/components/proctor/screens/DataScreen";
 import HardwareScreen from "@/components/proctor/screens/HardwareScreen";
 import SessionsScreen from "@/components/proctor/screens/SessionsScreen";
 import UploadScreen from "@/components/proctor/screens/UploadScreen";
@@ -48,7 +45,19 @@ export default function AppShell() {
   const { state, error } = useProctor();
 
   // The lap rail is only meaningful where a lap is being chosen.
-  const showLapRail = state.screen === "analyze" || state.screen === "live";
+  /* Analyze, Live trace and Physics became tabs of Data. Their ids stay valid
+     (they are in links people kept, and the phone still uses two of them), and
+     land on the matching tab. */
+  const dataTab: DataTab | null =
+    state.screen === "data"
+      ? "traces"
+      : state.screen === "analyze"
+        ? state.view === "line" ? "line" : "traces"
+        : state.screen === "live"
+          ? "replay"
+          : state.screen === "rig"
+            ? "physics"
+            : null;
   const needsSession = !SCREENS_WITHOUT_A_SESSION.has(state.screen);
 
   return (
@@ -68,7 +77,6 @@ export default function AppShell() {
       <LaunchScreen />
       <SetupScreen />
       <IconRail />
-      {showLapRail && <LapRail />}
 
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <TopBar />
@@ -142,12 +150,10 @@ export default function AppShell() {
               </div>
             )}
 
-            {state.screen === "analyze" && <AnalyzeScreen />}
-            {state.screen === "live" && <LiveScreen />}
+            {dataTab && <DataScreen initialTab={dataTab} />}
             {state.screen === "sessions" && <SessionsScreen />}
             {state.screen === "report" && <ReportScreen />}
             {state.screen === "corner" && <CornerScreen />}
-            {state.screen === "rig" && <ForcesScreen />}
             {state.screen === "hardware" && <HardwareScreen />}
             {state.screen === "anatomy" && <AnatomyScreen />}
             {state.screen === "upload" && <UploadScreen />}

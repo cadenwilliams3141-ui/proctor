@@ -71,7 +71,8 @@ const VIEWPORTS = [
   { name: 'desktop',   w: 1920, h: 1080, ua: DESKTOP, app: '/'  },
 ];
 
-const DESKTOP_SCREENS = ['sessions', 'report', 'corner', 'analyze', 'live', 'rig', 'hardware', 'anatomy', 'upload'];
+// live and rig are kept: they are old links that must now land on Data's Replay and Physics tabs.
+const DESKTOP_SCREENS = ['sessions', 'report', 'corner', 'data', 'live', 'rig', 'hardware', 'anatomy', 'upload'];
 const PHONE_SCREENS   = ['report', 'sessions', 'analyze', 'rig'];
 
 const SESSION = process.env.SWEEP_SESSION || '1';
@@ -111,6 +112,15 @@ for (const vp of VIEWPORTS) {
     if (m) return json(bundles[m[1] === 'latest' ? SESSION : m[1]] ?? bundles[SESSION]);
     m = u.pathname.match(/^\/api\/session\/([^/]+)\/traces$/);
     if (m) return json(traces[m[1] === 'latest' ? SESSION : m[1]] ?? traces[SESSION]);
+    // Full-rate laps (binary). Captured per session as s<N>samples.bin; a
+    // session without one answers 404, which the Data screen reports in words.
+    m = u.pathname.match(/^\/api\/session\/([^/]+)\/samples$/);
+    if (m) {
+      const f = path.join(BUNDLES, `s${SESSION}samples.bin`);
+      return fs.existsSync(f)
+        ? route.fulfill({ status: 200, contentType: 'application/octet-stream', body: fs.readFileSync(f) })
+        : route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"no samples captured"}' });
+    }
     if (u.pathname === '/api/ingest') return json([]);
     if (u.pathname === '/api/ingest-url') return json({ url: 'https://example.invalid/ingest' });
     return json({});

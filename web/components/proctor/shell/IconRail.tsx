@@ -7,8 +7,6 @@
 import {
   Armchair,
   ChartLine,
-  CirclePlay,
-  Gauge,
   Layers,
   LayoutGrid,
   NotebookText,
@@ -40,9 +38,8 @@ const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "sessions", label: "Sessions", Icon: LayoutGrid },
   { id: "report", label: "Session report", Icon: NotebookText },
   { id: "corner", label: "Corners", Icon: Route },
-  { id: "analyze", label: "Analyze", Icon: ChartLine },
-  { id: "live", label: "Live trace", Icon: CirclePlay },
-  { id: "rig", label: "Physics", Icon: Gauge },
+  // Analyze, Live trace and Physics are tabs of Data now (2026-11-22).
+  { id: "data", label: "Data", Icon: ChartLine },
   { id: "hardware", label: "Rig", Icon: Armchair },
   { id: "anatomy", label: "Anatomy", Icon: Layers },
   { id: "upload", label: "Upload", Icon: Upload },
@@ -89,7 +86,9 @@ export default function IconRail() {
       </button>
 
       {NAV.map(({ id, label, Icon }) => {
-        const active = state.screen === id;
+        const active =
+          state.screen === id ||
+          (id === "data" && (state.screen === "analyze" || state.screen === "live" || state.screen === "rig"));
         return (
           <button
             key={id}

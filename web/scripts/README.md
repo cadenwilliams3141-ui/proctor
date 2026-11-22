@@ -33,7 +33,10 @@ npm run build && npx next start -p 3210 &
 curl -s localhost:3210/api/sessions             > .sweep/bundles/sessions.json
 for s in 1 2 3; do
   curl -s "localhost:3210/api/session/$s/data"  > .sweep/bundles/s$s.json
+  # /data now carries only the opening pair's traces; capture every lap's
+  # (4 per request) into s<N>t.json, and the opening pair's full-rate laps:
   curl -s "localhost:3210/api/session/$s/traces?laps=0,1,2,3" > .sweep/bundles/s${s}t.json
+  curl -s "localhost:3210/api/session/$s/samples?laps=<the pair>" > .sweep/bundles/s${s}samples.bin
 done
 
 # 4. sweep. Non-zero exit on any finding; screenshots land in .sweep/shots

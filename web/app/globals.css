@@ -1693,3 +1693,11 @@ button[disabled] {
     padding: var(--space-4);
   }
 }
+
+/* Data workspace: the cursor/map/channels column moves under the lanes on
+   narrow screens rather than squeezing them. */
+@media (max-width: 960px) {
+  .data-traces {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

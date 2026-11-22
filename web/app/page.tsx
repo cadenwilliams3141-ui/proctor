@@ -26,6 +26,7 @@ const SCREENS: Screen[] = [
   "sessions",
   "report",
   "corner",
+  "data",
   "analyze",
   "live",
   "rig",

@@ -40,6 +40,7 @@ export type Screen =
   | "sessions"
   | "report"
   | "corner"
+  | "data"
   | "analyze"
   | "live"
   | "rig"

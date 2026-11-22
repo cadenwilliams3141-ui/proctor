@@ -1,26 +1,22 @@
 "use client";
 
-import { ListOrdered, Map as MapIcon, AudioWaveform, Spline } from "lucide-react";
-
 import { dim } from "@/lib/proctor/channels";
 import { IS_FIXTURE } from "@/lib/proctor/data-source";
-import { useProctor, type AnalysisView, type Screen } from "@/lib/proctor/store";
+import { useProctor, type Screen } from "@/lib/proctor/store";
 import { TIER_BLURB, TIERS } from "@/lib/tier";
 
 const TITLE: Record<Screen, { title: string; sub: string }> = {
   sessions: { title: "Sessions", sub: "everything the rig watcher has sent" },
   report: { title: "Session report", sub: "where the time is, and what your own fastest passes did differently" },
   corner: { title: "Corners", sub: "every pass through one corner, and the evidence behind its action" },
-  analyze: { title: "Analyze", sub: "any lap of this session against any other" },
+  data: { title: "Data", sub: "any lap, any channel, on time or distance — the whole session at full detail" },
+  analyze: { title: "Data", sub: "any lap, any channel, on time or distance — the whole session at full detail" },
   /* NOT "in the time it actually took": playback defaults to 4x, so that
      sentence was false the moment the screen opened. The rate is a control on
      the screen and the readout beside it already states the truth; the subtitle
      now says what is true at every multiplier. */
-  live: { title: "Live trace", sub: "where the car was, moment by moment, at a speed you choose" },
-  rig: {
-    title: "Physics",
-    sub: "what you asked for, what the car did with it, and what the ground actually gave",
-  },
+  live: { title: "Data", sub: "every lap in its own time, side by side" },
+  rig: { title: "Data", sub: "what you asked for, what the car did with it, and what the ground gave" },
   /* Labelled Rig, though its id is `hardware`: `rig` is the Physics screen's id
      and is in links people have kept. See shell/IconRail.tsx. */
   hardware: { title: "Rig", sub: "the layout you drive from, and what you have said is in each slot" },
@@ -30,13 +26,6 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
   },
   upload: { title: "Upload", sub: "add a session by hand" },
 };
-
-const VIEWS: { id: AnalysisView; label: string; Icon: typeof ListOrdered }[] = [
-  { id: "loss", label: "Where it went", Icon: ListOrdered },
-  { id: "ribbon", label: "Ribbon", Icon: AudioWaveform },
-  { id: "map", label: "Map & delta", Icon: MapIcon },
-  { id: "line", label: "Racing line", Icon: Spline },
-];
 
 export default function TopBar() {
   const { state, dispatch, setTier } = useProctor();
@@ -91,40 +80,6 @@ export default function TopBar() {
         >
           sample data
         </span>
-      )}
-
-      {state.screen === "analyze" && (
-        <div style={{ display: "flex", gap: 2, flex: "none" }}>
-          {VIEWS.map(({ id, label, Icon }) => {
-            const active = state.view === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                className="pk"
-                onClick={() => dispatch({ t: "view", view: id })}
-                aria-pressed={active}
-                aria-label={label}
-                title={label}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "5px 10px",
-                  borderRadius: 7,
-                  border: 0,
-                  font: "500 12px var(--font-heading)",
-                  color: active ? "var(--color-text)" : dim(52),
-                  background: active ? dim(6) : "transparent",
-                  boxShadow: active ? `inset 0 0 0 1px ${dim(12)}` : "none",
-                }}
-              >
-                <Icon size={14} strokeWidth={1.7} />
-                <span className="tb-view-label">{label}</span>
-              </button>
-            );
-          })}
-        </div>
       )}
 
       <span className="tb-detail-word" style={{ width: 1, height: 18, background: dim(12), flex: "none" }} />

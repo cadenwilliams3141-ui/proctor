@@ -42,6 +42,9 @@ export interface TrackMapProps {
   trail?: number;
   baseWidth?: number;
   segWidth?: number;
+  /** Extra markers at fractional sample indices — the other laps in a replay,
+   *  each where IT was at the same moment. */
+  ghosts?: { index: number; color: string }[];
   style?: React.CSSProperties;
   className?: string;
 }
@@ -62,6 +65,7 @@ export default function TrackMap({
   trail = 90,
   baseWidth = 11,
   segWidth = 4.4,
+  ghosts,
   style,
   className,
 }: TrackMapProps) {
@@ -278,6 +282,24 @@ export default function TrackMap({
         <path d={trailPath} fill="none" stroke={INK.text} strokeWidth={1.6} opacity={0.6} />
       )}
 
+      {ghosts?.map((g, i) => {
+        if (n === 0 || !Number.isFinite(g.index)) return null;
+        const wrapped = ((g.index % n) + n) % n;
+        const lo = Math.floor(wrapped);
+        const hi = (lo + 1) % n;
+        const f = wrapped - lo;
+        return (
+          <circle
+            key={i}
+            cx={geo.p.X(x[lo] + (x[hi] - x[lo]) * f)}
+            cy={geo.p.Y(y[lo] + (y[hi] - y[lo]) * f)}
+            r={5}
+            fill={g.color}
+            stroke={INK.bg}
+            strokeWidth={1.5}
+          />
+        );
+      })}
       {carAt && (
         <g>
           <circle

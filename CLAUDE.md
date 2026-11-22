@@ -62,6 +62,13 @@ see Honesty rules).
   invents survives a change of session and describes the wrong run without ever looking wrong.
 - MCP first, CLI fallback.
 
+## The app (2026-11-22)
+Desktop: Sessions · Report (the landing screen: where the time is, the actions, what was
+watched) · Corners (every pass through one corner, the evidence) · Data (MoTeC-style: any lap,
+any channel, time or distance, sectors, scatter, histogram, replay, racing line, physics) · Rig ·
+Anatomy · Upload. Old ?screen=analyze|live|rig links land on Data's Traces/Replay/Physics tabs.
+Phone: Report (home) · Lap · Physics · Sessions. Rig and Anatomy were deliberately left untouched.
+
 ## Regression tripwire (the golden fixtures — exact filenames, in OneDrive iRacing\Telemetry)
 - Long Beach `porsche718gt4_longbeach 2026-01-26 13-42-30.ibt`
   (285 vars / bufLen 1099 / 124,215 samples / wear_masked=true)
@@ -72,7 +79,7 @@ see Honesty rules).
   **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
   (**192 collected: 181 pass, 11 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**232 tests**) AND
+  `cd web && npx vitest run` (**240 tests**) AND
   `cd render-service && python -m pytest tests -q` (**29 pass**; needs the parser installed,
   `pip install -e ../parser`, as CI does). If these numbers move, you broke something.
   The count above was stale at "51" for five sessions, and at "140" (really 142) on 2026-11-22 —

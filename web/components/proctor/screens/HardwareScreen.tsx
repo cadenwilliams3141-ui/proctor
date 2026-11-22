@@ -201,7 +201,7 @@ export default function HardwareScreen() {
 
   function finish() {
     dispatch({ t: "setup", step: null });
-    dispatch({ t: "screen", screen: "analyze" });
+    dispatch({ t: "screen", screen: "report" });
   }
 
   const layout = prefs ? rigLayout(prefs.layout) : null;

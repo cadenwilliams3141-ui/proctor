@@ -29,8 +29,10 @@ def _register(module) -> None:
 
 from proctor_parser.analysis import (  # noqa: E402 — registry wiring
     balance,
+    coach,
     contact_patch,
     corner_context,
+    corner_laps,
     corner_sections,
     delta_time,
     grip,
@@ -44,8 +46,10 @@ from proctor_parser.analysis import (  # noqa: E402 — registry wiring
     tire_temps,
     track_edges,
     track_map,
+    segments,
     track_width,
     traction_circle,
+    watch,
 )
 
 for _module in (
@@ -54,6 +58,9 @@ for _module in (
     lockup_wheelspin, shift_analysis, tire_temps, balance,
     corner_context, grip, input_response, stint, track_width, track_edges,
     contact_patch,
+    # The coaching engine (2026-11-22). Order matters only for speed: segments
+    # builds the shared track model and passes, the rest reuse them.
+    segments, corner_laps, watch, coach,
 ):
     _register(_module)
 

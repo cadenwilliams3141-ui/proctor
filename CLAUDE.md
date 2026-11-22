@@ -62,7 +62,7 @@ see Honesty rules).
   **left-foot braking detected** (median **−50 ms** signed release→brake, 77% brake-before-lift);
   **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (**161 collected: 150 pass, 11 golden skip** without the .ibt fixtures on the machine) AND
+  (**187 collected: 176 pass, 11 golden skip** without the .ibt fixtures on the machine) AND
   `cd web && npx vitest run` (**186 tests**) AND
   `cd render-service && python -m pytest tests -q` (**29 pass**; needs the parser installed,
   `pip install -e ../parser`, as CI does). If these numbers move, you broke something.

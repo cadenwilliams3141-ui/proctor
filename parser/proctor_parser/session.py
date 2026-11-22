@@ -68,6 +68,10 @@ RAW_CHANNEL_MAP = {
     "lf_temp_r": "LFtempR",
     "brake_bias": "dcBrakeBias",
     "frame_rate": "FrameRate",
+    # The driver's running incident count. Core (every file has it) and used
+    # for the per-lap incident_delta, but until the coach needed to know WHICH
+    # corner an incident happened in, it never reached the modules.
+    "incidents": "PlayerCarMyIncidentCount",
 }
 
 # Raw keys that also get resampled onto the fixed distance grid (5.4).

@@ -30,7 +30,17 @@ ParsedLap:
   is_anomalous: bool            # incident or speed-profile outlier
   raw: dict[str, np.ndarray]    # per-tick arrays, all equal length within a lap
   grid: dict[str, np.ndarray]   # resampled onto fixed 1000-pt distance grid
+  start_crossing_s: float | None  # start/finish crossings, interpolated
+  end_crossing_s: float | None    # between ticks, relative to the lap's first
+                                  # tick (2026-11-22)
+  lap_time_exact_s: float | None  # property: end - start crossing
+  sim_lap_time_s: float | None    # the sim's LapLastLapTime, cross-check only
 ```
+
+`lap_time_s` keeps its tick-count definition (protects the golden pace value).
+For anything timed WITHIN a lap use `proctor_parser.timing` — time read off the
+tick clock against distance — never an integral of 1/speed, which is wrong by
+the driver's line.
 
 ### `raw` keys (per-tick, at `meta.tick_rate` Hz = 60)
 
@@ -58,6 +68,10 @@ ParsedLap:
 | lf_temp_l/m/r | LFtempL/M/R | °C |
 | brake_bias | dcBrakeBias | % front |
 | frame_rate | FrameRate | fps |
+| incidents | PlayerCarMyIncidentCount | running count (per-segment incidents) |
+| session_time | SessionTime | s — OPTIONAL, present when the file has it |
+| dist_m | LapDist | m — OPTIONAL |
+| lap_last_time | LapLastLapTime | s — OPTIONAL, cross-check only |
 
 ### `grid` keys (all float32, length exactly 1000)
 
@@ -126,3 +140,26 @@ Also assert your payload survives `json.dumps`.
 Match the existing code: type hints, module docstring stating what the module
 observes, small pure helpers, no classes unless state demands it, comments
 only for non-obvious constraints. numpy vectorized — no per-tick Python loops.
+
+## The coaching engine (2026-11-22)
+
+`segments`, `corner_laps`, `watch` and `coach` share one per-session engine
+(`analysis/_engine.py`): `track_model.py` (corners, kinks, segments on a 2 m
+station grid in metres), `phases.py` (every pass through every corner,
+measured at 60 Hz, with run-quality flags), `events.py` (the watcher) and
+`coaching.py` (actions). Statistics live in `stats.py` (numpy only).
+
+Rules specific to it:
+- A pass flagged off-track, incident (and the two segments after), tow,
+  possible traffic, pit or distance jump never enters a comparison.
+- Time and every input are detrended against lap order before comparing.
+- Actions need >= 6 usable passes, a permutation p-value surviving
+  Benjamini–Hochberg FDR across the whole session (q <= 0.10; strong needs
+  q <= 0.05, n >= 10, bootstrap stability >= 0.95), at least two passes short
+  of the target by more than measurement resolution, and an EXPLAINED gain of
+  >= 0.03 s capped at the corner's opportunity.
+- Brake points are compared at matched entry speed.
+- Output is structured; prose lives in web/lib/proctor/coach.ts.
+
+Tests for it drive real laps with planted truths: `tests/synthetic_track.py`.
+Use it, not `make_core_channels`, for anything about corners or lap time.

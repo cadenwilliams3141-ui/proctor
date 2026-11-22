@@ -45,7 +45,7 @@ const STORAGE_KEY = "proctor-speed-mul";
 const TRAIL_S = 1.6;
 
 export default function LiveScreen() {
-  const { bundle, state, dispatch, traceA, error, referenceLap } = useProctor();
+  const { bundle, state, dispatch, traceA, error, referenceLap, pendingLaps } = useProctor();
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
@@ -107,6 +107,7 @@ export default function LiveScreen() {
     referenceLap,
     lapA: state.lapA,
     traceA,
+    pendingLaps,
   });
   if (readiness.state !== "ready" || !bundle || !traceA || !tb) {
     return <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />;

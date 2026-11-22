@@ -182,3 +182,64 @@ export interface TrackBoundaryRow {
   laps_contributed: number;
   updated_at: string | null;
 }
+
+/* ── Laps, with what is stored for each ───────────────────────────────────── */
+
+export interface LapRow {
+  lap_number: number;
+  lap_time_s: number | null;
+  is_valid: boolean;
+  is_out_lap: boolean;
+  incident_delta: number;
+  is_anomalous: boolean;
+  has_trace: boolean;
+  has_samples: boolean;
+}
+
+export async function lapRows(sessionId: string): Promise<LapRow[]> {
+  const rows = (await sql`
+    SELECT l.lap_number, l.lap_time_s, l.is_valid, l.is_out_lap, l.incident_delta,
+           l.is_anomalous,
+           EXISTS (SELECT 1 FROM lap_traces t WHERE t.lap_id = l.id) AS has_trace
+    FROM laps l
+    WHERE l.session_id = ${sessionId}::bigint
+    ORDER BY l.lap_number
+  `) as unknown as Omit<LapRow, "has_samples">[];
+  const withSamples = new Set(await sampleLaps(sessionId));
+  return rows.map((r) => ({ ...r, has_samples: withSamples.has(r.lap_number) }));
+}
+
+/** Lap numbers with full-rate samples. Empty — not an error — when the table
+ *  does not exist yet: Vercel can deploy a moment before Render has booted and
+ *  run migration 003, and the rest of the session must still load. */
+export async function sampleLaps(sessionId: string): Promise<number[]> {
+  try {
+    const rows = (await sql`
+      SELECT l.lap_number FROM lap_samples s JOIN laps l ON l.id = s.lap_id
+      WHERE l.session_id = ${sessionId}::bigint
+    `) as unknown as { lap_number: number }[];
+    return rows.map((r) => Number(r.lap_number));
+  } catch (e) {
+    if (/lap_samples/.test(String((e as Error)?.message ?? e))) return [];
+    throw e;
+  }
+}
+
+export interface SampleRow {
+  lap_number: number;
+  header: Record<string, unknown>;
+  /** base64 of the compressed bytes — encoded in SQL so the two drivers
+   *  (Neon HTTP, node-pg) hand back the same thing. */
+  data_b64: string;
+}
+
+export async function samples(sessionId: string, lapNumbers: number[]): Promise<SampleRow[]> {
+  const rows = await sql`
+    SELECT l.lap_number, s.header, encode(s.data, 'base64') AS data_b64
+    FROM lap_samples s
+    JOIN laps l ON l.id = s.lap_id
+    WHERE l.session_id = ${sessionId}::bigint AND l.lap_number = ANY(${lapNumbers}::int[])
+    ORDER BY l.lap_number
+  `;
+  return rows as unknown as SampleRow[];
+}

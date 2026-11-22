@@ -15,7 +15,9 @@ from psycopg.types.json import Jsonb
 
 from proctor_parser import parse_ibt
 from proctor_parser.analysis import compute_all
+from proctor_parser.samples import encode_lap
 from proctor_parser.session import ParsedSession
+from proctor_parser.timing import session_clocks
 
 from app.db import connect
 from app.track_boundary import merge_session
@@ -78,6 +80,16 @@ def _write_session(conn, ingest_id: int, user_id: str, ps: ParsedSession) -> int
                     row.append([float(v) for v in lap.grid[col]])
                 copy.write_row(row)
 
+    # Full-rate laps (lap_samples), one lap at a time so a long race never
+    # holds every lap's encoded bytes at once. In a SAVEPOINT of its own, like
+    # the boundary merge below: the session and its analysis are why the file
+    # was uploaded, and a sample-write failure must not cost them.
+    try:
+        with conn.transaction():
+            _write_samples(conn, lap_ids, ps)
+    except Exception as exc:  # noqa: BLE001 — never sink the telemetry write
+        log.error("full-rate samples not stored for session %s: %s", session_id, exc)
+
     metrics = compute_all(ps)
     for key, payload in metrics.items():
         conn.execute(
@@ -105,6 +117,21 @@ def _write_session(conn, ingest_id: int, user_id: str, ps: ParsedSession) -> int
     except Exception as exc:  # noqa: BLE001 — never sink the telemetry write
         log.error("track boundary not updated for %s: %s", meta.track_name, exc)
     return session_id
+
+
+def _write_samples(conn, lap_ids: list[int], ps: ParsedSession) -> None:
+    clocks, _, _ = session_clocks(ps)
+    rate = ps.meta.tick_rate or 60
+    with conn.cursor() as cur:
+        with cur.copy(
+            "COPY lap_samples (lap_id, codec, tick_rate, n, header, data) FROM STDIN"
+        ) as copy:
+            for lap_id, lap in zip(lap_ids, ps.laps):
+                clock = clocks.get(lap.lap_number)
+                if clock is None:
+                    continue
+                header, data = encode_lap(lap, clock, rate)
+                copy.write_row((lap_id, header["codec"], rate, header["n"], Jsonb(header), data))
 
 
 def process_file(ingest_id: int, filename: str, data: bytes, user_id: str) -> None:

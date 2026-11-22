@@ -351,14 +351,14 @@ function LapChart({ best, sd }: { best: number | null; sd: number }) {
               onPointerEnter={() => setHover(lap.lap_number)}
               onPointerLeave={() => setHover(null)}
               onClick={() =>
-                bundle.traces[lap.lap_number] &&
+                (lap.has_trace ?? bundle.traces[lap.lap_number] != null) &&
                 dispatch(
                   state.pick === "A"
                     ? { t: "lapA", lap: lap.lap_number }
                     : { t: "lapB", lap: lap.lap_number },
                 )
               }
-              style={{ cursor: bundle.traces[lap.lap_number] ? "pointer" : "default" }}
+              style={{ cursor: (lap.has_trace ?? bundle.traces[lap.lap_number] != null) ? "pointer" : "default" }}
             >
               <title>
                 {`Lap ${lap.lap_number} — ${fmtLap(lap.lap_time_s)}${

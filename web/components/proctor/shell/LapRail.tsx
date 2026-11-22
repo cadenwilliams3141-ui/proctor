@@ -128,7 +128,9 @@ export default function LapRail() {
       >
         {laps.map((lap, i) => {
           const usable = isUsable(lap);
-          const hasTrace = bundle.traces[lap.lap_number] != null;
+          // Whether one was STORED, not whether it is loaded yet: traces load
+          // on demand, and a lap the rail can offer is one that has one.
+          const hasTrace = lap.has_trace ?? bundle.traces[lap.lap_number] != null;
           const isA = lap.lap_number === state.lapA;
           const isB = lap.lap_number === state.lapB;
           const isReference = lap.lap_number === referenceLap;

@@ -17,7 +17,7 @@ import { useProctor } from "@/lib/proctor/store";
 const SPEEDS = [1, 2, 4, 8] as const;
 
 export default function MobileLive() {
-  const { bundle, state, dispatch, traceA, error, referenceLap } = useProctor();
+  const { bundle, state, dispatch, traceA, error, referenceLap, pendingLaps } = useProctor();
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
@@ -52,6 +52,7 @@ export default function MobileLive() {
     referenceLap,
     lapA: state.lapA,
     traceA,
+    pendingLaps,
   });
   if (readiness.state !== "ready" || !bundle || !traceA) {
     return <NotDrawable readiness={readiness.state === "ready" ? { state: "loading" } : readiness} />;

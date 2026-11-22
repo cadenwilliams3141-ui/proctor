@@ -15,6 +15,7 @@
    ║  numbers produced by one piece of code.                               ║
    ╚═══════════════════════════════════════════════════════════════════════╝ */
 
+import { decodeContainer, type LapSamples } from "@/lib/proctor/samples";
 import type { IngestRow, SessionBundle, SessionRow, Trace } from "@/lib/proctor/types";
 
 export type SourceKind = "neon";
@@ -37,6 +38,8 @@ export interface DataSource {
   loadSession(sessionId: string): Promise<SessionBundle>;
   /** Traces are large; they load lazily by lap number. */
   loadTraces(sessionId: string, lapNumbers: number[]): Promise<Trace[]>;
+  /** Full-rate laps (every tick, every channel), at most four at a time. */
+  loadSamples(sessionId: string, lapNumbers: number[]): Promise<LapSamples[]>;
   /** Newest first. */
   listSessions(): Promise<SessionRow[]>;
   /** Files the watcher has sent that are not yet a readable session. */
@@ -72,6 +75,11 @@ const neonSource: DataSource = {
     if (!res.ok) throw await failure(res, `traces ${lapNumbers.join(",")}`);
     const body = (await res.json()) as { traces: Trace[] };
     return body.traces ?? [];
+  },
+  async loadSamples(sessionId, lapNumbers) {
+    const res = await fetch(`/api/session/${sessionId}/samples?laps=${lapNumbers.join(",")}`);
+    if (!res.ok) throw await failure(res, `full-rate laps ${lapNumbers.join(",")}`);
+    return decodeContainer(await res.arrayBuffer());
   },
   async listSessions() {
     const res = await fetch(`/api/sessions`);

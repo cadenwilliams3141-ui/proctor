@@ -12,7 +12,7 @@
  * overlay uses the stored lap traces of two real passes — never a composite
  * drawn as if it had been driven. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import ActionCard from "@/components/proctor/report/ActionCard";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
@@ -445,9 +445,14 @@ function Overlay({
   lengthM: number;
   shortLaps?: number[];
 }) {
-  const { bundle } = useProctor();
+  const { bundle, ensureTraces, pendingLaps } = useProctor();
   const { typical, best, fromShort } = typicalAndBest(runs, shortLaps);
   const who = fromShort ? "a pass that fell short" : "your typical pass";
+  // Both passes, and the laps after them for a segment that runs over the line.
+  useEffect(() => {
+    if (typical == null || best == null) return;
+    ensureTraces(corner.wraps ? [typical, best, typical + 1, best + 1] : [typical, best]);
+  }, [ensureTraces, typical, best, corner.wraps]);
   if (!bundle || typical == null || best == null || typical === best) {
     return (
       <Panel title="Typical against fastest">
@@ -467,9 +472,12 @@ function Overlay({
     return out;
   };
   if (!bundle.traces[typical] || !bundle.traces[best]) {
+    const waiting = pendingLaps.includes(typical) || pendingLaps.includes(best);
     return (
       <Panel title="Typical against fastest">
-        <p style={{ fontSize: 12, color: dim(55) }}>The traces for these passes are not loaded.</p>
+        <p style={{ fontSize: 12, color: dim(55) }}>
+          {waiting ? "Loading these two passes…" : "No stored trace for one of these passes."}
+        </p>
       </Panel>
     );
   }

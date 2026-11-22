@@ -204,3 +204,29 @@ describe("playback readiness (one lap, not two)", () => {
     expect(r.state).toBe("error");
   });
 });
+
+describe("lazily loaded traces", () => {
+  const base = {
+    error: null,
+    lapCount: 10,
+    referenceLap: 3,
+    lapA: 3,
+    lapB: 7,
+    traceA: { lap_number: 3 } as never,
+    traceB: null,
+  };
+
+  it("a trace on its way is loading, not missing", () => {
+    expect(deriveReadiness({ ...base, pendingLaps: [7] }).state).toBe("loading");
+  });
+
+  it("a trace that is not coming is still reported missing", () => {
+    expect(deriveReadiness({ ...base, pendingLaps: [] }).state).toBe("no-traces");
+  });
+
+  it("playback waits for a pending lap too", () => {
+    expect(
+      derivePlaybackReadiness({ ...base, lapA: 7, traceA: null, pendingLaps: [7] }).state,
+    ).toBe("loading");
+  });
+});

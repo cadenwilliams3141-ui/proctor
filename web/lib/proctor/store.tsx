@@ -201,6 +201,9 @@ interface Ctx {
   /** The selected corner, falling back to the biggest single loss. */
   selectedCornerId: number | null;
   setTier: (t: Tier) => void;
+  /** Fetch these laps' traces if they are not loaded. */
+  ensureTraces: (laps: (number | null | undefined)[]) => void;
+  pendingLaps: number[];
 }
 
 const ProctorCtx = createContext<Ctx | null>(null);
@@ -234,8 +237,15 @@ export function ProctorProvider({
     splash: !skipSplash && initialSetup == null,
     setup: initialSetup,
   });
-  const [bundle, setBundle] = useState<SessionBundle | null>(null);
+  const [loaded, setBundle] = useState<SessionBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* Traces fetched after the bundle, by lap. The bundle carries only the
+     opening pair; anything else a screen asks for (another lap on the rail, the
+     passes a corner overlays) is fetched here and merged in, so consumers keep
+     reading bundle.traces as before. */
+  const [extraTraces, setExtraTraces] = useState<Record<number, Trace>>({});
+  const [pendingLaps, setPendingLaps] = useState<number[]>([]);
+  const pendingRef = useRef(new Set<number>());
 
   useEffect(() => {
     let live = true;
@@ -244,6 +254,9 @@ export function ProctorProvider({
        as the fetch takes — the loading state has to be empty, not stale. */
     setBundle(null);
     setError(null);
+    setExtraTraces({});
+    setPendingLaps([]);
+    pendingRef.current = new Set();
     data
       .loadSession(state.sessionId)
       .then((b) => {
@@ -255,6 +268,49 @@ export function ProctorProvider({
       live = false;
     };
   }, [state.sessionId]);
+
+  const bundle = useMemo<SessionBundle | null>(
+    () =>
+      loaded && Object.keys(extraTraces).length
+        ? { ...loaded, traces: { ...loaded.traces, ...extraTraces } }
+        : loaded,
+    [loaded, extraTraces],
+  );
+
+  /** Fetch any of these laps' traces that are not here yet. Laps the session
+   *  stored no trace for are skipped — asking would only produce an error. */
+  const ensureTraces = useCallback(
+    (laps: (number | null | undefined)[]) => {
+      if (!loaded) return;
+      const want = [...new Set(laps)].filter(
+        (n): n is number =>
+          n != null &&
+          !(n in loaded.traces) &&
+          !(n in extraTraces) &&
+          !pendingRef.current.has(n) &&
+          loaded.laps.some((l) => l.lap_number === n && l.has_trace !== false),
+      );
+      if (want.length === 0) return;
+      const sid = String(loaded.session.id);
+      for (let i = 0; i < want.length; i += 4) {
+        const chunk = want.slice(i, i + 4);
+        chunk.forEach((n) => pendingRef.current.add(n));
+        setPendingLaps([...pendingRef.current]);
+        data
+          .loadTraces(sid, chunk)
+          .then((ts) => {
+            if (String(loaded.session.id) !== sid) return;
+            setExtraTraces((prev) => ({ ...prev, ...Object.fromEntries(ts.map((t) => [t.lap_number, t])) }));
+          })
+          .catch(() => undefined) // a lap that will not load stays missing; readiness says so
+          .finally(() => {
+            chunk.forEach((n) => pendingRef.current.delete(n));
+            setPendingLaps([...pendingRef.current]);
+          });
+      }
+    },
+    [loaded, extraTraces],
+  );
 
   const cleanLaps = useMemo(
     () => (bundle ? bundle.laps.filter(isUsable).map((l) => l.lap_number) : []),
@@ -293,6 +349,11 @@ export function ProctorProvider({
     dispatch({ t: "initLaps", a: referenceLap, b: worst });
   }, [bundle, referenceLap, cleanLaps, state.lapA]);
 
+  // The selected pair is always fetched if it is not already here.
+  useEffect(() => {
+    ensureTraces([state.lapA, state.lapB]);
+  }, [ensureTraces, state.lapA, state.lapB]);
+
   const traceA = bundle && state.lapA != null ? bundle.traces[state.lapA] ?? null : null;
   const traceB = bundle && state.lapB != null ? bundle.traces[state.lapB] ?? null : null;
 
@@ -317,8 +378,9 @@ export function ProctorProvider({
         lapB: state.lapB,
         traceA,
         traceB,
+        pendingLaps,
       }),
-    [error, bundle, referenceLap, state.lapA, state.lapB, traceA, traceB],
+    [error, bundle, referenceLap, state.lapA, state.lapB, traceA, traceB, pendingLaps],
   );
 
   const selectedCornerId = useMemo(() => {
@@ -380,8 +442,12 @@ export function ProctorProvider({
       readiness,
       selectedCornerId,
       setTier,
+      ensureTraces,
+      pendingLaps,
     }),
     [
+      ensureTraces,
+      pendingLaps,
       state,
       bundle,
       error,

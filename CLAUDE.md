@@ -48,6 +48,13 @@ see Honesty rules).
   registered explicitly in analysis/__init__.py, honesty fields in every payload.
 - No route may carry telemetry bytes through Vercel: serverless request bodies cap at 4.5 MB and
   a session .ibt is 54-136 MB. The browser POSTs straight to Render. (Broken once by construction.)
+  The same limit binds RESPONSES: /data ships only the opening lap pair's traces (other laps load
+  lazily via /traces, max 4), and /samples (full-rate laps, max 4) refuses anything over 3 MB with
+  a 413. Every telemetry route has a hard cap — keep it that way.
+- Full-rate laps live in `lap_samples` (migration 003), encoded by proctor_parser.samples and
+  decoded by web/lib/proctor/samples.ts. The Python side defines the format; the web test decodes
+  a fixture the Python encoder wrote (lib/proctor/__fixtures__/samples-lap.json). Change the codec
+  only by bumping CODEC and regenerating that fixture.
 - Spacing tokens are --space-1,2,3,4,6,8 only. `var(--space-5)` is INVALID CSS and silently drops
   the whole declaration (Answer.tsx padding never applied until 2026-11-22).
 - No screen may carry a measurement as a literal in its own source. Broken three times now —
@@ -64,8 +71,8 @@ see Honesty rules).
   **left-foot braking detected** (median **−50 ms** signed release→brake, 77% brake-before-lift);
   **69** pedal noise spikes; pace improved 0.213s first-5→last-5 clean laps while ~31 L burned.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (**188 collected: 177 pass, 11 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**224 tests**) AND
+  (**192 collected: 181 pass, 11 golden skip** without the .ibt fixtures on the machine) AND
+  `cd web && npx vitest run` (**232 tests**) AND
   `cd render-service && python -m pytest tests -q` (**29 pass**; needs the parser installed,
   `pip install -e ../parser`, as CI does). If these numbers move, you broke something.
   The count above was stale at "51" for five sessions, and at "140" (really 142) on 2026-11-22 —

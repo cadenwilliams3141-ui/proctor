@@ -163,7 +163,7 @@ export default function MobileLap() {
         style={{ display: "flex", gap: "var(--space-2)", padding: "var(--space-4) var(--space-6) 0" }}
       >
         {clean
-          .filter((l) => l.lap_number !== state.lapA && bundle.traces[l.lap_number])
+          .filter((l) => l.lap_number !== state.lapA && (l.has_trace ?? bundle.traces[l.lap_number] != null))
           .map((l) => {
             const on = l.lap_number === state.lapB;
             return (

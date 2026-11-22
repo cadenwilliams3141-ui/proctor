@@ -33,6 +33,10 @@ export interface ReadinessInput {
   lapB: number | null;
   traceA: Trace | null;
   traceB: Trace | null;
+  /** Laps whose traces are being fetched right now. Traces load lazily (a
+   *  session's every lap no longer rides in the bundle), so a missing trace
+   *  that is on its way is "loading" — not "not saved", which would be false. */
+  pendingLaps?: number[];
 }
 
 function noReference(lapCount: number, need: string): Readiness {
@@ -64,6 +68,10 @@ export function deriveReadiness(i: ReadinessInput): Readiness {
   }
 
   if (!i.traceA || !i.traceB) {
+    const pending = new Set(i.pendingLaps ?? []);
+    if ((!i.traceA && pending.has(i.lapA)) || (!i.traceB && pending.has(i.lapB))) {
+      return { state: "loading" };
+    }
     const missing = [
       !i.traceA ? `lap ${i.lapA}` : null,
       !i.traceB ? `lap ${i.lapB}` : null,
@@ -92,12 +100,13 @@ export function deriveReadiness(i: ReadinessInput): Readiness {
  * Kept beside deriveReadiness, sharing its sentences, so the phone and the
  * desktop cannot drift apart on what they say about the same session. */
 export function derivePlaybackReadiness(
-  i: Pick<ReadinessInput, "error" | "lapCount" | "referenceLap" | "lapA" | "traceA">,
+  i: Pick<ReadinessInput, "error" | "lapCount" | "referenceLap" | "lapA" | "traceA" | "pendingLaps">,
 ): Readiness {
   if (i.error) return { state: "error", reason: i.error };
   if (i.lapCount == null) return { state: "loading" };
   if (i.referenceLap == null) return noReference(i.lapCount, "Playback");
   if (i.lapA == null) return { state: "loading" };
+  if (!i.traceA && (i.pendingLaps ?? []).includes(i.lapA)) return { state: "loading" };
   if (!i.traceA) {
     return {
       state: "no-traces",

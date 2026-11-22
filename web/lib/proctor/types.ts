@@ -28,6 +28,10 @@ export interface SessionMeta {
 }
 
 export interface Lap {
+  /** Whether the lap has a stored distance-grid trace / full-rate samples.
+   *  Absent on bundles from before these flags existed: treat as unknown. */
+  has_trace?: boolean;
+  has_samples?: boolean;
   lap_number: number;
   lap_time_s: number | null;
   is_valid: boolean;
@@ -913,8 +917,9 @@ export interface WatchData {
 export interface SessionBundle {
   session: SessionMeta;
   laps: Lap[];
+  /** The traces the bundle shipped with: the opening lap pair. The rest load
+   *  lazily through /traces (see store.tsx ensureTraces) and are merged in. */
   traces: Record<number, Trace>;
-  metrics: MetricPayloads;
   corners: Corner[];
   traction: TractionData;
   tire: TireBands;

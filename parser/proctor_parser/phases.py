@@ -28,7 +28,7 @@ from proctor_parser.session import ParsedLap, ParsedSession
 from proctor_parser.timing import LapClock
 from proctor_parser.track_model import (
     BRAKE_ON, BRAKE_HOLD_TICKS, CornerDef, TrackModel, _runs, brake_onset_index,
-    fwd_dist, interp_cross,
+    fwd_dist, interp_cross, lap_on_stations,
 )
 
 # Run-quality flags (bitmask, stored per run in the payload).
@@ -355,35 +355,56 @@ def measure(run: Run, corner: CornerDef, model: TrackModel, rate: int) -> None:
 # population flags: possible traffic, tows, after an incident
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _flag_held_up(runs: list[Run]) -> None:
-    """A lift or brake where at least 80% of the other passes were flat out,
-    after which this pass goes back to flat out. Proctor cannot see other cars;
-    this is the shape a car in the way leaves, and nothing more is claimed.
+def _flag_held_up(session: ParsedSession, model: TrackModel,
+                  keyed: dict[tuple[int, int], Run]) -> None:
+    """A lift or brake where at least 80% of the other laps were flat out,
+    with flat out on both sides of it. Proctor cannot see other cars; this is
+    the shape a car in the way leaves, and nothing more is claimed.
 
     Flat out on both sides is what separates it from the driver's own habits:
     an early brake point is followed by more braking, never by full throttle,
-    and a late throttle pickup is never preceded by full throttle."""
-    if len(runs) < 4:
+    and a late throttle pickup is never preceded by full throttle.
+
+    Judged on the WHOLE LAP in track metres, then mapped onto every segment the
+    lift touches. Judged per segment it was missed whenever the lift straddled
+    a segment boundary — and being held up just before a braking zone, which
+    is where segments begin, is the common case.
+
+    What it cannot catch: held up INTO a braking zone, with no return to full
+    throttle before the brakes. That looks exactly like braking early, and the
+    file holds nothing that tells them apart."""
+    L = model.length_m
+    st = model.stations
+    laps = [lap for lap in session.laps
+            if lap.is_valid and model.clocks.get(lap.lap_number) is not None
+            and model.clocks[lap.lap_number].complete]
+    if len(laps) < 4:
         return
-    n_st = min(len(r.stations["u"]) for r in runs)
     flat = np.vstack([
-        (r.stations["throttle"][:n_st] >= THROTTLE_FULL) & (r.stations["brake_raw"][:n_st] < BRAKE_ON)
-        for r in runs
+        (lap_on_stations(lap, model.clocks[lap.lap_number], st, "throttle") >= THROTTLE_FULL)
+        & (lap_on_stations(lap, model.clocks[lap.lap_number], st, "brake_raw") < BRAKE_ON)
+        for lap in laps
     ])
-    for i, r in enumerate(runs):
-        others = np.delete(flat, i, axis=0)
-        share = others.mean(axis=0)
+    M = len(st)
+    for i, lap in enumerate(laps):
+        share = np.delete(flat, i, axis=0).mean(axis=0)
         not_flat = ~flat[i] & (share >= HELD_FLAT_SHARE)
         for a, b in _runs(not_flat):
             if b - a < HELD_MIN_STATIONS:
                 continue
-            # Flat out before AND after: a lift from full throttle and back.
-            # Picking the throttle up late on the exit is never flat before,
-            # and is the driver's own doing — it must stay in the statistics.
             was_flat = a >= HELD_MIN_STATIONS and bool(flat[i, a - HELD_MIN_STATIONS:a].all())
-            if was_flat and b < n_st and flat[i, b]:
-                r.flags |= HELD_UP
-                break
+            if not (was_flat and b < M and flat[i, b]):
+                continue
+            lo, hi = float(st[a]), float(st[b - 1])
+            for c in model.corners:
+                s0, s1 = c.seg_start_m, c.seg_end_m
+                # This lap's own pass, and — for a segment that wraps the line —
+                # the previous lap's pass, whose tail runs into this lap's start.
+                for owner, off in ((lap.lap_number, 0.0), (lap.lap_number - 1, L)):
+                    if lo + off < s1 and hi + off >= s0:
+                        r = keyed.get((owner, c.id))
+                        if r is not None:
+                            r.flags |= HELD_UP
 
 
 def _flag_tows(all_runs: list[Run]) -> None:
@@ -511,8 +532,7 @@ def build_runs(session: ParsedSession, model: TrackModel) -> dict[int, list[Run]
             measure(r, c, model, rate)
             out[c.id].append(r)
             keyed[(lap.lap_number, c.id)] = r
-    for runs in out.values():
-        _flag_held_up(runs)
+    _flag_held_up(session, model, keyed)
     _flag_tows([r for runs in out.values() for r in runs])
     order = [(lap.lap_number, c.id) for lap in laps for c in model.corners]
     _flag_after_incident(keyed, len(model.corners), order)

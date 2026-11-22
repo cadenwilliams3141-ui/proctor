@@ -295,3 +295,16 @@ def test_every_module_runs_on_the_driven_session_and_stays_compact(effect):
     sizes = {k: len(json.dumps(m[k])) for k in ("segments", "corner_laps", "watch", "coach")}
     assert sizes["coach"] < 20_000 and sizes["watch"] < 40_000
     assert sizes["corner_laps"] < 80_000 and sizes["segments"] < 20_000
+
+
+def test_traffic_that_straddles_a_segment_boundary_is_still_caught():
+    """Held up just before T3's braking zone: the lift starts in T2's segment
+    and ends in T3's. Judged per segment, neither half was flat on both sides,
+    and the pass counted as normal driving. Both passes must be left out."""
+    knobs = {lap: {} for lap in range(1, 13)}
+    knobs[6][3] = Knob(held_up=True)
+    ds = drive_session(n_laps=12, knobs=knobs, seed=5, noise=0.4)
+    _, runs = engine(_parse(ds))
+    flagged = {(r.corner, r.lap) for rs in runs.values() for r in rs if r.flags & HELD_UP}
+    assert {(2, 6), (3, 6)} <= flagged
+    assert {lap for _, lap in flagged} == {6}

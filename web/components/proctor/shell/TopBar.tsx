@@ -9,7 +9,8 @@ import { TIER_BLURB, TIERS } from "@/lib/tier";
 
 const TITLE: Record<Screen, { title: string; sub: string }> = {
   sessions: { title: "Sessions", sub: "everything the rig watcher has sent" },
-  report: { title: "Session report", sub: "what this session did, module by module" },
+  report: { title: "Session report", sub: "where the time is, and what your own fastest passes did differently" },
+  corner: { title: "Corners", sub: "every pass through one corner, and the evidence behind its action" },
   analyze: { title: "Analyze", sub: "any lap of this session against any other" },
   /* NOT "in the time it actually took": playback defaults to 4x, so that
      sentence was false the moment the screen opened. The rate is a control on

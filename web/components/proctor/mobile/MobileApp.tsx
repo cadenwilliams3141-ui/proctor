@@ -24,7 +24,7 @@ import { useProctor } from "@/lib/proctor/store";
 
 import CornerSheet from "@/components/proctor/mobile/CornerSheet";
 import MobileLap from "@/components/proctor/mobile/MobileLap";
-import MobileLive from "@/components/proctor/mobile/MobileLive";
+import MobileReport from "@/components/proctor/mobile/MobileReport";
 import MobileRig from "@/components/proctor/mobile/MobileRig";
 import MobileSessions from "@/components/proctor/mobile/MobileSessions";
 import TabBar from "@/components/proctor/mobile/TabBar";
@@ -79,7 +79,7 @@ export default function MobileApp() {
         >
           {state.screen === "analyze" && <MobileLap />}
           {state.screen === "sessions" && <MobileSessions />}
-          {state.screen === "live" && <MobileLive />}
+          {state.screen === "report" && <MobileReport />}
           {state.screen === "rig" && <MobileRig />}
           {/* Space for the tab bar, which floats over the scroll. */}
           <div style={{ height: 120 }} />

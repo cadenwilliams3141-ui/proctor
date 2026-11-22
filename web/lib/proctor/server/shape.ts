@@ -27,8 +27,13 @@ import type {
   HardwareData,
   InputResponseData,
   LockBand,
+  CoachData,
+  CornerLapsData,
   MetricPayloads,
   ModuleAbsence,
+  SegmentsData,
+  WatchData,
+  WatchEvent,
   StintData,
   TireBands,
   TrackBoundary,
@@ -227,6 +232,11 @@ export function cornersFrom(
   metrics: MetricPayloads,
   map: { x_m: number[]; y_m: number[] },
 ): Corner[] {
+  // The coaching engine's corners win when the session has them, so "T4" means
+  // the same corner on every screen. See cornersFromSegments.
+  const fromSegments = cornersFromSegments(segmentsFrom(metrics), cornerLapsFrom(metrics));
+  if (fromSegments.length) return fromSegments;
+
   const cs = block(metrics, "corner_sections");
   if (!ran(cs) || !Array.isArray(cs.corners)) return [];
 
@@ -835,7 +845,7 @@ export function absencesFrom(
       key: "racecraft",
       title: "Racecraft and positioning",
       reason:
-        "Other-car channels (CarIdx) are not written to disk .ibt files, so nothing can be said about traffic, position or intent.",
+        "Other-car channels (CarIdx) are not written to disk .ibt files, so Proctor cannot see other cars, positions or intent. The most it can do is notice the shape a car in the way leaves — a lift from flat out and back where you are normally flat — and leave that pass out of every comparison.",
       permanent: true,
       kind: "permanent",
       short: "Disk .ibt files carry no other-car channels.",
@@ -910,6 +920,10 @@ export function absencesFrom(
     stint: "How the run changed",
     track_width: "The road you used",
     contact_patch: "Between the car and the ground",
+    segments: "Corners and segments",
+    corner_laps: "Every pass through every corner",
+    watch: "What was watched, lap by lap",
+    coach: "Where the time is, and what to do about it",
   };
 
   for (const [key, title] of Object.entries(TITLES)) {
@@ -1109,5 +1123,125 @@ export function trackEdgesFrom(metrics: MetricPayloads): TrackEdges | null {
     coverage_pct: Number(te.coverage_pct ?? 0),
     surface: (te.surface as TrackEdges["surface"]) ?? undefined,
     caveat: String(te.caveat ?? ""),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The coaching engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The corner proper inside each segment, for the views that compare two laps
+ *  corner by corner (the ledger, the ribbon's bands).
+ *
+ *  A segment covers the brake zone, the corner, its exit and the whole
+ *  following straight, so it tiles the lap. The ledger wants the corner and a
+ *  "straights" remainder, so its window runs from just before the typical
+ *  brake point to just after the typical return to full throttle.
+ *
+ *  Clipped at the start/finish line rather than wrapped: the older views draw
+ *  their bands assuming 0..1. What a clipped window leaves out falls into the
+ *  ledger's straights remainder — still counted, never lost. */
+export function cornersFromSegments(
+  seg: SegmentsData | null,
+  laps: CornerLapsData | null,
+): Corner[] {
+  if (!seg || seg.corners.length === 0 || !(seg.length_m > 0)) return [];
+  const L = seg.length_m;
+  const lead = 15;
+  return seg.corners.map((c) => {
+    const lm = laps?.corners.find((x) => x.id === c.id)?.landmarks;
+    const apexU = (((c.apex_m - c.seg_start_m) % L) + L) % L;
+    const startU = Math.max(0, (lm?.brake_on ?? Math.max(0, apexU - 120)) - lead);
+    const endU = Math.min(c.seg_end_m - c.seg_start_m, (lm?.full ?? apexU + 80) + lead);
+    const apexAbs = c.apex_m;
+    const startAbs = apexAbs - (apexU - startU);
+    const endAbs = apexAbs + (endU - apexU);
+    return {
+      id: c.id,
+      start_pct: Math.max(0, startAbs / L),
+      apex_pct: c.apex_pct,
+      end_pct: Math.min(1, endAbs / L),
+      radius_m: c.radius_m,
+      dir: c.dir,
+    };
+  });
+}
+
+export function segmentsFrom(metrics: MetricPayloads): SegmentsData | null {
+  const p = block(metrics, "segments");
+  if (!ran(p) || !Array.isArray(p.corners) || !(Number(p.length_m) > 0)) return null;
+  const laps = (p.laps ?? {}) as Payload;
+  return {
+    length_m: Number(p.length_m),
+    length_source: String(p.length_source ?? ""),
+    numbering: String(p.numbering ?? ""),
+    corners: p.corners as SegmentsData["corners"],
+    kinks: Array.isArray(p.kinks) ? (p.kinks as SegmentsData["kinks"]) : [],
+    laps: {
+      lap: Array.isArray(laps.lap) ? (laps.lap as number[]) : [],
+      segment_s: Array.isArray(laps.segment_s) ? (laps.segment_s as (number | null)[][]) : [],
+    },
+    timing: (p.timing as SegmentsData["timing"]) ?? { available: false, reason: "not reported" },
+  };
+}
+
+export function cornerLapsFrom(metrics: MetricPayloads): CornerLapsData | null {
+  const p = block(metrics, "corner_laps");
+  if (!ran(p) || !Array.isArray(p.corners)) return null;
+  return {
+    units: (p.units as CornerLapsData["units"]) ?? {},
+    flag_bits: (p.flag_bits as Record<string, number>) ?? {},
+    // A corner the module could not measure carries insufficient_data and no
+    // runs; it is dropped here and voiced by the coach's per-corner status.
+    corners: (p.corners as Payload[]).filter((c) => c.runs != null) as unknown as CornerLapsData["corners"],
+  };
+}
+
+export function coachFrom(metrics: MetricPayloads): CoachData | null {
+  const p = block(metrics, "coach");
+  if (!ran(p) || !Array.isArray(p.actions) || !Array.isArray(p.corners)) return null;
+  const num = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+  return {
+    n_clean_laps: Number(p.n_clean_laps ?? 0),
+    typical_lap_s: num(p.typical_lap_s),
+    best_lap_s: num(p.best_lap_s),
+    achievable_lap_s: num(p.achievable_lap_s),
+    explained_gain_s: Number(p.explained_gain_s ?? 0),
+    theoretical_best_s: num(p.theoretical_best_s),
+    // An action without evidence is not an action; it never reaches a screen.
+    actions: (p.actions as CoachData["actions"]).filter(
+      (a) => a && a.evidence && Number(a.evidence.n) > 0 && Array.isArray(a.evidence.target_laps),
+    ),
+    actions_total: Number(p.actions_total ?? 0),
+    corners: p.corners as CoachData["corners"],
+    tests_run: Number(p.tests_run ?? 0),
+    no_action_reason: p.no_action_reason == null ? null : String(p.no_action_reason),
+    method: (p.method as Record<string, unknown>) ?? {},
+    caveat: String(p.caveat ?? ""),
+  };
+}
+
+export function watchFrom(metrics: MetricPayloads): WatchData | null {
+  const p = block(metrics, "watch");
+  if (!ran(p) || !Array.isArray(p.events)) return null;
+  const fields = Array.isArray(p.fields)
+    ? (p.fields as string[])
+    : ["lap", "at_m", "corner", "phase", "kind", "sev", "dur_ms", "a", "b"];
+  const events = (p.events as unknown[][]).map((row) => {
+    const o: Record<string, unknown> = {};
+    fields.forEach((f, i) => (o[f] = row[i]));
+    return o as unknown as WatchEvent;
+  });
+  return {
+    events,
+    capped: Boolean(p.capped),
+    counts: (p.counts as WatchData["counts"]) ?? {},
+    matrix: (p.matrix as WatchData["matrix"]) ?? {},
+    per_lap: (p.per_lap as WatchData["per_lap"]) ?? {},
+    links: Array.isArray(p.links) ? (p.links as WatchData["links"]) : [],
+    none_observed: Array.isArray(p.none_observed) ? (p.none_observed as WatchData["none_observed"]) : [],
+    unavailable: (p.unavailable as WatchData["unavailable"]) ?? {},
+    laps_watched: Array.isArray(p.laps_watched) ? (p.laps_watched as number[]) : [],
+    caveat: String(p.caveat ?? ""),
   };
 }

@@ -71,8 +71,8 @@ const VIEWPORTS = [
   { name: 'desktop',   w: 1920, h: 1080, ua: DESKTOP, app: '/'  },
 ];
 
-const DESKTOP_SCREENS = ['sessions', 'report', 'analyze', 'live', 'rig', 'hardware', 'anatomy', 'upload'];
-const PHONE_SCREENS   = ['sessions', 'analyze', 'live', 'rig'];
+const DESKTOP_SCREENS = ['sessions', 'report', 'corner', 'analyze', 'live', 'rig', 'hardware', 'anatomy', 'upload'];
+const PHONE_SCREENS   = ['report', 'sessions', 'analyze', 'rig'];
 
 const SESSION = process.env.SWEEP_SESSION || '1';
 const TIER = process.env.SWEEP_TIER || 'deep';

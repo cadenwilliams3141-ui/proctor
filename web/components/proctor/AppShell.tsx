@@ -22,6 +22,7 @@ import TopBar from "@/components/proctor/shell/TopBar";
 
 import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
 import AnatomyScreen from "@/components/proctor/screens/AnatomyScreen";
+import CornerScreen from "@/components/proctor/screens/CornerScreen";
 import LiveScreen from "@/components/proctor/screens/LiveScreen";
 import ReportScreen from "@/components/proctor/screens/ReportScreen";
 import ForcesScreen from "@/components/proctor/screens/ForcesScreen";
@@ -145,6 +146,7 @@ export default function AppShell() {
             {state.screen === "live" && <LiveScreen />}
             {state.screen === "sessions" && <SessionsScreen />}
             {state.screen === "report" && <ReportScreen />}
+            {state.screen === "corner" && <CornerScreen />}
             {state.screen === "rig" && <ForcesScreen />}
             {state.screen === "hardware" && <HardwareScreen />}
             {state.screen === "anatomy" && <AnatomyScreen />}

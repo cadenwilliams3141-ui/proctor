@@ -14,6 +14,7 @@ import { Info } from "lucide-react";
 import { CH, INK, deltaColor, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtCornerGeometry, fmtDelta, kmh, toG } from "@/lib/proctor/format";
 import { pathFor, pathLength, project, windowExtent, wrapIndex } from "@/lib/proctor/geometry";
+import { describeAction } from "@/lib/proctor/coach";
 import { observation } from "@/lib/proctor/ledger";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
@@ -163,6 +164,8 @@ export default function CornerSheet() {
             {fmtDelta(sel.delta)} s
           </span>
         </div>
+
+        <CoachBlock id={c.id} />
 
         <div style={{ fontSize: 12.5, lineHeight: 1.55, color: dim(62), marginTop: "var(--space-2)" }}>
           {observation(sel)}
@@ -317,3 +320,40 @@ export default function CornerSheet() {
     </div>
   );
 }
+
+/* What the coach found at this corner, ahead of the lap-pair comparison
+   below it: the action with its evidence, or why there is none. Same words as
+   desktop (lib/proctor/coach.ts), nothing dropped for space. */
+function CoachBlock({ id }: { id: number }) {
+  const { bundle } = useProctor();
+  const coach = bundle?.coach;
+  const seg = bundle?.segments;
+  if (!coach || !seg) return null;
+  const status = coach.corners.find((x) => x.id === id);
+  const actions = coach.actions.filter((a) => a.corner === id);
+  const corner = seg.corners.find((x) => x.id === id) ?? null;
+  return (
+    <div style={{ marginTop: "var(--space-3)", display: "grid", gap: "var(--space-3)" }}>
+      {actions.map((a) => {
+        const t = describeAction(a, corner, seg.length_m);
+        return (
+          <div key={a.metric} style={{ borderLeft: `2px solid ${CH.gain}`, paddingLeft: "var(--space-3)" }}>
+            <div style={{ fontSize: 14, lineHeight: 1.45 }}>{t.todo}</div>
+            <div style={{ fontSize: 12, color: dim(60), marginTop: 4, lineHeight: 1.5 }}>
+              {t.observed} {t.gain} <span style={{ color: dim(45) }}>({t.confidence} evidence)</span>
+            </div>
+            <div style={{ fontSize: 10.5, color: dim(38), marginTop: 4, lineHeight: 1.5 }}>{t.because}</div>
+          </div>
+        );
+      })}
+      {actions.length === 0 && status && (
+        <div style={{ fontSize: 12, color: dim(55), lineHeight: 1.5 }}>
+          {status.status === "consistent"
+            ? "Your passes here were consistent — little time on the table."
+            : status.reason ?? "No action at this corner."}
+        </div>
+      )}
+    </div>
+  );
+}
+

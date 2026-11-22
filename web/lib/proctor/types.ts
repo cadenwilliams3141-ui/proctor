@@ -731,6 +731,185 @@ export interface ContactPatchData {
   perTireLoad: { available: false; reason: string; note?: string };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The coaching engine (parser modules segments / corner_laps / watch / coach)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One of this session's corners, as the driver's own laps carved it. Corner
+ *  numbers are Proctor's own, counted from the line — not official turn names. */
+export interface SegmentCorner {
+  id: number;
+  name: string;
+  kind: "brake" | "lift" | "flat";
+  complex: boolean;
+  dir: "left" | "right" | null;
+  radius_m: number | null;
+  turn_deg: number;
+  vmin_ms: number;
+  apex_m: number;
+  /** The segment runs from here (brake zone) through the corner, its exit and
+   *  the following straight. seg_end_m may exceed the lap length (wraps). */
+  seg_start_m: number;
+  seg_end_m: number;
+  start_pct: number;
+  apex_pct: number;
+  end_pct: number;
+  wraps: boolean;
+  sub_apexes: { apex_m: number; apex_pct: number; dir: "left" | "right" | null; deg: number }[];
+}
+
+export interface SegmentsData {
+  length_m: number;
+  length_source: string;
+  numbering: string;
+  corners: SegmentCorner[];
+  kinks: { at_m: number; dir: "left" | "right"; deg: number }[];
+  laps: { lap: number[]; segment_s: (number | null)[][] };
+  timing: {
+    available: boolean;
+    reason?: string;
+    laps_checked?: number;
+    max_abs_exact_vs_tick_ms?: number;
+    sim_laps_checked?: number;
+    max_abs_exact_vs_sim_ms?: number;
+    sim_agrees?: boolean;
+    sim_check?: string;
+  };
+}
+
+/** The per-pass measurements the coach compares. Positions are metres from
+ *  the start of the corner's segment. */
+export type PassMetric =
+  | "v_entry" | "brake_on" | "brake_peak" | "brake_attack" | "release" | "turn_in"
+  | "trail" | "v_min" | "v_min_at" | "pickup" | "full" | "coast" | "corrections"
+  | "relifts" | "abs_ms" | "v_exit" | "v_eos";
+
+export interface CornerRuns {
+  id: number;
+  seg_len_m: number;
+  landmarks: { brake_on: number | null; turn_in: number | null; v_min_at: number | null; full: number | null };
+  phase_names: string[];
+  phase_edges_m: number[];
+  runs: {
+    lap: number[];
+    flags: number[];
+    usable: boolean[];
+    time_s: number[];
+    phase_s: number[][];
+    m: Partial<Record<PassMetric, (number | null)[]>>;
+  };
+}
+
+export interface CornerLapsData {
+  units: Partial<Record<PassMetric, string>>;
+  flag_bits: Record<string, number>;
+  corners: CornerRuns[];
+}
+
+/** The inputs the coach may point at. */
+export type CoachMetric =
+  | "brake_on" | "brake_peak" | "release" | "trail" | "turn_in" | "coast"
+  | "abs_ms" | "v_min" | "corrections" | "pickup" | "full" | "relifts";
+
+export interface CoachEvidence {
+  n: number;
+  k: number;
+  target_laps: number[];
+  rho: number;
+  p: number;
+  q: number;
+  slope_s_per_unit: number;
+  stability: number;
+  phase_share_entry: number | null;
+  entry_speed_adjusted: boolean;
+  detrended_by_lap_order: boolean;
+}
+
+/** One action: what the driver's own fastest passes did differently at one
+ *  corner, how often the other passes fell short of it, and what matching it
+ *  is worth. Never rendered without its evidence (lib/proctor/coach.ts). */
+export interface CoachAction {
+  corner: number;
+  metric: CoachMetric;
+  unit: string;
+  phase: "entry" | "mid" | "exit";
+  typical: number;
+  target: number;
+  range: [number, number];
+  n_short: number;
+  short_typical: number | null;
+  short_laps: number[];
+  direction: string;
+  gain_s: number;
+  confidence: "strong" | "moderate";
+  comes_with: { metric: CoachMetric; unit: string; typical: number; target: number; direction: string }[];
+  evidence: CoachEvidence;
+}
+
+export interface CoachCorner {
+  id: number;
+  n: number;
+  n_runs: number;
+  excluded: Record<string, number>;
+  status: "action" | "consistent" | "unexplained" | "insufficient";
+  reason?: string;
+  best_s?: number;
+  median_s?: number;
+  iqr_s?: number;
+  k?: number;
+  target_s?: number;
+  opportunity_s?: number;
+  target_laps?: number[];
+  phase_gain_s?: Record<string, number | null>;
+  differences?: { metric: CoachMetric; unit: string; typical: number; fastest: number }[];
+}
+
+export interface CoachData {
+  n_clean_laps: number;
+  typical_lap_s: number | null;
+  best_lap_s: number | null;
+  achievable_lap_s: number | null;
+  explained_gain_s: number;
+  theoretical_best_s: number | null;
+  actions: CoachAction[];
+  actions_total: number;
+  corners: CoachCorner[];
+  tests_run: number;
+  no_action_reason: string | null;
+  method: Record<string, unknown>;
+  caveat: string;
+}
+
+export type WatchKind =
+  | "lockup" | "wheelspin" | "oversteer" | "understeer" | "coasting" | "brake_pumping"
+  | "throttle_hesitation" | "slow_shift" | "over_rev" | "off_track" | "kerb_strike"
+  | "heavy_abs" | "tow" | "possible_traffic";
+
+export interface WatchEvent {
+  lap: number;
+  at_m: number;
+  corner: number;
+  phase: string;
+  kind: WatchKind;
+  sev: number;
+  dur_ms: number;
+  a: number | string | null;
+  b: number | string | null;
+}
+
+export interface WatchData {
+  events: WatchEvent[];
+  capped: boolean;
+  counts: Partial<Record<WatchKind, number>>;
+  matrix: Record<string, Partial<Record<WatchKind, number>>>;
+  per_lap: Record<string, Partial<Record<WatchKind, number>>>;
+  links: { corner: number; kind: WatchKind; n_with: number; n_without: number; median_delta_s: number }[];
+  none_observed: WatchKind[];
+  unavailable: Partial<Record<WatchKind, string>>;
+  laps_watched: number[];
+  caveat: string;
+}
+
 export interface SessionBundle {
   session: SessionMeta;
   laps: Lap[];
@@ -759,4 +938,10 @@ export interface SessionBundle {
   /** Circuit centreline in metres, gridSize long. */
   map: { x_m: number[]; y_m: number[] };
   absences: ModuleAbsence[];
+  /** The coaching engine. Null when the session was ingested before it
+   *  existed, or it could not run — the absence says which. */
+  segments: SegmentsData | null;
+  cornerLaps: CornerLapsData | null;
+  coach: CoachData | null;
+  watch: WatchData | null;
 }

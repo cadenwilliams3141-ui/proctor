@@ -40,7 +40,7 @@ export const viewport = {
    design (see mobile/TabBar.tsx), so a link to one of them cannot be honoured
    here and falls back to the ranked lap read rather than landing on a tab that
    does not exist. */
-const PHONE_SCREENS: Screen[] = ["sessions", "analyze", "live", "rig"];
+const PHONE_SCREENS: Screen[] = ["report", "sessions", "analyze", "rig"];
 
 export default async function MobilePage({
   searchParams,
@@ -56,7 +56,7 @@ export default async function MobilePage({
      ignored, which is worse than not carrying it — the address bar would say
      one thing and the app show another. */
   const asked = one(q.screen) as Screen | undefined;
-  const screen = asked && PHONE_SCREENS.includes(asked) ? asked : "analyze";
+  const screen = asked && PHONE_SCREENS.includes(asked) ? asked : "report";
 
   return (
     <ProctorProvider

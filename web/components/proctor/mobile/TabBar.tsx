@@ -1,18 +1,19 @@
 "use client";
 
-import { CirclePlay, Gauge, LayoutGrid, ListOrdered } from "lucide-react";
+import { Gauge, LayoutGrid, ListOrdered, NotebookText } from "lucide-react";
 
 import { CH, dim } from "@/lib/proctor/channels";
 import { useProctor, type Screen } from "@/lib/proctor/store";
 
-/* Four tabs, not six. Session report and Upload are desktop concerns — you are
-   not uploading a file from the sofa, and the report is a reading you do at the
-   rig. The phone carries the four things you actually want after a session. */
+/* Four tabs. The report is the home tab now: on the sofa after a session, what
+   you want first is what to do differently next time. Live left the bar — its
+   replay swept at constant distance, not in the time the lap took — and Upload
+   stays a desktop concern. */
 const TABS: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
-  { id: "sessions", label: "Sessions", Icon: LayoutGrid },
+  { id: "report", label: "Report", Icon: NotebookText },
   { id: "analyze", label: "Lap", Icon: ListOrdered },
-  { id: "live", label: "Live", Icon: CirclePlay },
   { id: "rig", label: "Physics", Icon: Gauge },
+  { id: "sessions", label: "Sessions", Icon: LayoutGrid },
 ];
 
 export default function TabBar() {

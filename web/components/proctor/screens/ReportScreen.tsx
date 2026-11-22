@@ -24,6 +24,7 @@
 import { useMemo, useState } from "react";
 import { Ban, Fuel, Gauge, ShieldCheck, Thermometer, TrendingDown, Waves } from "lucide-react";
 
+import CoachReport from "@/components/proctor/report/CoachReport";
 import Absences from "@/components/proctor/ui/Absences";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import { Evidence } from "@/components/proctor/ui/Answer";
@@ -60,6 +61,7 @@ function voicedHere(deep: boolean): ReadonlySet<string> {
     // counted — see the note below.
     "stint",
     "grip", // → the "Grip you demonstrated" card (always)
+    "coach", // → CoachReport states it in its own words, at the top (always)
   ];
   // The tire card is deep-only.
   if (deep) keys.push("tire_temp_curve", "tire_temps");
@@ -139,8 +141,17 @@ export default function ReportScreen() {
         </div>
       </header>
 
-      <div style={{ marginTop: "var(--space-6)" }}>
-        <Lede item={explainSession(bundle.laps, stats.clean)} />
+      {/* ── Where the time is ───────────────────────────────────────────────
+          The answer first: the lap within reach, the actions your own fastest
+          passes demonstrated, what was watched. Everything after it is the
+          session's story and the evidence behind it. */}
+      <CoachReport />
+
+      <div style={{ marginTop: "var(--space-8)" }}>
+        <Eyebrow>the session</Eyebrow>
+        <div style={{ marginTop: "var(--space-2)" }}>
+          <Lede item={explainSession(bundle.laps, stats.clean)} />
+        </div>
       </div>
 
       {/* ── The evidence ─────────────────────────────────────────────────────

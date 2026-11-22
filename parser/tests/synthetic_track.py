@@ -307,10 +307,11 @@ class DrivenSession:
 
 DEFAULT_YAML_TMPL = """---
 WeekendInfo:
- TrackName: synthetic_circuit
+ TrackDisplayName: Synthetic Circuit
  TrackLength: {km:.4f} km
  EventType: Practice
 DriverInfo:
+ DriverCarIdx: 0
  DriverCarRedLine: 8500.000
  Drivers:
  - CarIdx: 0

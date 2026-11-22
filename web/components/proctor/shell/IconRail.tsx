@@ -12,6 +12,7 @@ import {
   Layers,
   LayoutGrid,
   NotebookText,
+  Route,
   Upload,
 } from "lucide-react";
 
@@ -38,6 +39,7 @@ import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
 const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "sessions", label: "Sessions", Icon: LayoutGrid },
   { id: "report", label: "Session report", Icon: NotebookText },
+  { id: "corner", label: "Corners", Icon: Route },
   { id: "analyze", label: "Analyze", Icon: ChartLine },
   { id: "live", label: "Live trace", Icon: CirclePlay },
   { id: "rig", label: "Physics", Icon: Gauge },

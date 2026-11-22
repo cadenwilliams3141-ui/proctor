@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import {
   absencesFrom,
+  coachFrom,
+  cornerLapsFrom,
+  segmentsFrom,
+  watchFrom,
   cornersFrom,
   eventPatternsFrom,
   eventsFrom,
@@ -119,6 +123,10 @@ export async function GET(
       gridSize,
       map,
       absences: absencesFrom(metrics, session),
+      segments: segmentsFrom(metrics),
+      cornerLaps: cornerLapsFrom(metrics),
+      coach: coachFrom(metrics),
+      watch: watchFrom(metrics),
     };
 
     return NextResponse.json(bundle);

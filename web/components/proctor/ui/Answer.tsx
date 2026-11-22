@@ -94,7 +94,7 @@ export default function Answer({
         display: "flex",
         gap: "var(--space-6)",
         alignItems: "flex-start",
-        padding: "var(--space-5) var(--space-5) var(--space-4)",
+        padding: "var(--space-6) var(--space-6) var(--space-4)",
         background: "var(--color-surface)",
         borderRadius: "var(--radius-md)",
         boxShadow: "var(--shadow-sm)",

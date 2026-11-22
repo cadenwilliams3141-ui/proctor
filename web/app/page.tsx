@@ -4,7 +4,8 @@ import { openingStep, SETUP_PARAM } from "@/lib/setup";
 import { readSetupDone } from "@/lib/setup-server";
 import { readTier } from "@/lib/tier-server";
 
-/* The desktop app. One shell, eight screens, four analysis views.
+/* The desktop app. One shell, nine screens, four analysis views. It opens on
+ * the session report — where the time is, and what to do about it.
  *
  * The tier is read on the server from its cookie so the first paint is already
  * at the right detail level — no flash of the default tier before the client
@@ -24,6 +25,7 @@ export const dynamic = "force-dynamic";
 const SCREENS: Screen[] = [
   "sessions",
   "report",
+  "corner",
   "analyze",
   "live",
   "rig",
@@ -44,7 +46,7 @@ export default async function Page({
 
   const screen = SCREENS.includes(one(q.screen) as Screen)
     ? (one(q.screen) as Screen)
-    : "analyze";
+    : "report";
   const view = VIEWS.includes(one(q.view) as AnalysisView)
     ? (one(q.view) as AnalysisView)
     : "loss";

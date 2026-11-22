@@ -39,6 +39,7 @@ import { DEFAULT_TIER, parseTier, TIER_COOKIE, type Tier } from "@/lib/tier";
 export type Screen =
   | "sessions"
   | "report"
+  | "corner"
   | "analyze"
   | "live"
   | "rig"
@@ -104,11 +105,12 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       // A different session shares nothing with the one before it: lap 4 of
       // yesterday's race is not lap 4 of this one, and carrying the selection
       // across would put a stale lap number against a new set of traces.
-      if (a.id === s.sessionId) return { ...s, screen: "analyze", setup: null };
+      // A session opens on its report: the answer first.
+      if (a.id === s.sessionId) return { ...s, screen: "report", setup: null };
       return {
         ...s,
         sessionId: a.id,
-        screen: "analyze",
+        screen: "report",
         setup: null,
         lapA: null,
         lapB: null,
@@ -168,7 +170,7 @@ function reducer(s: ProctorState, a: Action): ProctorState {
 
 const INITIAL: ProctorState = {
   sessionId: "latest",
-  screen: "analyze",
+  screen: "report",
   view: "loss",
   lapA: null,
   lapB: null,
@@ -206,7 +208,7 @@ const ProctorCtx = createContext<Ctx | null>(null);
 export function ProctorProvider({
   sessionId = "latest",
   initialTier = DEFAULT_TIER,
-  initialScreen = "analyze",
+  initialScreen = "report",
   initialView = "loss",
   skipSplash = false,
   initialSetup = null,

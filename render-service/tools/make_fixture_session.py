@@ -161,6 +161,34 @@ def main():
     from app.db import connect
 
     conn = connect()
+
+    # A DRIVEN session first (parser/tests/synthetic_track.py): laps solved on a
+    # closed circuit, every channel from the same motion, with planted truths —
+    # late braking into T4 on some laps, a late throttle out of T2 on others, a
+    # shortcut, a tow, traffic, a lockup, a slide. This is the one the coaching
+    # screens need: the circuit() sessions below have identical lap times and
+    # no corners the engine can measure.
+    from tests.synthetic_track import Knob, drive_session
+    rng = np.random.default_rng(5)
+    knobs = {lap: {4: Knob(decel=float(rng.uniform(-2.5, 3.5))),
+                   2: Knob(pickup_m=float(rng.choice([0, 0, 25, 40])))}
+             for lap in range(1, 17)}
+    knobs[9][4] = Knob(decel=6.0, cut_m=25)
+    knobs[11][1] = Knob(tow=0.15)
+    knobs[6][3] = Knob(held_up=True)
+    knobs[3][1] = Knob(lockup=True)
+    knobs[12][5] = Knob(slide=True)
+    knobs[14][2] = Knob(coast_m=35, pickup_m=30)
+    driven = drive_session(n_laps=16, knobs=knobs, seed=5, noise=0.4, thrust_noise=0.01)
+    filename = "porsche992rgt3_synthetic circuit 2026-11-21 18-30-00.ibt"
+    row = conn.execute(
+        "INSERT INTO ingest_files (user_id, filename, sha256) VALUES (%s,%s,%s) RETURNING id",
+        ("caden", filename, filename),
+    ).fetchone()
+    process_file(row[0], filename, driven.ibt(), "caden")
+    st = conn.execute("SELECT status, error_detail FROM ingest_files WHERE id=%s", (row[0],)).fetchone()
+    print(f"{filename[:52]:52s} -> {st[0]}  {st[1] or ''}")
+
     for filename, kwargs in [
         ("porsche992rgt3_roadatlanta full 2026-08-30 19-04-11.ibt",
          dict(n_laps=12, slow_lap=7, incident_lap=9, clean=True)),

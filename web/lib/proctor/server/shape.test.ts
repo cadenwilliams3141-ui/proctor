@@ -400,7 +400,7 @@ describe("absences are classified by what would fix them", () => {
         "track_map", "traction_circle", "tire_temps", "lockup_wheelspin",
         "shift_analysis", "hardware", "balance", "report_card", "grip",
         "track_edges", "input_response", "stint", "track_width",
-        "contact_patch",
+        "contact_patch", "segments", "corner_laps", "watch", "coach",
       ].map((k) => [k, k === "tire_temps" ? { ...ok, curve: [1, 2] } : ok]),
     );
     const a = absencesFrom(metrics, { wear_masked: false });

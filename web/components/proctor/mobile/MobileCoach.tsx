@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import { GearFix, SuggestionCard, VerdictChip, WorthBar } from "@/components/proctor/panels/CoachBits";
+import FocusBanner from "@/components/proctor/panels/FocusBanner";
 import GearReadings from "@/components/proctor/panels/GearReadings";
 import { ASPECT_ICON } from "@/components/proctor/screens/CoachScreen";
 import { CH, dim } from "@/lib/proctor/channels";
@@ -36,7 +37,10 @@ export default function MobileCoach() {
         {da ? ` · typical ${fmtLap(da.median_lap_s)}` : ""}
       </div>
 
-      <Panel padding="var(--space-4)" style={{ marginTop: "var(--space-4)", borderLeft: `3px solid ${one.kind === "gear" ? CH.warn : CH.a}` }}>
+      <div style={{ marginTop: "var(--space-4)" }}>
+        <FocusBanner compact />
+      </div>
+      <Panel padding="var(--space-4)" style={{ borderLeft: `3px solid ${one.kind === "gear" ? CH.warn : CH.a}` }}>
         <Eyebrow style={{ marginBottom: "var(--space-2)" }}>
           {one.kind === "gear" ? "Before technique: your gear" : "Your one thing for next session"}
         </Eyebrow>

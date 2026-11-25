@@ -9,12 +9,13 @@
  * equipment fix carries GEAR_FIX_LABEL. None of the three is ever rendered
  * without its label. */
 
-import { ArrowRight, CircleCheck, CircleHelp, TriangleAlert } from "lucide-react";
+import { ArrowRight, CircleCheck, CircleHelp, Target, TriangleAlert } from "lucide-react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import TechniqueNotes from "@/components/proctor/ui/TechniqueNote";
 import { CH, dim } from "@/lib/proctor/channels";
 import { ASPECT_LABEL, aspectHeadline, worthLine, type AspectSummary, type Suggestion } from "@/lib/proctor/coach";
+import { PINNABLE } from "@/lib/proctor/focus";
 import { GEAR_FIX_LABEL, type GearCheck, type GearFinding, type Verdict } from "@/lib/proctor/gearCheck";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
@@ -90,6 +91,33 @@ export function CompareButton({ lap, corner }: { lap: number; corner?: number })
   );
 }
 
+/** Make this suggestion the one thing to carry into the next session. */
+export function PinButton({ s }: { s: Suggestion }) {
+  const { focus, pinFocus } = useProctor();
+  if (!PINNABLE.includes(s.key)) return null;
+  const pinned = focus != null && focus.rule_key === s.key && focus.title === s.title;
+  return (
+    <button
+      type="button"
+      className="btn btn-secondary"
+      disabled={pinned}
+      aria-pressed={pinned}
+      onClick={() => pinFocus(s)}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 11.5,
+        padding: "5px 10px",
+        color: pinned ? CH.a : undefined,
+      }}
+    >
+      <Target size={13} strokeWidth={1.7} aria-hidden />
+      {pinned ? "Your focus" : "Make this my focus"}
+    </button>
+  );
+}
+
 export function GearFix({ finding }: { finding: GearFinding }) {
   return (
     <div
@@ -150,9 +178,10 @@ export function SuggestionCard({
       <p style={{ margin: "var(--space-2) 0 0", fontSize: big ? 13.5 : 12.5, lineHeight: 1.6, color: dim(72), maxWidth: 680 }}>
         {s.evidence}
       </p>
-      {s.laps.length > 0 && !s.blocked && (
-        <div style={{ marginTop: "var(--space-3)" }}>
-          <CompareButton lap={s.laps[0]} corner={s.corners[0]} />
+      {!s.blocked && (s.laps.length > 0 || PINNABLE.includes(s.key)) && (
+        <div style={{ marginTop: "var(--space-3)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {s.laps.length > 0 && <CompareButton lap={s.laps[0]} corner={s.corners[0]} />}
+          <PinButton s={s} />
         </div>
       )}
       {s.blocked && (

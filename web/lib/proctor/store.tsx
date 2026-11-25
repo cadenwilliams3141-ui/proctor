@@ -30,7 +30,8 @@ import {
 
 import { data } from "@/lib/proctor/data-source";
 import { buildLedger } from "@/lib/proctor/ledger";
-import { coach, type AspectKey, type CoachReport } from "@/lib/proctor/coach";
+import { coach, type AspectKey, type CoachReport, type Suggestion } from "@/lib/proctor/coach";
+import { focusProgress, type DriverFocus, type FocusProgress } from "@/lib/proctor/focus";
 import { deriveReadiness, type Readiness } from "@/lib/proctor/readiness";
 import type { CornerLedger, SessionBundle, Trace } from "@/lib/proctor/types";
 import { isUsable } from "@/lib/proctor/types";
@@ -209,6 +210,13 @@ interface Ctx {
   selectedCornerId: number | null;
   /** What to work on, per aspect, with the gear checks. Null until a bundle. */
   coachReport: CoachReport | null;
+  /** The focus pinned for this session's car and track, and how this session
+   *  reads against it. `focusError` is a failed load or pin, said not hidden. */
+  focus: DriverFocus | null;
+  focusProgress: FocusProgress | null;
+  focusError: string | null;
+  pinFocus: (s: Suggestion) => void;
+  clearFocus: () => void;
   setTier: (t: Tier) => void;
 }
 
@@ -357,6 +365,53 @@ export function ProctorProvider({
     });
   }, [bundle]);
 
+  /* The focus belongs to a car at a track, not to a session, so it is loaded
+     whenever the session's car or track changes. A failure is kept and shown:
+     a focus that silently failed to load would read as "none pinned". */
+  const [focus, setFocus] = useState<DriverFocus | null>(null);
+  const [focusError, setFocusError] = useState<string | null>(null);
+  const car = bundle?.session.car_name ?? null;
+  const track = bundle?.session.track_name ?? null;
+  useEffect(() => {
+    let live = true;
+    setFocus(null);
+    setFocusError(null);
+    if (!car || !track) return;
+    data
+      .loadFocus(car, track)
+      .then((f) => live && setFocus(f))
+      .catch((e) => live && setFocusError(String(e?.message ?? e)));
+    return () => {
+      live = false;
+    };
+  }, [car, track]);
+
+  const progress = useMemo<FocusProgress | null>(() => {
+    if (!focus || !bundle) return null;
+    return focusProgress(focus, bundle.session.id, bundle.drivingAspects, bundle.trailBraking);
+  }, [focus, bundle]);
+
+  const pinFocus = useCallback(
+    (s: Suggestion) => {
+      if (!bundle) return;
+      setFocusError(null);
+      data
+        .pinFocus(String(bundle.session.id), s.key, s.corners)
+        .then(setFocus)
+        .catch((e) => setFocusError(String(e?.message ?? e)));
+    },
+    [bundle],
+  );
+
+  const clearFocus = useCallback(() => {
+    if (!car || !track) return;
+    setFocusError(null);
+    data
+      .clearFocus(car, track)
+      .then(() => setFocus(null))
+      .catch((e) => setFocusError(String(e?.message ?? e)));
+  }, [car, track]);
+
   const setTier = useCallback((t: Tier) => {
     dispatch({ t: "tier", tier: t });
     document.cookie = `${TIER_COOKIE}=${t}; path=/; max-age=31536000; samesite=lax`;
@@ -409,6 +464,11 @@ export function ProctorProvider({
       readiness,
       selectedCornerId,
       coachReport,
+      focus,
+      focusProgress: progress,
+      focusError,
+      pinFocus,
+      clearFocus,
       setTier,
     }),
     [
@@ -423,6 +483,11 @@ export function ProctorProvider({
       readiness,
       selectedCornerId,
       coachReport,
+      focus,
+      progress,
+      focusError,
+      pinFocus,
+      clearFocus,
       setTier,
     ],
   );

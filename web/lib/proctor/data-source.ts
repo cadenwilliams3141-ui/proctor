@@ -15,6 +15,8 @@
    ║  numbers produced by one piece of code.                               ║
    ╚═══════════════════════════════════════════════════════════════════════╝ */
 
+import type { RuleKey } from "@/lib/proctor/coach";
+import type { DriverFocus } from "@/lib/proctor/focus";
 import type { IngestRow, SessionBundle, SessionRow, Trace } from "@/lib/proctor/types";
 
 export type SourceKind = "neon";
@@ -41,6 +43,11 @@ export interface DataSource {
   listSessions(): Promise<SessionRow[]>;
   /** Files the watcher has sent that are not yet a readable session. */
   listIngest(): Promise<IngestRow[]>;
+  /** The focus pinned for a car at a track, or null. */
+  loadFocus(car: string, track: string): Promise<DriverFocus | null>;
+  /** Pin a suggestion; the server re-derives everything it saves. */
+  pinFocus(sessionId: string, key: RuleKey, corners: number[]): Promise<DriverFocus>;
+  clearFocus(car: string, track: string): Promise<void>;
 }
 
 /** A failed read has to reach the screen as a sentence, not as an empty panel —
@@ -82,6 +89,26 @@ const neonSource: DataSource = {
     const res = await fetch(`/api/ingest`);
     if (!res.ok) throw await failure(res, "ingest queue");
     return (await res.json()) as IngestRow[];
+  },
+  async loadFocus(car, track) {
+    const q = new URLSearchParams({ car, track });
+    const res = await fetch(`/api/focus?${q}`);
+    if (!res.ok) throw await failure(res, "focus");
+    return ((await res.json()) as { focus: DriverFocus | null }).focus;
+  },
+  async pinFocus(sessionId, key, corners) {
+    const res = await fetch(`/api/focus`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId, key, corners }),
+    });
+    if (!res.ok) throw await failure(res, "pin focus");
+    return ((await res.json()) as { focus: DriverFocus }).focus;
+  },
+  async clearFocus(car, track) {
+    const q = new URLSearchParams({ car, track });
+    const res = await fetch(`/api/focus?${q}`, { method: "DELETE" });
+    if (!res.ok) throw await failure(res, "clear focus");
   },
 };
 

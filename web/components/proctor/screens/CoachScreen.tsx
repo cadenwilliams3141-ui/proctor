@@ -27,6 +27,7 @@ import { Lede } from "@/components/proctor/ui/Explain";
 import { LapChart, MeasuredCards, StintSection } from "@/components/proctor/panels/ReportPanels";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
+import FocusBanner from "@/components/proctor/panels/FocusBanner";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import {
   AspectTile,
@@ -96,7 +97,8 @@ export default function CoachScreen() {
         )}
       </div>
 
-      {/* ── The one thing ─────────────────────────────────────────────────── */}
+      {/* ── Last time's focus, then this time's one thing ─────────────────── */}
+      <FocusBanner />
       <OneThing />
 
       {/* ── The parts of the driving ──────────────────────────────────────── */}

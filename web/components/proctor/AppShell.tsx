@@ -11,7 +11,7 @@
  * Designed for >= 1440x900. The phone gets its own app at /m, not this one
  * squeezed: a shared-axis lane stack needs a pointer and a wide viewport. */
 
-import { CH, dim } from "@/lib/proctor/channels";
+import { CH, alpha, dim } from "@/lib/proctor/channels";
 import { useProctor } from "@/lib/proctor/store";
 
 import LapRail from "@/components/proctor/shell/LapRail";
@@ -124,8 +124,8 @@ export default function AppShell() {
                   margin: "var(--space-3) var(--space-6) 0",
                   padding: "8px 11px",
                   borderRadius: "var(--radius-sm)",
-                  background: "rgba(224,104,94,.08)",
-                  boxShadow: "inset 0 0 0 1px rgba(224,104,94,.22)",
+                  background: alpha(CH.loss, 0.08),
+                  boxShadow: `inset 0 0 0 1px ${alpha(CH.loss, 0.22)}`,
                   fontSize: 11.5,
                   lineHeight: 1.55,
                   color: dim(70),

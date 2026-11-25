@@ -2,6 +2,7 @@ import type { AspectKey } from "@/lib/proctor/coach";
 import type { Metadata } from "next";
 
 import MobileApp from "@/components/proctor/mobile/MobileApp";
+import { INK } from "@/lib/proctor/channels";
 import { ProctorProvider, type Screen } from "@/lib/proctor/store";
 import { readTier } from "@/lib/tier-server";
 
@@ -34,7 +35,7 @@ export const viewport = {
   // The bottom tab bar and the corner sheet both sit against the home
   // indicator, so the app needs the real safe-area insets.
   viewportFit: "cover" as const,
-  themeColor: "#161826",
+  themeColor: INK.bg,
 };
 
 /* The four the phone actually has. Report and Upload are desktop-only by

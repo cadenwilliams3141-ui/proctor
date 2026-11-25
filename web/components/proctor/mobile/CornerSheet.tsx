@@ -11,7 +11,7 @@
 import { useEffect, useMemo } from "react";
 import { Info } from "lucide-react";
 
-import { CH, INK, deltaColor, dim, inkA } from "@/lib/proctor/channels";
+import { CH, INK, alpha, deltaColor, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtCornerGeometry, fmtDelta, kmh, toG } from "@/lib/proctor/format";
 import { pathFor, pathLength, project, windowExtent, wrapIndex } from "@/lib/proctor/geometry";
 import { explainTrailCorner } from "@/lib/proctor/explain";
@@ -284,7 +284,7 @@ export default function CornerSheet() {
           aria-hidden
         >
           <line x1="0" y1="104" x2="330" y2="104" stroke={inkA(0.09)} />
-          <path d={traces.brake} fill="rgba(224,104,94,.2)" stroke={CH.loss} strokeWidth={1.3} />
+          <path d={traces.brake} fill={alpha(CH.loss, 0.2)} stroke={CH.loss} strokeWidth={1.3} />
           <polyline points={traces.steer} fill="none" stroke={CH.a} strokeWidth={1.4} opacity={0.55} />
           <polyline points={traces.speedA} fill="none" stroke={CH.a} strokeWidth={1.8} />
           <polyline points={traces.speedB} fill="none" stroke={CH.b} strokeWidth={1.6} />

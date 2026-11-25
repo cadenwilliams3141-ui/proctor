@@ -9,7 +9,7 @@ import { useMemo } from "react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
-import { CH, MATCHED_BAND_S, deltaColor, dim } from "@/lib/proctor/channels";
+import { CH, MATCHED_BAND_S, alpha, deltaColor, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtDelta, fmtLap } from "@/lib/proctor/format";
 import { observationShort, ranked } from "@/lib/proctor/ledger";
 import NotDrawable from "@/components/proctor/ui/NotDrawable";
@@ -126,7 +126,7 @@ export default function MobileLap() {
                 key={c.corner.id}
                 style={{
                   width: `${share.toFixed(2)}%`,
-                  background: `rgba(224,104,94,${(0.3 + 0.55 * (c.delta / stack.worst)).toFixed(2)})`,
+                  background: alpha(CH.loss, +(0.3 + 0.55 * (c.delta / stack.worst)).toFixed(2)),
                   display: "grid",
                   placeItems: "center",
                   transformOrigin: "left",
@@ -135,7 +135,7 @@ export default function MobileLap() {
                 }}
               >
                 {share > 8 && (
-                  <span style={{ font: "500 8.5px var(--font-heading)", color: "rgba(255,240,238,.9)" }}>
+                  <span style={{ font: "500 8.5px var(--font-heading)", color: inkA(0.92) }}>
                     T{c.corner.id}
                   </span>
                 )}
@@ -186,9 +186,9 @@ export default function MobileLap() {
                   borderRadius: "var(--radius-md)",
                   border: 0,
                   fontSize: 11.5,
-                  background: on ? "rgba(224,168,106,.14)" : dim(5),
+                  background: on ? alpha(CH.b, 0.14) : dim(5),
                   boxShadow: on
-                    ? "inset 0 0 0 1px rgba(224,168,106,.45)"
+                    ? `inset 0 0 0 1px ${alpha(CH.b, 0.45)}`
                     : `inset 0 0 0 1px ${dim(9)}`,
                   color: on ? CH.b : dim(60),
                 }}
@@ -226,7 +226,7 @@ export default function MobileLap() {
                 border: 0,
                 width: "100%",
                 textAlign: "left",
-                background: i === 0 ? "rgba(224,104,94,.09)" : "transparent",
+                background: i === 0 ? alpha(CH.loss, 0.09) : "transparent",
                 animation: "fadeUp .4s both",
                 animationDelay: `${(0.2 + i * 0.035).toFixed(2)}s`,
               }}

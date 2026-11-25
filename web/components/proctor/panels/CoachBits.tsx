@@ -13,7 +13,7 @@ import { ArrowRight, CircleCheck, CircleHelp, Target, TriangleAlert } from "luci
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import TechniqueNotes from "@/components/proctor/ui/TechniqueNote";
-import { CH, dim } from "@/lib/proctor/channels";
+import { CH, dim, inkA } from "@/lib/proctor/channels";
 import { ASPECT_LABEL, aspectHeadline, worthLine, type AspectSummary, type Suggestion } from "@/lib/proctor/coach";
 import { PINNABLE } from "@/lib/proctor/focus";
 import { GEAR_FIX_LABEL, type GearCheck, type GearFinding, type Verdict } from "@/lib/proctor/gearCheck";
@@ -24,7 +24,7 @@ import type { CoachGates } from "@/lib/proctor/types";
 export const VERDICT_TONE: Record<Verdict, string> = {
   "gear-first": CH.warn,
   "looks-like-you": CH.gain,
-  "cant-tell": "rgba(232,234,246,.5)",
+  "cant-tell": inkA(0.5),
 };
 
 const VERDICT_WORDS: Record<Verdict, string> = {

@@ -5,7 +5,7 @@ import { FileUp } from "lucide-react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
-import { CH, INK, dim } from "@/lib/proctor/channels";
+import { CH, INK, alpha, dim } from "@/lib/proctor/channels";
 import { data } from "@/lib/proctor/data-source";
 import { fmtAgo, fmtDay, fmtLap } from "@/lib/proctor/format";
 import { useProctor } from "@/lib/proctor/store";
@@ -107,7 +107,7 @@ export default function SessionsScreen() {
                 borderRadius: "50%",
                 background: watcher?.lastAgo ? CH.gain : dim(28),
                 boxShadow: watcher?.lastAgo
-                  ? "0 0 0 3px color-mix(in srgb, #6fbf8f 22%, transparent)"
+                  ? `0 0 0 3px ${alpha(CH.gain, 0.22)}`
                   : "none",
                 flex: "none",
               }}
@@ -162,7 +162,7 @@ export default function SessionsScreen() {
             <tbody>
               {ingest.map((f) => (
                 <tr key={f.id}>
-                  <td style={{ fontFamily: "ui-monospace, monospace", fontSize: 11 }}>{f.filename}</td>
+                  <td style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>{f.filename}</td>
                   <td>
                     <span
                       className="tag"
@@ -171,9 +171,9 @@ export default function SessionsScreen() {
                         padding: "2px 8px",
                         border: `1px solid ${
                           f.status === "failed"
-                            ? "color-mix(in srgb, #e0685e 55%, transparent)"
+                            ? alpha(CH.loss, 0.55)
                             : f.status === "parsing"
-                              ? "color-mix(in srgb, #e0b76a 55%, transparent)"
+                              ? alpha(CH.warn, 0.55)
                               : dim(20)
                         }`,
                         color:

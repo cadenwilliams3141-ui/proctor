@@ -10,7 +10,7 @@
 import { Target, X } from "lucide-react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
-import { CH, dim } from "@/lib/proctor/channels";
+import { CH, dim, inkA } from "@/lib/proctor/channels";
 import { FOCUS_CAVEAT, progressLine, type FocusState } from "@/lib/proctor/focus";
 import { fmtDay } from "@/lib/proctor/format";
 import { useProctor } from "@/lib/proctor/store";
@@ -18,9 +18,9 @@ import { useProctor } from "@/lib/proctor/store";
 const TONE: Record<FocusState, string> = {
   quicker: CH.gain,
   slower: CH.loss,
-  held: "rgba(232,234,246,.6)",
+  held: inkA(0.6),
   "same-session": CH.a,
-  "cant-compare": "rgba(232,234,246,.5)",
+  "cant-compare": inkA(0.5),
 };
 
 const WORD: Record<FocusState, string> = {

@@ -14,7 +14,7 @@ import { Evidence } from "@/components/proctor/ui/Answer";
 import Explain, { Lede } from "@/components/proctor/ui/Explain";
 import Panel from "@/components/proctor/ui/Panel";
 import { excludedReason } from "@/components/proctor/shell/LapRail";
-import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
+import { CH, INK, alpha, dim, inkA } from "@/lib/proctor/channels";
 import { explainInputResponse, explainSession, explainStint } from "@/lib/proctor/explain";
 import { fixed, fmtDay, fmtLap } from "@/lib/proctor/format";
 import { brakeCeiling } from "@/lib/proctor/pedals";
@@ -107,7 +107,7 @@ export function LapChart({ best, sd }: { best: number | null; sd: number }) {
             y={Y(0)}
             width={RIGHT - LEFT}
             height={Math.max(1, Y(sd) - Y(0))}
-            fill="color-mix(in srgb, #b5abfc 7%, transparent)"
+            fill={alpha(CH.a, 0.07)}
           />
         )}
 
@@ -154,7 +154,7 @@ export function LapChart({ best, sd }: { best: number | null; sd: number }) {
           const y = Y(gap);
           const on = hover === lap.lap_number;
           const selected = lap.lap_number === state.lapA || lap.lap_number === state.lapB;
-          const fill = isBest ? CH.a : usable ? "rgba(181,171,252,.55)" : "rgba(224,183,106,.42)";
+          const fill = isBest ? CH.a : usable ? alpha(CH.a, 0.55) : alpha(CH.warn, 0.42);
           const reason = excludedReason(lap);
 
           return (
@@ -229,9 +229,9 @@ export function LapChart({ best, sd }: { best: number | null; sd: number }) {
 
       <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap", marginTop: 4 }}>
         <Key color={CH.a} label="your best clean lap" />
-        <Key color="rgba(181,171,252,.55)" label="clean lap" />
-        <Key color="rgba(224,183,106,.42)" label="out, in, partial or flagged — shown, never averaged in" />
-        <Key color="color-mix(in srgb, #b5abfc 22%, transparent)" label="one standard deviation of your clean laps" />
+        <Key color={alpha(CH.a, 0.55)} label="clean lap" />
+        <Key color={alpha(CH.warn, 0.42)} label="out, in, partial or flagged — shown, never averaged in" />
+        <Key color={alpha(CH.a, 0.22)} label="one standard deviation of your clean laps" />
       </div>
 
       <Caveat maxWidth={880} icon={false}>

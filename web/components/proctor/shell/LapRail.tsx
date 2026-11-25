@@ -26,7 +26,7 @@
 
 import { useMemo } from "react";
 
-import { CH, dim } from "@/lib/proctor/channels";
+import { CH, alpha, dim } from "@/lib/proctor/channels";
 import { fmtLap } from "@/lib/proctor/format";
 import { useProctor } from "@/lib/proctor/store";
 import { isUsable, type Lap } from "@/lib/proctor/types";
@@ -178,12 +178,12 @@ export default function LapRail() {
                 background: isA
                   ? "color-mix(in srgb, var(--color-accent) 13%, transparent)"
                   : isB
-                    ? "rgba(224,168,106,.11)"
+                    ? alpha(CH.b, 0.11)
                     : "transparent",
                 boxShadow: isA
                   ? "inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent)"
                   : isB
-                    ? "inset 0 0 0 1px rgba(224,168,106,.32)"
+                    ? `inset 0 0 0 1px ${alpha(CH.b, 0.32)}`
                     : "none",
                 // Entrance delay is written once per row and never rebuilt, so a
                 // re-render (a new lap B, say) does not replay the whole list.

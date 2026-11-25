@@ -36,7 +36,7 @@ import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Explain from "@/components/proctor/ui/Explain";
 import Panel from "@/components/proctor/ui/Panel";
 import NotDrawable from "@/components/proctor/ui/NotDrawable";
-import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
+import { CH, INK, alpha, dim, inkA } from "@/lib/proctor/channels";
 import { explainRoad } from "@/lib/proctor/explain";
 import { fixed, fmtCornerGeometry } from "@/lib/proctor/format";
 import { gpsToLocal, projectAll, smoothRing, wrapIndex } from "@/lib/proctor/geometry";
@@ -232,9 +232,9 @@ export default function RacingLine() {
 function WidthKey({ surface = false }: { surface?: boolean }) {
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 10, color: dim(42), whiteSpace: "nowrap" }}>
-      <Key color={surface ? "rgba(233,233,237,.14)" : "rgba(145,132,217,.20)"}
+      <Key color={surface ? inkA(0.14) : alpha(INK.accent, 0.2)}
            label={surface ? "track" : "every line"} />
-      {surface && <Key color="rgba(145,132,217,.26)" label="where you drove" />}
+      {surface && <Key color={alpha(INK.accent, 0.26)} label="where you drove" />}
       <Key color={CH.a} label="lap A" />
       <Key color={CH.b} label="lap B" />
     </div>
@@ -602,14 +602,14 @@ function FullCircuit({
       {/* The road itself, where the sim still called the car on track. Drawn
           first and darkest, so everything else reads as being ON it. */}
       {geo.surface && (
-        <path d={geo.surface} fill="rgba(233,233,237,.11)" stroke={inkA(0.26)} strokeWidth={0.7} />
+        <path d={geo.surface} fill={inkA(0.11)} stroke={inkA(0.26)} strokeWidth={0.7} />
       )}
       {/* The band between the driver's own lines. On its own when there is no
           measured surface; an overlay showing what was used when there is. */}
       {geo.band && (
         <path
           d={geo.band}
-          fill={geo.surface ? "rgba(145,132,217,.22)" : "rgba(145,132,217,.18)"}
+          fill={geo.surface ? alpha(INK.accent, 0.22) : alpha(INK.accent, 0.18)}
           stroke={geo.surface ? "none" : inkA(0.1)}
           strokeWidth={0.6}
         />
@@ -743,12 +743,12 @@ function CornerZoom({
         aria-hidden
       >
         {geo.surface && (
-          <path d={geo.surface} fill="rgba(233,233,237,.11)" stroke={inkA(0.3)} strokeWidth={1} />
+          <path d={geo.surface} fill={inkA(0.11)} stroke={inkA(0.3)} strokeWidth={1} />
         )}
         {geo.band && (
           <path
             d={geo.band}
-            fill={geo.surface ? "rgba(145,132,217,.24)" : "rgba(145,132,217,.18)"}
+            fill={geo.surface ? alpha(INK.accent, 0.24) : alpha(INK.accent, 0.18)}
             stroke={geo.surface ? "none" : inkA(0.14)}
             strokeWidth={0.8}
           />
@@ -902,7 +902,7 @@ function WidthProfile({
       })}
 
       <line x1={30} y1={PLOT_BOTTOM} x2={VBW - 4} y2={PLOT_BOTTOM} stroke={inkA(0.12)} />
-      <path d={geo.area} fill="rgba(145,132,217,.22)" stroke={CH.a} strokeWidth={1.2} />
+      <path d={geo.area} fill={alpha(INK.accent, 0.22)} stroke={CH.a} strokeWidth={1.2} />
 
       <text x={26} y={PLOT_TOP + 3} fill={inkA(0.34)} fontSize={9} textAnchor="end">
         {geo.hi.toFixed(0)} m

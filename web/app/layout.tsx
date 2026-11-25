@@ -1,16 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Chakra_Petch, Inter, Roboto_Mono } from "next/font/google";
 
 import "./globals.css";
 
-/* Inter throughout — headings and body are the same family; hierarchy comes
-   from size and space, never from a heavier weight. next/font inlines and
-   self-hosts it at build time rather than hitting Google at runtime, which is
-   what the design handoff asks for. */
+/* Carbon's three faces. Chakra Petch for headings and eyebrows, Inter for
+   reading, Roboto Mono for every number (globals.css `.num`). next/font inlines
+   and self-hosts them at build time rather than hitting Google at runtime. */
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+const chakra = Chakra_Petch({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-chakra",
+  display: "swap",
+});
+
+const mono = Roboto_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-roboto-mono",
   display: "swap",
 });
 
@@ -33,7 +46,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${chakra.variable} ${mono.variable}`}>
       {/* Each app owns all of its own chrome, so the document body is bare. */}
       <body>{children}</body>
     </html>

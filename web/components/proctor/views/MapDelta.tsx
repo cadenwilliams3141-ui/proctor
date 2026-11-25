@@ -10,7 +10,7 @@ import Caveat from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import TrackMap from "@/components/proctor/ui/TrackMap";
-import { CH, dim, inkA } from "@/lib/proctor/channels";
+import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
 import { fmtDelta, fmtLap, kmh } from "@/lib/proctor/format";
 import { areaPath, polyline, sharedExtent, wrapIndex } from "@/lib/proctor/geometry";
 import { deltaCurve } from "@/lib/proctor/ledger";
@@ -154,7 +154,7 @@ export default function MapDelta() {
                 height: 4,
                 borderRadius: 2,
                 background:
-                  "linear-gradient(to right, var(--ramp-slow), var(--color-accent-2-600), var(--ch-a), var(--ramp-fast))",
+                  "linear-gradient(to right, var(--ramp-slow), var(--color-accent-600), var(--ch-a), var(--ramp-fast))",
               }}
             />
             <span className="num" style={{ fontSize: 10, color: dim(40) }}>
@@ -414,7 +414,7 @@ function DeltaSpeedChart({ ci, onScrub }: { ci: number; onScrub: (p: number) => 
             y1={0}
             x2={paths.X(ci)}
             y2={318}
-            stroke="#e9e9ed"
+            stroke={INK.text}
             strokeWidth={1}
             opacity={0.5}
           />
@@ -675,7 +675,7 @@ function InputsPanel({ ci }: { ci: number }) {
           y1={0}
           x2={lanes.X(ci)}
           y2={IN_VB_H - 4}
-          stroke="#e9e9ed"
+          stroke={INK.text}
           strokeWidth={1}
           opacity={0.4}
         />

@@ -17,7 +17,7 @@ import NotDrawable from "@/components/proctor/ui/NotDrawable";
 import TechniqueNotes from "@/components/proctor/ui/TechniqueNote";
 import TrackMap from "@/components/proctor/ui/TrackMap";
 import IntoTheCorner from "@/components/proctor/panels/IntoTheCorner";
-import { CH, deltaColor, deltaSense, dim, inkA } from "@/lib/proctor/channels";
+import { CH, alpha, deltaColor, deltaSense, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtCornerGeometry, fmtDelta, fmtLap, kmh, toG } from "@/lib/proctor/format";
 import { windowExtent, wrapIndex } from "@/lib/proctor/geometry";
 import { noteFor } from "@/lib/proctor/provenance";
@@ -138,7 +138,7 @@ export default function WhereItWent() {
                   cursor: "pointer",
                   display: "grid",
                   placeItems: "center",
-                  background: `rgba(224,104,94,${(0.3 + 0.55 * (c.delta / worst)).toFixed(2)})`,
+                  background: alpha(CH.loss, +(0.3 + 0.55 * (c.delta / worst)).toFixed(2)),
                   boxShadow: on ? "inset 0 0 0 2px var(--color-text)" : "none",
                   transformOrigin: "left",
                   animation: "growX .45s cubic-bezier(.2,.8,.2,1) both",
@@ -146,7 +146,7 @@ export default function WhereItWent() {
                 }}
               >
                 {share > 4.5 && (
-                  <span style={{ font: "500 9.5px var(--font-heading)", color: "rgba(255,240,238,.92)" }}>
+                  <span style={{ font: "500 9.5px var(--font-heading)", color: inkA(0.92) }}>
                     T{c.corner.id}
                   </span>
                 )}
@@ -363,8 +363,8 @@ function RankedRow({
         padding: "6px var(--space-2)",
         borderRadius: 7,
         flex: "none",
-        background: selected ? "rgba(224,104,94,.09)" : "transparent",
-        boxShadow: selected ? "inset 0 0 0 1px rgba(224,104,94,.3)" : "none",
+        background: selected ? alpha(CH.loss, 0.09) : "transparent",
+        boxShadow: selected ? `inset 0 0 0 1px ${alpha(CH.loss, 0.3)}` : "none",
         animation: "fadeUp .4s both",
         animationDelay: delay,
       }}
@@ -578,7 +578,7 @@ function CarState({ selected }: { selected: CornerDelta }) {
         <line x1="0" y1="36" x2="330" y2="36" stroke={inkA(0.09)} />
         <path
           d={`M 0 70 L ${brakePts.join(" L ")} L 330 70 Z`}
-          fill="rgba(224,104,94,.22)"
+          fill={alpha(CH.loss, 0.22)}
           stroke={CH.loss}
           strokeWidth={1.3}
         />

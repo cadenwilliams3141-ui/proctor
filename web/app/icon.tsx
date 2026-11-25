@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 
+import { INK } from "@/lib/proctor/channels";
+
 /* Favicon and PWA icon, generated at build time — same mark as apple-icon.tsx,
    sized for the manifest's install prompt. 192 is the size Android and desktop
    PWA installers look for. */
@@ -17,7 +19,7 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#161826",
+          background: INK.bg,
         }}
       >
         <div
@@ -27,11 +29,11 @@ export default function Icon() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            border: "4px solid #9184d9",
+            background: INK.accent,
             borderRadius: 28,
-            color: "#b5abfc",
+            color: INK.onAccent,
             fontSize: 78,
-            fontWeight: 500,
+            fontWeight: 700,
             letterSpacing: "0.01em",
           }}
         >

@@ -5,65 +5,78 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   NOCTURNE — the design system, ported from
-   design/_ds/nocturne-11586adf-c6b7-44bf-bae5-ac6639a333b1/styles.css.
+   CARBON — the design system. Chosen 2026-11-25 from five Coach-screen mocks
+   on the theme canvas (claude.ai/artifact/7VqNW5THwwi1CPh4Un4KzQ); it replaces
+   Nocturne. Graphite surfaces, one electric-cyan accent, lime for time found,
+   Chakra Petch for headings, Inter for reading, Roboto Mono for every number.
 
    These tokens are the source of truth for the look. Take every colour, font,
    space, radius and shadow from a var() below — never hard-code a value the
-   tokens already carry. Nocturne is dense on purpose: density 0.70x.
+   tokens already carry. lib/proctor/channels.ts holds the same colours as
+   literals for SVG attributes; lib/proctor/palette.test.ts fails if the two
+   lists drift apart.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --color-bg: #161826;
-  --color-surface: #232532;
-  --color-text: #e9e9ed;
-  --color-accent: #9184d9;
-  --color-accent-2: #a7a1db;
-  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+  --color-bg: #0f1112;
+  --color-surface: #171a1c;
+  --color-text: #f1f3f4;
+  --color-accent: #35d0e5;
+  --color-accent-2: #a7b0b6;
+  --color-divider: color-mix(in srgb, #f1f3f4 14%, transparent);
 
-  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
-     same step of any role matches the others in visual value. On this dark
-     ground: 700-900 for tinted fills and subtle borders, 500 as base,
-     100-300 for text on those tints. */
-  --color-neutral-100: #f3f5fe;
-  --color-neutral-200: #e4e7f5;
-  --color-neutral-300: #cfd3e5;
-  --color-neutral-400: #b2b6ca;
-  --color-neutral-500: #9397ab;
-  --color-neutral-600: #75798c;
-  --color-neutral-700: #595d6c;
-  --color-neutral-800: #3f424d;
-  --color-neutral-900: #292b31;
+  /* Carbon's own surfaces. The rail and map panels sit a step below a card;
+     a raised control a step above it. Borders, not shadows, separate them. */
+  --color-rail: #131617;
+  --color-raised: #1e2225;
+  --color-line: #2b3034;
+  --color-line-strong: #3a4146;
+  /* Text on a cyan fill: the active rail button, a primary button, a pill. */
+  --color-on-accent: #0f1112;
 
-  --color-accent-100: #f5f4ff;
-  --color-accent-200: #e7e5fe;
-  --color-accent-300: #d2cefd;
-  --color-accent-400: #b5abfc;
-  --color-accent-500: #968ae0;
-  --color-accent-600: #796cbf;
-  --color-accent-700: #5d5294;
-  --color-accent-800: #423a6a;
-  --color-accent-900: #2b2741;
+  /* Tonal ramps. On this ground: 700-900 for tinted fills and subtle borders,
+     500 as base, 100-300 for text on those tints. */
+  --color-neutral-100: #f1f3f4;
+  --color-neutral-200: #dce0e2;
+  --color-neutral-300: #c3cace;
+  --color-neutral-400: #a9b1b6;
+  --color-neutral-500: #9aa3a9;
+  --color-neutral-600: #6e777d;
+  --color-neutral-700: #4a5257;
+  --color-neutral-800: #2b3034;
+  --color-neutral-900: #1e2225;
 
-  --color-accent-2-100: #f5f4ff;
-  --color-accent-2-200: #e7e5fe;
-  --color-accent-2-300: #d2cefd;
-  --color-accent-2-400: #b5afe8;
-  --color-accent-2-500: #9690c9;
-  --color-accent-2-600: #7972a9;
-  --color-accent-2-700: #5c5783;
-  --color-accent-2-800: #423e5d;
-  --color-accent-2-900: #2b293a;
+  --color-accent-100: #e8fbfd;
+  --color-accent-200: #c2f1f7;
+  --color-accent-300: #8fe5f0;
+  --color-accent-400: #35d0e5;
+  --color-accent-500: #20b3c7;
+  --color-accent-600: #168ea0;
+  --color-accent-700: #136b78;
+  --color-accent-800: #0f4a53;
+  --color-accent-900: #0b2e33;
 
-  /* Saturation as presence. The ONE place a saturated field may flood is a
-     full-bleed band; these are not interface colours. */
-  --color-section: #262a60;
-  --color-section-glow: #353b80;
-  --color-section-ghost: #4c5397;
+  /* The second accent is steel: the circuit's own line under the speed
+     colouring, quiet chrome. Never a data colour. */
+  --color-accent-2-100: #eef1f3;
+  --color-accent-2-200: #dce1e5;
+  --color-accent-2-300: #c3cace;
+  --color-accent-2-400: #a7b0b6;
+  --color-accent-2-500: #8a949b;
+  --color-accent-2-600: #6e777d;
+  --color-accent-2-700: #545c61;
+  --color-accent-2-800: #3a4146;
+  --color-accent-2-900: #23282b;
 
-  --font-heading: var(--font-inter), "Inter", system-ui, sans-serif;
-  --font-heading-weight: 500;
+  /* A full-bleed band, never an interface colour. */
+  --color-section: #0e2a2f;
+  --color-section-glow: #123a40;
+  --color-section-ghost: #1c5560;
+
+  --font-heading: var(--font-chakra), "Chakra Petch", system-ui, sans-serif;
+  --font-heading-weight: 600;
   --font-body: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-mono: var(--font-roboto-mono), "Roboto Mono", ui-monospace, monospace;
 
   --space-1: 2.8px;
   --space-2: 5.6px;
@@ -75,31 +88,31 @@
   --space-6: 16.8px;
   --space-8: 22.4px;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 14px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 
-  /* Elevation on a dark ground is an edge plus ambient darkness. Never stack
-     heavier than these. Shadows are the one place black is allowed — ambient
-     darkness is a shadow, not a colour. */
-  --shadow-sm: 0 0 0 1px #3f424d;
-  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+  /* Elevation is an edge first: a card is its 1px graphite border. Ambient
+     darkness only for things that float. */
+  --shadow-sm: 0 0 0 1px #2b3034;
+  --shadow-md: 0 0 0 1px #3a4146, 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 0 0 1px #6e777d, 0 16px 40px rgba(0, 0, 0, 0.6);
 
-  /* ── Telemetry channels — a DECLARED EXCEPTION to the mono palette ────────
-     Nocturne is mono. Data channels have to stay apart at 1.3-1.8px stroke
-     widths, so five hues are declared here and nowhere else. SVG presentation
-     attributes cannot resolve var(), so the same literals also live in exactly
-     one TS module — lib/proctor/channels.ts. Those two lists must agree. */
+  /* ── Telemetry channels — the declared data colours ──────────────────────
+     Five hues that stay apart at 1.3-1.8px strokes, and apart in LIGHTNESS
+     too (loss and gain are a red-orange and a much lighter lime), so they
+     survive colour-blindness. SVG presentation attributes take literals, so
+     the same values live in lib/proctor/channels.ts; palette.test.ts keeps
+     the two lists equal. */
   --ch-a: var(--color-accent-400); /* lap A / reference lap */
-  --ch-b: #e0a86a; /* lap B / comparison lap */
-  --ch-loss: #e0685e; /* time lost, brake, lockup */
-  --ch-gain: #6fbf8f; /* time gained, throttle */
-  --ch-warn: #e0b76a; /* wheelspin, anomalous, wear-masked */
-  --ramp-slow: #3a3d52;
-  --ramp-fast: #f4d6a8;
+  --ch-b: #ff9f43; /* lap B / comparison lap */
+  --ch-loss: #ff6b57; /* time lost, brake, lockup */
+  --ch-gain: #a6e33c; /* time gained, throttle */
+  --ch-warn: #ffc14d; /* wheelspin, anomalous, wear-masked, your gear first */
+  --ramp-slow: #2b3034;
+  --ramp-fast: #d8f6fa;
 
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 }
 
 *,
@@ -130,10 +143,10 @@ h4,
 h5,
 h6 {
   font-family: var(--font-heading);
-  /* Hierarchy here is size and space. Never bolden past 500. */
+  /* Chakra Petch carries its own geometry; 600 is its reading weight. */
   font-weight: var(--font-heading-weight);
   line-height: 1.12;
-  letter-spacing: -0.015em;
+  letter-spacing: 0.005em;
   margin: 0 0 var(--space-2);
 }
 
@@ -162,14 +175,20 @@ img {
   background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
-/* Lap times in a column must not jitter. Every numeric readout carries this. */
-.num {
+/* Every numeric readout is Roboto Mono, so lap times in a column never jitter
+   and a number never reads as a heading. `!important` because many numeric
+   elements also carry an inline `font:` shorthand naming the heading family,
+   and an inline style outranks any class — this is the one rule that must win
+   over them all. */
+.num,
+.mono {
+  font-family: var(--font-mono) !important;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 /* ── Rules ────────────────────────────────────────────────────────────────
-   A Nocturne signature: freestanding rules fade to transparent at both ends
+   Carried over from Nocturne: freestanding rules fade to transparent at both ends
    rather than stopping cleanly. Box outlines, in-control separators and short
    accent marks stay solid. --fade sets the ramp length (48px default; the app
    shell uses 40px, panel-internal rules 12-20px). */
@@ -261,7 +280,7 @@ button[disabled] {
   display: none;
 }
 
-/* ── Nocturne components ─────────────────────────────────────────────────── */
+/* ── Carbon components ───────────────────────────────────────────────────── */
 
 .btn {
   display: inline-flex;
@@ -277,22 +296,25 @@ button[disabled] {
   color: var(--color-text);
   background: transparent;
   border: 1px solid transparent;
-  padding: var(--space-2) calc(var(--space-3) * 1.2);
-  border-radius: var(--radius-md);
+  padding: var(--space-2) calc(var(--space-3) * 1.3);
+  border-radius: 10px;
 }
-/* Primary actions are an accent outline on transparent, never a fill. */
+/* Carbon fills its primary action: one cyan button per view, dark text on it. */
 .btn-primary {
-  color: var(--color-accent);
+  color: var(--color-on-accent);
+  background: var(--color-accent);
   border-color: var(--color-accent);
 }
 .btn-primary:hover {
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  background: var(--color-accent-300);
+  border-color: var(--color-accent-300);
 }
 .btn-primary:active {
-  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  background: var(--color-accent-500);
+  border-color: var(--color-accent-500);
 }
 .btn-secondary {
-  border-color: var(--color-divider);
+  border-color: var(--color-line-strong);
 }
 .btn-secondary:hover {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
@@ -325,7 +347,7 @@ button[disabled] {
   font-size: 11px;
   letter-spacing: 0.02em;
   padding: 3px 10px;
-  border-radius: calc(var(--radius-md) * 0.75);
+  border-radius: 999px;
 }
 .tag-accent {
   background: var(--color-accent-800);
@@ -371,34 +393,34 @@ button[disabled] {
   outline-offset: 0;
 }
 
+/* The pill switch: a recessed track, the chosen option filled cyan. */
 .seg {
   display: inline-flex;
+  gap: 2px;
+  padding: 2px;
   overflow: hidden;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
 }
 .seg-opt {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
-  font-size: 13px;
+  padding: 5px 11px;
+  font-size: 12.5px;
   cursor: pointer;
   background: transparent;
   border: 0;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
   font-family: inherit;
-  transition: background 0.13s, color 0.13s, box-shadow 0.13s;
+  transition: background 0.13s, color 0.13s;
 }
-/* Non-first options carry their separator as an inset shadow so the active
-   ring can replace it without shifting layout. */
-.seg-opt + .seg-opt {
-  box-shadow: inset 1px 0 0 var(--color-divider);
-}
-.seg-opt[data-active="true"],
-.seg-opt + .seg-opt[data-active="true"] {
-  color: var(--ch-a);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+.seg-opt[data-active="true"] {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  font-weight: 600;
 }
 .seg-opt:not([data-active="true"]):hover {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
@@ -423,9 +445,10 @@ button[disabled] {
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
   padding: var(--space-2);
-  font-weight: 400;
+  font-family: var(--font-heading);
+  font-weight: 600;
   white-space: nowrap;
 }
 .table td {

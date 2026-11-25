@@ -16,7 +16,7 @@ import RacingLine from "@/components/proctor/views/RacingLine";
 import Ribbon from "@/components/proctor/views/Ribbon";
 import WhereItWent from "@/components/proctor/views/WhereItWent";
 import { excludedReason } from "@/components/proctor/shell/LapRail";
-import { CH, dim } from "@/lib/proctor/channels";
+import { CH, alpha, dim } from "@/lib/proctor/channels";
 import { useProctor } from "@/lib/proctor/store";
 import { atLeast, hiddenNote } from "@/lib/tier";
 
@@ -63,8 +63,8 @@ export default function AnalyzeScreen() {
             margin: "var(--space-3) var(--space-6) 0",
             padding: "8px 11px",
             borderRadius: "var(--radius-sm)",
-            background: "rgba(224,183,106,.09)",
-            boxShadow: "inset 0 0 0 1px rgba(224,183,106,.26)",
+            background: alpha(CH.warn, 0.09),
+            boxShadow: `inset 0 0 0 1px ${alpha(CH.warn, 0.26)}`,
           }}
         >
           <Info size={13} strokeWidth={2} color={CH.warn} style={{ flex: "none", marginTop: 2 }} />

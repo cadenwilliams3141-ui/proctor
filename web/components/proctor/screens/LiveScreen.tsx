@@ -29,7 +29,7 @@ import { Pause, Play, RotateCcw } from "lucide-react";
 import Caveat from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import TrackMap from "@/components/proctor/ui/TrackMap";
-import { CH, INK, dim, inkA } from "@/lib/proctor/channels";
+import { CH, INK, alpha, dim, inkA } from "@/lib/proctor/channels";
 import { fixed, fmtLap, kmh, pct, toG } from "@/lib/proctor/format";
 import { noteFor } from "@/lib/proctor/provenance";
 import NotDrawable from "@/components/proctor/ui/NotDrawable";
@@ -379,7 +379,7 @@ function GGPanel({
         ))}
         <line x1={150} y1={14} x2={150} y2={286} stroke={inkA(0.07)} />
         <line x1={14} y1={150} x2={286} y2={150} stroke={inkA(0.07)} />
-        <polygon points={geom.poly} fill="rgba(145,132,217,.07)" stroke={INK.accent2_700} strokeWidth={1.4} />
+        <polygon points={geom.poly} fill={alpha(INK.accent, 0.07)} stroke={INK.accent2_700} strokeWidth={1.4} />
         <polyline points={trail.join(" ")} fill="none" stroke={CH.a} strokeWidth={1.2} opacity={0.5} />
         <circle cx={cx} cy={cy} r={10} fill={CH.a} opacity={0.22} />
         <circle cx={cx} cy={cy} r={4.6} fill={INK.text} />

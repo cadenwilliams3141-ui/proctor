@@ -30,10 +30,10 @@ function sample(stops: Stop[], t: number): string {
 /* Speed on the track map. Brightness reads as speed; the warm top end marks
    the flat-out sections. Normalised per lap against that lap's own min/max. */
 const SPEED_STOPS: Stop[] = [
-  [0, [58, 61, 82]],
-  [0.42, [121, 114, 169]],
-  [0.78, [181, 171, 252]],
-  [1, [244, 214, 168]],
+  [0, [43, 48, 52]], // graphite #2b3034: the slowest point
+  [0.42, [22, 142, 160]], // teal #168ea0 = --color-accent-600, the legend's second stop
+  [0.78, [53, 208, 229]], // cyan #35d0e5
+  [1, [216, 246, 250]], // pale #d8f6fa: flat out
 ];
 
 export function speedRamp(t: number): string {
@@ -43,9 +43,9 @@ export function speedRamp(t: number): string {
 /* Tire surface temperature. Normalised across all three L/M/R bands of the
    session together, so the bands stay comparable to each other. */
 const TIRE_STOPS: Stop[] = [
-  [0, [70, 74, 110]],
-  [0.55, [181, 171, 252]],
-  [1, [232, 150, 110]],
+  [0, [43, 48, 52]], // graphite: cold
+  [0.55, [53, 208, 229]], // cyan
+  [1, [255, 159, 67]], // orange #ff9f43: hot — parts from the speed ramp at the top
 ];
 
 export function tireRamp(t: number): string {

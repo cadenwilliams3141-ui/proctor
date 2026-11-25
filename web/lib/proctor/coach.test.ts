@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import data from "./__fixtures__/coach-sessions.json";
-import { aspectHeadline, coach, where, worthLine, type CoachInputs } from "./coach";
+import { aspectHeadline, coach, heroFigures, where, worthLine, type CoachInputs } from "./coach";
 import {
   balanceFrom,
   drivingAspectsFrom,
@@ -337,6 +337,42 @@ describe("copy", () => {
   it("keeps the general 'why' free of the driver's numbers", () => {
     for (const s of coach(fromPayload(sessions.healthy)).suggestions) {
       if (s.why) expect(s.why.body, s.why.body).not.toMatch(/\d/);
+    }
+  });
+
+  it("gives every suggestion at most two figures, each a number with a short label", () => {
+    for (const m of Object.values(sessions)) {
+      const r = coach(fromPayload(m));
+      for (const s of r.suggestions) {
+        expect(s.figures.length, s.key).toBeLessThanOrEqual(2);
+        for (const f of s.figures) {
+          expect(f.value, `${s.key}: ${f.value}`).toMatch(/\d/);
+          expect(words(f.label), f.label).toBeLessThanOrEqual(6);
+          expect(words(f.value), f.value).toBeLessThanOrEqual(3);
+        }
+      }
+    }
+  });
+
+  it("quotes in the hero's stat row the same numbers the evidence does", () => {
+    const r = coach(fromPayload(sessions.healthy));
+    if (r.oneThing.kind !== "suggestion") throw new Error("expected a suggestion");
+    const s = r.oneThing.suggestion;
+    const row = heroFigures(s, r.aspects.find((a) => a.key === s.aspect) ?? null);
+    expect(row.length).toBeGreaterThanOrEqual(2);
+    expect(row.length).toBeLessThanOrEqual(4);
+    // The aspect's time, then this habit's, both hedged in their labels.
+    expect(row[0].label).toMatch(/seems to cost|went with/);
+    expect(row[1].value).toBe(`${s.atStakeS.toFixed(2)} s`);
+    // The habit's figures are lifted from the evidence sentence, not invented.
+    for (const f of s.figures) expect(s.evidence, f.value).toContain(f.value);
+  });
+
+  it("uses linked wording for linked time in the stat row, never 'cost'", () => {
+    const r = coach(fromPayload(sessions.healthy));
+    for (const s of r.suggestions.filter((x) => x.linked)) {
+      const row = heroFigures(s, r.aspects.find((a) => a.key === s.aspect) ?? null);
+      for (const f of row) expect(f.label).not.toMatch(/cost/);
     }
   });
 

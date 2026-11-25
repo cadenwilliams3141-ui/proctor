@@ -43,7 +43,7 @@ export default function TopBar() {
   return (
     <header
       style={{
-        height: 46,
+        height: 54,
         flex: "none",
         display: "flex",
         alignItems: "center",
@@ -57,16 +57,18 @@ export default function TopBar() {
         minWidth: 0,
         overflowX: "auto",
         scrollbarWidth: "none",
-        boxShadow: `inset 0 -1px 0 ${dim(8)}`,
+        boxShadow: "inset 0 -1px 0 var(--color-line)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", minWidth: 0 }}>
-        <span style={{ font: "500 14px var(--font-heading)" }}>{meta.title}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-4)", minWidth: 0 }}>
+        <h1 style={{ margin: 0, font: "var(--font-heading-weight) 19px var(--font-heading)", letterSpacing: ".02em", whiteSpace: "nowrap" }}>
+          {meta.title}
+        </h1>
         <span
           className="tb-sub"
           style={{
-            fontSize: 11.5,
-            color: dim(45),
+            fontSize: 12.5,
+            color: "var(--color-neutral-500)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -109,12 +111,11 @@ export default function TopBar() {
                   alignItems: "center",
                   gap: 6,
                   padding: "5px 10px",
-                  borderRadius: 7,
+                  borderRadius: 9,
                   border: 0,
-                  font: "500 12px var(--font-heading)",
-                  color: active ? "var(--color-text)" : dim(52),
-                  background: active ? dim(6) : "transparent",
-                  boxShadow: active ? `inset 0 0 0 1px ${dim(12)}` : "none",
+                  font: "var(--font-heading-weight) 12px var(--font-heading)",
+                  color: active ? "var(--color-on-accent)" : "var(--color-neutral-500)",
+                  background: active ? "var(--color-accent)" : "transparent",
                 }}
               >
                 <Icon size={14} strokeWidth={1.7} />
@@ -139,7 +140,7 @@ export default function TopBar() {
             data-active={state.tier === t}
             title={TIER_BLURB[t]}
             onClick={() => setTier(t)}
-            style={{ fontSize: 11, padding: "4px 9px" }}
+            style={{ fontSize: 12, padding: "5px 10px", textTransform: "capitalize" }}
           >
             {t}
           </button>

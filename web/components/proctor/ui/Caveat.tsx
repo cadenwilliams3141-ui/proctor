@@ -10,7 +10,6 @@
 
 import { Info } from "lucide-react";
 
-import { dim } from "@/lib/proctor/channels";
 
 export default function Caveat({
   children,
@@ -30,9 +29,10 @@ export default function Caveat({
         alignItems: "flex-start",
         gap: 6,
         margin: "var(--space-3) 0 0",
-        fontSize: 10.5,
+        fontSize: 11,
         lineHeight: 1.5,
-        color: dim(36),
+        // The honesty line has to be readable: muted, at 4.5:1 or better.
+        color: "var(--color-neutral-500)",
         maxWidth,
         textWrap: "pretty",
         ...style,
@@ -49,7 +49,7 @@ export default function Caveat({
 /** An eyebrow: 9.5-10px, uppercase, wide tracking. */
 export function Eyebrow({
   children,
-  size = 10,
+  size = 11,
   color,
   style,
 }: {
@@ -61,10 +61,11 @@ export function Eyebrow({
   return (
     <div
       style={{
-        font: `500 ${size}px var(--font-heading)`,
-        letterSpacing: ".1em",
+        font: `var(--font-heading-weight) ${size}px var(--font-heading)`,
+        letterSpacing: ".13em",
         textTransform: "uppercase",
-        color: color ?? dim(42),
+        // Muted, not dimmed: a dimmed label on Carbon's graphite fell under 4.5:1.
+        color: color ?? "var(--color-neutral-500)",
         ...style,
       }}
     >

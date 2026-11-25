@@ -11,7 +11,10 @@
  *   5. the evidence: the physics panels that used to live on their own screen
  *
  * Caveats, absences and technique notes stay beside the answer and never go
- * inside <Evidence> (the 2026-08-14 Decision; ui/Evidence.test.ts checks). */
+ * inside <Evidence> (the 2026-08-14 Decision; ui/Evidence.test.ts checks).
+ *
+ * Carbon layout: the sections on the left; "Your driving" on the right is the
+ * navigation between aspects, the open one outlined (it replaced a tab row). */
 
 import { useMemo } from "react";
 
@@ -21,8 +24,10 @@ import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import TechniqueNotes from "@/components/proctor/ui/TechniqueNote";
 import TrackMap from "@/components/proctor/ui/TrackMap";
+import AspectStack from "@/components/proctor/panels/AspectStack";
 import IntoTheCorner from "@/components/proctor/panels/IntoTheCorner";
 import {
+  ASPECT_ICON,
   CompareButton,
   GearFix,
   SuggestionCard,
@@ -39,9 +44,8 @@ import {
   TorqueSection,
   TractionCircle,
 } from "@/components/proctor/panels/ForcesPanels";
-import { ASPECT_ICON } from "@/components/proctor/screens/CoachScreen";
 import { CH, dim } from "@/lib/proctor/channels";
-import { ASPECT_LABEL, ASPECT_ORDER, aspectHeadline, type AspectKey } from "@/lib/proctor/coach";
+import { ASPECT_LABEL, aspectHeadline, type AspectKey } from "@/lib/proctor/coach";
 import { fixed } from "@/lib/proctor/format";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
@@ -109,267 +113,245 @@ export default function AspectScreen() {
   const toIdx = (p: number) => Math.round(p * (n - 1));
   const handed = (a.handedTo ?? []).filter((h) => r.gates && h.atStakeS >= r.gates.min_at_stake_s);
   const tips = a.suggestions.filter((s) => s.key !== "drift.improving");
+  const Icon = ASPECT_ICON[key];
   const drift = a.suggestions.filter((s) => s.key === "drift.improving");
 
   return (
-    <div className="scrollpane" style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}>
-      {/* ── The five aspects ──────────────────────────────────────────────── */}
-      <nav aria-label="Aspects" className="aspect-tabs" style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: "var(--space-5)" }}>
-        {ASPECT_ORDER.map((k) => {
-          const x = r.aspects.find((y) => y.key === k)!;
-          const Icon = ASPECT_ICON[k];
-          const on = k === key;
-          return (
-            <button
-              key={k}
-              type="button"
-              className="pk"
-              aria-pressed={on}
-              onClick={() => dispatch({ t: "aspect", aspect: k })}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: 0,
-                font: "500 12px var(--font-heading)",
-                color: on ? "var(--color-text)" : dim(55),
-                background: on ? dim(7) : "transparent",
-                boxShadow: on ? `inset 0 0 0 1px ${dim(14)}` : "none",
-              }}
-            >
-              <Icon size={14} strokeWidth={1.7} />
-              {ASPECT_LABEL[k]}
-              {x.atStakeS != null && (
-                <span className="num" style={{ fontSize: 10.5, color: x.linked ? CH.warn : CH.loss }}>
-                  {x.atStakeS.toFixed(2)}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* ── 1. What it seems to be worth, and where ───────────────────────── */}
-      <section
-        style={{
-          display: "flex",
-          gap: "var(--space-6)",
-          alignItems: "flex-start",
-          padding: "var(--space-5)",
-          background: "var(--color-surface)",
-          borderRadius: "var(--radius-md)",
-          boxShadow: "var(--shadow-sm)",
-        }}
-        className="aspect-answer"
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ font: "500 17px/1.4 var(--font-heading)", textWrap: "balance" }}>{aspectHeadline(a, r.gates)}</div>
-          {handed.map((h) => (
-            <div key={h.aspect} style={{ marginTop: 6, fontSize: 12.5, color: dim(62) }}>
-              <span className="num">{h.atStakeS.toFixed(2)} s</span> of the time here went with your{" "}
-              <button
-                type="button"
-                className="pk"
-                onClick={() => dispatch({ t: "aspect", aspect: h.aspect })}
-                style={{ border: 0, background: "transparent", padding: 0, color: CH.a, cursor: "pointer", font: "inherit" }}
-              >
-                {ASPECT_LABEL[h.aspect].toLowerCase()}
-              </button>
-              , so it is counted there.
-            </div>
-          ))}
-          {a.tendency && <div style={{ marginTop: 8, fontSize: 12.5, color: dim(62) }}>{a.tendency}</div>}
-          {!r.available && <div style={{ marginTop: 8, fontSize: 12.5, color: dim(62) }}>{r.reason}</div>}
-          <Caveat maxWidth={720}>{noteFor(a.linked ? "coach.linked" : "aspect.at_stake")}</Caveat>
-        </div>
-        <HeroNumber
-          value={a.atStakeS == null ? "—" : a.atStakeS.toFixed(2)}
-          unit={a.atStakeS == null ? undefined : "s"}
-          label={a.linked ? "went with these differences, a lap — overlapping the rest" : "up to, a lap, against your own quick passes"}
-          tone={a.atStakeS ? (a.linked ? CH.warn : CH.loss) : dim(40)}
-        />
-      </section>
-
-      {ranked.length > 0 && (
-        <div className="aspect-where" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 300px", gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-          <Panel title="Where on the lap" sub="corners by what this seems to be worth there">
-            <div style={{ display: "grid", gap: 6 }}>
-              {ranked.map((c) => {
-                const on = c.id === selectedId;
-                return (
+    <div className="scrollpane roomy" style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}>
+      <div className="carbon-split">
+        <div style={{ minWidth: 0 }}>
+          {/* ── 1. What it seems to be worth, and where ───────────────────────── */}
+          <section
+            style={{
+              display: "flex",
+              gap: "var(--space-6)",
+              alignItems: "flex-start",
+              padding: 24,
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-line)",
+              borderRadius: 14,
+            }}
+            className="aspect-answer"
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Eyebrow size={12} color={CH.a} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "var(--space-3)" }}>
+                <Icon size={15} strokeWidth={1.8} aria-hidden />
+                {ASPECT_LABEL[key]}
+              </Eyebrow>
+              <h2 style={{ margin: 0, font: "var(--font-heading-weight) 24px/1.2 var(--font-heading)", textWrap: "balance" }}>
+                {aspectHeadline(a, r.gates)}
+              </h2>
+              {handed.map((h) => (
+                <div key={h.aspect} style={{ marginTop: 6, fontSize: 12.5, color: dim(62) }}>
+                  <span className="num">{h.atStakeS.toFixed(2)} s</span> of the time here went with your{" "}
                   <button
-                    key={c.id}
                     type="button"
-                    className="crow"
-                    aria-pressed={on}
-                    onClick={() => dispatch({ t: "corner", id: c.id })}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "38px 1fr 64px",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "6px 8px",
-                      border: 0,
-                      borderRadius: 6,
-                      background: on ? dim(6) : "transparent",
-                      color: "var(--color-text)",
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
+                    className="pk"
+                    onClick={() => dispatch({ t: "aspect", aspect: h.aspect })}
+                    style={{ border: 0, background: "transparent", padding: 0, color: CH.a, cursor: "pointer", font: "inherit" }}
                   >
-                    <span style={{ font: "500 12px var(--font-heading)" }}>T{c.id}</span>
-                    <WorthBar value={c.atStakeS} max={max} linked={a.linked} />
-                    <span className="num" style={{ fontSize: 11.5, textAlign: "right", color: dim(70) }}>
-                      {c.atStakeS.toFixed(3)} s
-                    </span>
+                    {ASPECT_LABEL[h.aspect].toLowerCase()}
                   </button>
-                );
-              })}
+                  , so it is counted there.
+                </div>
+              ))}
+              {a.tendency && <div style={{ marginTop: 8, fontSize: 12.5, color: dim(62) }}>{a.tendency}</div>}
+              {!r.available && <div style={{ marginTop: 8, fontSize: 12.5, color: dim(62) }}>{r.reason}</div>}
+              <Caveat maxWidth={720}>{noteFor(a.linked ? "coach.linked" : "aspect.at_stake")}</Caveat>
             </div>
-          </Panel>
-          <Panel padding="var(--space-3)">
-            <div style={{ height: 260 }}>
-              {n > 0 && (
-                <TrackMap
-                  x={bundle.map.x_m}
-                  y={bundle.map.y_m}
-                  w={280}
-                  h={260}
-                  pad={18}
-                  baseWidth={7}
-                  highlights={ranked.flatMap((c) => {
-                    const k = bundle.corners.find((x) => x.id === c.id);
-                    if (!k) return [];
-                    return [{
-                      from: toIdx(k.start_pct),
-                      to: toIdx(k.end_pct),
-                      color: c.id === selectedId ? CH.a : a.linked ? CH.warn : CH.loss,
-                      weight: c.id === selectedId ? 1 : c.atStakeS / max,
-                    }];
+            <HeroNumber
+              value={a.atStakeS == null ? "—" : a.atStakeS.toFixed(2)}
+              unit={a.atStakeS == null ? undefined : "s"}
+              label={a.linked ? "went with these differences, a lap — overlapping the rest" : "up to, a lap, against your own quick passes"}
+              tone={a.atStakeS ? (a.linked ? CH.warn : CH.loss) : dim(40)}
+            />
+          </section>
+
+          {ranked.length > 0 && (
+            <div className="aspect-where" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 300px", gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+              <Panel title="Where on the lap" sub="corners by what this seems to be worth there">
+                <div style={{ display: "grid", gap: 6 }}>
+                  {ranked.map((c) => {
+                    const on = c.id === selectedId;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="crow"
+                        aria-pressed={on}
+                        onClick={() => dispatch({ t: "corner", id: c.id })}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "38px 1fr 64px",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "6px 8px",
+                          border: 0,
+                          borderRadius: 6,
+                          background: on ? dim(6) : "transparent",
+                          color: "var(--color-text)",
+                          cursor: "pointer",
+                          textAlign: "left",
+                        }}
+                      >
+                        <span style={{ font: "var(--font-heading-weight) 12.5px var(--font-heading)" }}>T{c.id}</span>
+                        <WorthBar value={c.atStakeS} max={max} linked={a.linked} />
+                        <span className="num" style={{ fontSize: 11.5, textAlign: "right", color: dim(70) }}>
+                          {c.atStakeS.toFixed(3)} s
+                        </span>
+                      </button>
+                    );
                   })}
-                  apexes={bundle.corners.filter((k) => ranked.some((c) => c.id === k.id))}
-                />
-              )}
-            </div>
-          </Panel>
-        </div>
-      )}
-
-      {/* ── 2. What to try ────────────────────────────────────────────────── */}
-      <section style={{ marginTop: "var(--space-6)" }}>
-        <Eyebrow style={{ marginBottom: "var(--space-3)" }}>What to try</Eyebrow>
-        {tips.length ? (
-          <div style={{ display: "grid", gap: "var(--space-3)" }}>
-            {tips.map((s) => (
-              <Panel key={`${s.key}-${s.corners.join(",")}`} padding="var(--space-4)">
-                <SuggestionCard s={s} />
+                </div>
               </Panel>
-            ))}
-          </div>
-        ) : (
-          <Panel padding="var(--space-4)">
-            <div style={{ fontSize: 13, lineHeight: 1.6, color: dim(66), maxWidth: 680 }}>
-              {r.available
-                ? "None of your habits here went with quicker passes strongly enough, across enough laps, to point at. That is a result: the time is real, but the file does not show what made the difference."
-                : r.reason}
-            </div>
-          </Panel>
-        )}
-        {drift.map((s) => (
-          <Panel key={`drift-${s.corners.join(",")}`} padding="var(--space-4)" style={{ marginTop: "var(--space-3)" }}>
-            <SuggestionCard s={s} showWhy={false} />
-          </Panel>
-        ))}
-      </section>
-
-      {/* ── 3. Your habits, corner by corner ──────────────────────────────── */}
-      {corner && HABITS[key].some((h) => corner.metrics[h.key]) && (
-        <section style={{ marginTop: "var(--space-6)" }}>
-          <Eyebrow style={{ marginBottom: "var(--space-3)" }}>Your habits at T{corner.id}</Eyebrow>
-          <Panel padding="var(--space-4)">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th />
-                  <th style={{ textAlign: "right" }}>typical</th>
-                  <th style={{ textAlign: "right", color: CH.gain }}>your quick passes</th>
-                  <th style={{ textAlign: "right" }}>link to time</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {HABITS[key].map((h) => {
-                  const m = corner.metrics[h.key];
-                  if (!m) return null;
-                  return (
-                    <tr key={h.key}>
-                      <td style={{ color: dim(62), fontSize: 11.5 }}>{h.label}</td>
-                      <td className="num" style={{ textAlign: "right" }}>{fixed(m.typical, h.dp)}</td>
-                      <td className="num" style={{ textAlign: "right", color: CH.gain }}>{fixed(m.quick, h.dp)}</td>
-                      <td className="num" style={{ textAlign: "right", color: dim(55), fontSize: 11 }}>
-                        {m.link ? `ρ ${m.link.rho.toFixed(2)} · p ${m.link.p.toFixed(3)} · ${m.link.n} laps` : "no variation"}
-                      </td>
-                      <td style={{ color: dim(40), fontSize: 10.5 }}>{h.unit}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <div style={{ marginTop: "var(--space-3)" }}>
-              <CompareButton lap={corner.zones[zoneOf(key)].best_lap} corner={corner.id} />
-            </div>
-            <Caveat maxWidth={720}>
-              Quick passes are the quickest third of your clean laps through this stretch. ρ is how
-              closely the habit tracked the time across laps; p is how often chance alone would show
-              a link that strong.
-            </Caveat>
-          </Panel>
-        </section>
-      )}
-
-      {/* ── 4. You or your gear? ──────────────────────────────────────────── */}
-      <section style={{ marginTop: "var(--space-6)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "var(--space-3)" }}>
-          <Eyebrow>You or your gear?</Eyebrow>
-          {a.gear.findings.length > 0 && <VerdictChip verdict={a.gear.verdict} />}
-        </div>
-        <Panel padding="var(--space-4)">
-          {a.gear.findings.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: dim(62) }}>
-              Nothing on a rig decides {key === "line" ? "where the car goes" : "how much grip the tyres had"} — this one is
-              the driving and the car.
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: "var(--space-3)" }}>
-              {a.gear.findings.map((f) =>
-                f.verdict === "gear-first" ? (
-                  <GearFix key={f.label} finding={f} />
-                ) : (
-                  <div key={f.label} style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-                    <VerdictChip verdict={f.verdict} />
-                    <span style={{ font: "500 12.5px var(--font-heading)" }}>{f.label}</span>
-                    <span style={{ fontSize: 12.5, color: dim(62) }}>{f.detail}</span>
-                  </div>
-                ),
-              )}
+              <Panel padding="var(--space-3)">
+                <div style={{ height: 260 }}>
+                  {n > 0 && (
+                    <TrackMap
+                      x={bundle.map.x_m}
+                      y={bundle.map.y_m}
+                      w={280}
+                      h={260}
+                      pad={18}
+                      baseWidth={7}
+                      highlights={ranked.flatMap((c) => {
+                        const k = bundle.corners.find((x) => x.id === c.id);
+                        if (!k) return [];
+                        return [{
+                          from: toIdx(k.start_pct),
+                          to: toIdx(k.end_pct),
+                          color: c.id === selectedId ? CH.a : a.linked ? CH.warn : CH.loss,
+                          weight: c.id === selectedId ? 1 : c.atStakeS / max,
+                        }];
+                      })}
+                      apexes={bundle.corners.filter((k) => ranked.some((c) => c.id === k.id))}
+                    />
+                  )}
+                </div>
+              </Panel>
             </div>
           )}
-          {a.gear.context && <div style={{ marginTop: "var(--space-3)", fontSize: 12, color: dim(58) }}>{a.gear.context}</div>}
-          <Caveat maxWidth={720}>{noteFor("gear.verdict")}</Caveat>
-        </Panel>
-      </section>
 
-      {/* ── 5. The evidence ───────────────────────────────────────────────── */}
-      {deep && <AspectEvidence aspect={key} cornerId={selectedId} />}
+          {/* ── 2. What to try ────────────────────────────────────────────────── */}
+          <section style={{ marginTop: "var(--space-6)" }}>
+            <Eyebrow style={{ marginBottom: "var(--space-3)" }}>What to try</Eyebrow>
+            {tips.length ? (
+              <div style={{ display: "grid", gap: "var(--space-3)" }}>
+                {tips.map((s) => (
+                  <Panel key={`${s.key}-${s.corners.join(",")}`} padding="var(--space-4)">
+                    <SuggestionCard s={s} />
+                  </Panel>
+                ))}
+              </div>
+            ) : (
+              <Panel padding="var(--space-4)">
+                <div style={{ fontSize: 13, lineHeight: 1.6, color: dim(66), maxWidth: 680 }}>
+                  {r.available
+                    ? "None of your habits here went with quicker passes strongly enough, across enough laps, to point at. That is a result: the time is real, but the file does not show what made the difference."
+                    : r.reason}
+                </div>
+              </Panel>
+            )}
+            {drift.map((s) => (
+              <Panel key={`drift-${s.corners.join(",")}`} padding="var(--space-4)" style={{ marginTop: "var(--space-3)" }}>
+                <SuggestionCard s={s} showWhy={false} />
+              </Panel>
+            ))}
+          </section>
 
-      <section style={{ marginTop: "var(--space-8)" }}>
-        <Absences
-          absences={bundle.absences.filter((x) => VOICED[key].includes(x.key) || x.permanent)}
-          title={`What this session does not show about your ${ASPECT_LABEL[key].toLowerCase()}`}
-        />
-      </section>
+          {/* ── 3. Your habits, corner by corner ──────────────────────────────── */}
+          {corner && HABITS[key].some((h) => corner.metrics[h.key]) && (
+            <section style={{ marginTop: "var(--space-6)" }}>
+              <Eyebrow style={{ marginBottom: "var(--space-3)" }}>Your habits at T{corner.id}</Eyebrow>
+              <Panel padding="var(--space-4)">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th />
+                      <th style={{ textAlign: "right" }}>typical</th>
+                      <th style={{ textAlign: "right", color: CH.gain }}>your quick passes</th>
+                      <th style={{ textAlign: "right" }}>link to time</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {HABITS[key].map((h) => {
+                      const m = corner.metrics[h.key];
+                      if (!m) return null;
+                      return (
+                        <tr key={h.key}>
+                          <td style={{ color: dim(62), fontSize: 11.5 }}>{h.label}</td>
+                          <td className="num" style={{ textAlign: "right" }}>{fixed(m.typical, h.dp)}</td>
+                          <td className="num" style={{ textAlign: "right", color: CH.gain }}>{fixed(m.quick, h.dp)}</td>
+                          <td className="num" style={{ textAlign: "right", color: dim(55), fontSize: 11 }}>
+                            {m.link ? `ρ ${m.link.rho.toFixed(2)} · p ${m.link.p.toFixed(3)} · ${m.link.n} laps` : "no variation"}
+                          </td>
+                          <td style={{ color: dim(40), fontSize: 10.5 }}>{h.unit}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: "var(--space-3)" }}>
+                  <CompareButton lap={corner.zones[zoneOf(key)].best_lap} corner={corner.id} />
+                </div>
+                <Caveat maxWidth={720}>
+                  Quick passes are the quickest third of your clean laps through this stretch. ρ is how
+                  closely the habit tracked the time across laps; p is how often chance alone would show
+                  a link that strong.
+                </Caveat>
+              </Panel>
+            </section>
+          )}
+
+          {/* ── 4. You or your gear? ──────────────────────────────────────────── */}
+          <section style={{ marginTop: "var(--space-6)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "var(--space-3)" }}>
+              <Eyebrow>You or your gear?</Eyebrow>
+              {a.gear.findings.length > 0 && <VerdictChip verdict={a.gear.verdict} />}
+            </div>
+            <Panel padding="var(--space-4)">
+              {a.gear.findings.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: dim(62) }}>
+                  Nothing on a rig decides {key === "line" ? "where the car goes" : "how much grip the tyres had"} — this one is
+                  the driving and the car.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: "var(--space-3)" }}>
+                  {a.gear.findings.map((f) =>
+                    f.verdict === "gear-first" ? (
+                      <GearFix key={f.label} finding={f} />
+                    ) : (
+                      <div key={f.label} style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                        <VerdictChip verdict={f.verdict} />
+                        <span style={{ font: "500 12.5px var(--font-heading)" }}>{f.label}</span>
+                        <span style={{ fontSize: 12.5, color: dim(62) }}>{f.detail}</span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+              {a.gear.context && <div style={{ marginTop: "var(--space-3)", fontSize: 12, color: dim(58) }}>{a.gear.context}</div>}
+              <Caveat maxWidth={720}>{noteFor("gear.verdict")}</Caveat>
+            </Panel>
+          </section>
+
+          {/* ── 5. The evidence ───────────────────────────────────────────────── */}
+          {deep && <AspectEvidence aspect={key} cornerId={selectedId} />}
+
+          <section style={{ marginTop: "var(--space-8)" }}>
+            <Absences
+              absences={bundle.absences.filter((x) => VOICED[key].includes(x.key) || x.permanent)}
+              title={`What this session does not show about your ${ASPECT_LABEL[key].toLowerCase()}`}
+            />
+          </section>
+        </div>
+
+        {/* ── The five aspects, worth first: the way between them ─────────── */}
+        <aside className="carbon-side" style={{ minWidth: 0 }}>
+          <AspectStack outlined={key} />
+        </aside>
+      </div>
     </div>
   );
 }

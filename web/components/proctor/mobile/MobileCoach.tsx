@@ -1,19 +1,20 @@
 "use client";
 
 /* The coach, on the phone: the one thing to work on, then each part of the
- * driving as a row you can open. Same report, same words and the same labels
- * as the desktop (lib/proctor/coach.ts) — only the layout is the phone's. */
+ * driving as a card you can open. Same report, same words, the same labels and
+ * the same Carbon pieces as the desktop (the stat row, the gear strip, the
+ * aspect stack) — only the layout is the phone's. */
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
-import { GearFix, SuggestionCard, VerdictChip, WorthBar } from "@/components/proctor/panels/CoachBits";
+import { GearFix, GearStrip, StatRow, SuggestionCard, VerdictChip } from "@/components/proctor/panels/CoachBits";
+import AspectStack from "@/components/proctor/panels/AspectStack";
 import FocusBanner from "@/components/proctor/panels/FocusBanner";
 import GearReadings from "@/components/proctor/panels/GearReadings";
-import { ASPECT_ICON } from "@/components/proctor/screens/CoachScreen";
 import { CH, dim } from "@/lib/proctor/channels";
-import { ASPECT_LABEL, aspectHeadline, worthLine } from "@/lib/proctor/coach";
+import { aspectHeadline, heroFigures, worthLine } from "@/lib/proctor/coach";
 import { fmtLap } from "@/lib/proctor/format";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
@@ -21,18 +22,18 @@ import { useProctor } from "@/lib/proctor/store";
 const PAD = "var(--space-6)";
 
 export default function MobileCoach() {
-  const { bundle, coachReport: r, dispatch } = useProctor();
+  const { bundle, coachReport: r } = useProctor();
   if (!bundle || !r) {
     return <div style={{ padding: PAD, color: dim(45) }}>Reading…</div>;
   }
   const da = bundle.drivingAspects;
   const one = r.oneThing;
-  const max = Math.max(...r.aspects.map((a) => a.atStakeS ?? 0), 1e-6);
+  const aspect = one.kind === "none" ? null : r.aspects.find((a) => a.key === one.suggestion.aspect) ?? null;
 
   return (
     <div style={{ padding: `calc(env(safe-area-inset-top, 0px) + ${PAD}) ${PAD} 0` }}>
-      <div style={{ font: "500 17px var(--font-heading)" }}>{bundle.session.track_name ?? "Unknown track"}</div>
-      <div className="num" style={{ fontSize: 11.5, color: dim(50), marginTop: 2 }}>
+      <div style={{ font: "var(--font-heading-weight) 19px var(--font-heading)" }}>{bundle.session.track_name ?? "Unknown track"}</div>
+      <div className="num" style={{ fontSize: 12, color: "var(--color-neutral-500)", marginTop: 2 }}>
         {bundle.session.car_name ?? "unknown car"}
         {da ? ` · typical ${fmtLap(da.median_lap_s)}` : ""}
       </div>
@@ -40,71 +41,45 @@ export default function MobileCoach() {
       <div style={{ marginTop: "var(--space-4)" }}>
         <FocusBanner compact />
       </div>
-      <Panel padding="var(--space-4)" style={{ borderLeft: `3px solid ${one.kind === "gear" ? CH.warn : CH.a}` }}>
-        <Eyebrow style={{ marginBottom: "var(--space-2)" }}>
-          {one.kind === "gear" ? "Before technique: your gear" : "Your one thing for next session"}
-        </Eyebrow>
-        {one.kind === "suggestion" && <SuggestionCard s={one.suggestion} />}
-        {one.kind === "gear" && (
-          <>
-            <GearFix finding={one.finding} />
-            <div style={{ marginTop: "var(--space-3)", fontSize: 12, color: dim(62), lineHeight: 1.55 }}>
-              It stands in front of: {one.suggestion.title} — {worthLine(one.suggestion)}.
-            </div>
-          </>
-        )}
-        {one.kind === "none" && (
-          <>
-            <div style={{ font: "500 15px/1.4 var(--font-heading)", color: dim(80) }}>
-              {r.available ? "No single habit stood out this session." : "No coaching for this session yet."}
-            </div>
-            <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.6, color: dim(66) }}>
-              {one.reason.charAt(0).toUpperCase() + one.reason.slice(1)}
-              {/[.!?]$/.test(one.reason) ? "" : "."}
-            </div>
-          </>
-        )}
-      </Panel>
+      <section className="coach-hero" aria-label="Your one thing">
+        <div className="coach-hero-text">
+          <Eyebrow size={12} color={one.kind === "gear" ? CH.warn : one.kind === "none" ? undefined : CH.a} style={{ marginBottom: "var(--space-3)" }}>
+            {one.kind === "gear" ? "Before technique: your gear" : "Your one thing"}
+          </Eyebrow>
+          {one.kind === "suggestion" && (
+            <SuggestionCard
+              s={one.suggestion}
+              big
+              figures={heroFigures(one.suggestion, aspect)}
+              actions={aspect && <VerdictChip verdict={aspect.gear.verdict} label="Gear" />}
+            />
+          )}
+          {one.kind === "gear" && (
+            <>
+              <StatRow figures={heroFigures(one.suggestion, aspect).slice(0, 2)} />
+              <GearFix finding={one.finding} />
+              <div style={{ marginTop: "var(--space-3)", fontSize: 12, color: dim(62), lineHeight: 1.55 }}>
+                It stands in front of: {one.suggestion.title} — {worthLine(one.suggestion)}.
+              </div>
+            </>
+          )}
+          {one.kind === "none" && (
+            <>
+              <div style={{ font: "var(--font-heading-weight) 17px/1.35 var(--font-heading)", color: dim(85) }}>
+                {r.available ? "No single habit stood out this session." : "No coaching for this session yet."}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13.5, lineHeight: 1.6, color: "var(--color-neutral-300)" }}>
+                {one.reason.charAt(0).toUpperCase() + one.reason.slice(1)}
+                {/[.!?]$/.test(one.reason) ? "" : "."}
+              </div>
+            </>
+          )}
+        </div>
+        <GearStrip />
+      </section>
 
-      <Eyebrow style={{ margin: "var(--space-6) 0 var(--space-3)" }}>Your driving, part by part</Eyebrow>
-      <div style={{ display: "grid", gap: "var(--space-2)" }}>
-        {r.aspects.map((a) => {
-          const Icon = ASPECT_ICON[a.key];
-          return (
-            <button
-              key={a.key}
-              type="button"
-              className="tap"
-              onClick={() => dispatch({ t: "aspect", aspect: a.key })}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "22px 1fr auto 14px",
-                alignItems: "center",
-                gap: 10,
-                minHeight: 56,
-                padding: "10px 12px",
-                border: 0,
-                borderRadius: "var(--radius-md)",
-                background: "var(--color-surface)",
-                boxShadow: "var(--shadow-sm)",
-                color: "var(--color-text)",
-                textAlign: "left",
-              }}
-            >
-              <Icon size={17} strokeWidth={1.6} />
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", font: "500 13px var(--font-heading)" }}>{ASPECT_LABEL[a.key]}</span>
-                <span style={{ display: "block", marginTop: 5 }}>
-                  <WorthBar value={a.atStakeS} max={max} linked={a.linked} />
-                </span>
-              </span>
-              <span className="num" style={{ fontSize: 12.5, color: a.atStakeS ? (a.linked ? CH.warn : CH.loss) : dim(40) }}>
-                {a.atStakeS == null ? "—" : `${a.atStakeS.toFixed(2)} s`}
-              </span>
-              <ChevronRight size={14} strokeWidth={1.6} color={dim(40)} />
-            </button>
-          );
-        })}
+      <div style={{ marginTop: "var(--space-6)" }}>
+        <AspectStack outlined={aspect?.key ?? null} />
       </div>
       {da && <Caveat>{noteFor("aspect.at_stake")}</Caveat>}
     </div>
@@ -127,7 +102,7 @@ export function MobileAspect() {
       >
         <ChevronLeft size={15} strokeWidth={1.7} /> Coach
       </button>
-      <div style={{ font: "500 18px/1.35 var(--font-heading)", marginTop: 4 }}>{aspectHeadline(a, r.gates)}</div>
+      <div style={{ font: "var(--font-heading-weight) 21px/1.25 var(--font-heading)", marginTop: 4 }}>{aspectHeadline(a, r.gates)}</div>
       {a.tendency && <div style={{ marginTop: 6, fontSize: 12.5, color: dim(62) }}>{a.tendency}</div>}
       <Caveat>{noteFor(a.linked ? "coach.linked" : "aspect.at_stake")}</Caveat>
 

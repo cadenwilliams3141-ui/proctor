@@ -1,6 +1,6 @@
 "use client";
 
-/* 56px icon rail, full height. The whole app lives behind eight items, which is
+/* 64px icon rail, full height (Carbon: the active screen is a filled cyan tile). The whole app lives behind eight items, which is
  * the point of the redesign: the five Next routes became one shell, so moving
  * between them no longer loses lap selection, cursor or scroll position. */
 
@@ -21,7 +21,6 @@ import {
 
 import type { AspectKey } from "@/lib/proctor/coach";
 import { ASPECT_LABEL } from "@/lib/proctor/coach";
-import { dim } from "@/lib/proctor/channels";
 import { useProctor, type Screen } from "@/lib/proctor/store";
 
 import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
@@ -74,22 +73,11 @@ function RailButton({
   return (
     <button
       type="button"
-      className="pk"
+      className="pk rail-btn"
       title={label}
       aria-label={label}
       aria-current={active ? "page" : undefined}
       onClick={onClick}
-      style={{
-        width: 38,
-        height: 38,
-        flex: "none",
-        borderRadius: "var(--radius-md)",
-        border: 0,
-        display: "grid",
-        placeItems: "center",
-        color: active ? "var(--ch-a)" : dim(40),
-        background: active ? "color-mix(in srgb, var(--color-accent) 14%, transparent)" : "transparent",
-      }}
     >
       {children}
     </button>
@@ -97,7 +85,11 @@ function RailButton({
 }
 
 const Divider = () => (
-  <span aria-hidden style={{ width: 20, height: 1, background: dim(10), margin: "6px 0", flex: "none" }} />
+  <span
+    aria-hidden
+    className="rail-divider"
+    style={{ width: 22, height: 1, background: "var(--color-line)", margin: "6px 0", flex: "none" }}
+  />
 );
 
 export default function IconRail() {
@@ -108,15 +100,15 @@ export default function IconRail() {
       className="icon-rail"
       aria-label="Screens"
       style={{
-        width: 56,
+        width: 64,
         flex: "none",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 3,
-        padding: "14px 0 12px",
-        background: "var(--color-bg)",
-        boxShadow: `inset -1px 0 0 ${dim(8)}`,
+        gap: 6,
+        padding: "18px 0 12px",
+        background: "var(--color-rail)",
+        boxShadow: "inset -1px 0 0 var(--color-line)",
       }}
     >
       <button
@@ -125,16 +117,18 @@ export default function IconRail() {
         title="Replay the launch screen"
         onClick={() => dispatch({ t: "splash", on: true })}
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: "var(--radius-sm)",
-          border: "1px solid var(--color-accent)",
-          background: "transparent",
+          width: 34,
+          height: 34,
+          flex: "none",
+          borderRadius: 10,
+          border: 0,
+          background: "var(--color-accent)",
           display: "grid",
           placeItems: "center",
-          font: "500 13px var(--font-heading)",
-          color: "var(--ch-a)",
-          marginBottom: 12,
+          font: "700 16px var(--font-heading)",
+          color: "var(--color-on-accent)",
+          marginBottom: 10,
+          cursor: "pointer",
         }}
       >
         P
@@ -147,7 +141,7 @@ export default function IconRail() {
           active={state.screen === id}
           onClick={() => dispatch({ t: "screen", screen: id })}
         >
-          <Icon size={19} strokeWidth={1.6} />
+          <Icon size={20} strokeWidth={1.7} />
         </RailButton>
       ))}
       <Divider />
@@ -158,7 +152,7 @@ export default function IconRail() {
           active={state.screen === "aspect" && state.aspect === id}
           onClick={() => dispatch({ t: "aspect", aspect: id })}
         >
-          <Icon size={18} strokeWidth={1.6} />
+          <Icon size={19} strokeWidth={1.7} />
         </RailButton>
       ))}
       <Divider />
@@ -169,7 +163,7 @@ export default function IconRail() {
           active={state.screen === id}
           onClick={() => dispatch({ t: "screen", screen: id })}
         >
-          <Icon size={19} strokeWidth={1.6} />
+          <Icon size={20} strokeWidth={1.7} />
         </RailButton>
       ))}
 

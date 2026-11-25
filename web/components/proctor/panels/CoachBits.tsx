@@ -9,17 +9,27 @@
  * equipment fix carries GEAR_FIX_LABEL. None of the three is ever rendered
  * without its label. */
 
-import { ArrowRight, CircleCheck, CircleHelp, Target, TriangleAlert } from "lucide-react";
+import { ArrowRight, CircleCheck, CircleHelp, Disc3, RotateCw, Route, Target, TrendingUp, TriangleAlert, Waves } from "lucide-react";
 
 import Caveat from "@/components/proctor/ui/Caveat";
 import TechniqueNotes from "@/components/proctor/ui/TechniqueNote";
 import { CH, dim, inkA } from "@/lib/proctor/channels";
-import { ASPECT_LABEL, aspectHeadline, worthLine, type AspectSummary, type Suggestion } from "@/lib/proctor/coach";
+import { worthLine, type AspectKey, type Figure, type Suggestion } from "@/lib/proctor/coach";
 import { PINNABLE } from "@/lib/proctor/focus";
-import { GEAR_FIX_LABEL, type GearCheck, type GearFinding, type Verdict } from "@/lib/proctor/gearCheck";
+import { allGearChecks, frameCell, GEAR_FIX_LABEL, type GearCheck, type GearFinding, type Verdict } from "@/lib/proctor/gearCheck";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
-import type { CoachGates } from "@/lib/proctor/types";
+
+/* Lucide has no steering wheel or brake pedal, so the aspect glyphs are the
+   nearest honest picture: a brake disc, rotation, the throttle's rising line,
+   a route, and the friction of the road. */
+export const ASPECT_ICON: Record<AspectKey, typeof Disc3> = {
+  braking: Disc3,
+  turn_in: RotateCw,
+  throttle: TrendingUp,
+  line: Route,
+  grip: Waves,
+};
 
 export const VERDICT_TONE: Record<Verdict, string> = {
   "gear-first": CH.warn,
@@ -68,14 +78,14 @@ export function typicalLap(times: Record<string, number> | undefined): number | 
 }
 
 /** "Compare lap 4 with lap 6" — opens Laps on that pair, at that corner. */
-export function CompareButton({ lap, corner }: { lap: number; corner?: number }) {
+export function CompareButton({ lap, corner, primary = false }: { lap: number; corner?: number; primary?: boolean }) {
   const { bundle, dispatch } = useProctor();
   const typical = typicalLap(bundle?.drivingAspects?.lap_times_s);
   if (typical == null || typical === lap) return null;
   return (
     <button
       type="button"
-      className="btn btn-secondary"
+      className={primary ? "btn btn-primary" : "btn btn-secondary"}
       onClick={() => {
         dispatch({ t: "lapA", lap });
         dispatch({ t: "lapB", lap: typical });
@@ -83,7 +93,14 @@ export function CompareButton({ lap, corner }: { lap: number; corner?: number })
         dispatch({ t: "view", view: "loss" });
         dispatch({ t: "screen", screen: "analyze" });
       }}
-      style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, padding: "5px 10px" }}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: primary ? 13 : 11.5,
+        fontWeight: primary ? 600 : undefined,
+        padding: primary ? "8px 14px" : "5px 10px",
+      }}
     >
       Compare lap {lap} with lap {typical}
       <ArrowRight size={13} strokeWidth={1.7} aria-hidden />
@@ -92,7 +109,7 @@ export function CompareButton({ lap, corner }: { lap: number; corner?: number })
 }
 
 /** Make this suggestion the one thing to carry into the next session. */
-export function PinButton({ s }: { s: Suggestion }) {
+export function PinButton({ s, big = false }: { s: Suggestion; big?: boolean }) {
   const { focus, pinFocus } = useProctor();
   if (!PINNABLE.includes(s.key)) return null;
   const pinned = focus != null && focus.rule_key === s.key && focus.title === s.title;
@@ -107,8 +124,9 @@ export function PinButton({ s }: { s: Suggestion }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        fontSize: 11.5,
-        padding: "5px 10px",
+        fontSize: big ? 13 : 11.5,
+        fontWeight: big ? 600 : undefined,
+        padding: big ? "8px 14px" : "5px 10px",
         color: pinned ? CH.a : undefined,
       }}
     >
@@ -149,17 +167,24 @@ export function SuggestionCard({
   s,
   showWhy = true,
   big = false,
+  figures,
+  actions,
 }: {
   s: Suggestion;
   showWhy?: boolean;
   big?: boolean;
+  /** The hero's stat row: replaces the worth line, which it contains. */
+  figures?: Figure[];
+  /** Drawn after the buttons, on their row (the hero's gear chip). */
+  actions?: React.ReactNode;
 }) {
   return (
     <article>
       <div
         style={{
-          font: `500 ${big ? 22 : 15}px/1.25 var(--font-heading)`,
-          letterSpacing: big ? "-.01em" : undefined,
+          font: big
+            ? "var(--font-heading-weight) clamp(22px, 2.4vw + 12px, 30px)/1.14 var(--font-heading)"
+            : "var(--font-heading-weight) 15px/1.25 var(--font-heading)",
           textWrap: "balance",
           color: s.blocked ? dim(55) : "var(--color-text)",
           textDecoration: s.blocked ? "line-through" : undefined,
@@ -168,20 +193,33 @@ export function SuggestionCard({
       >
         {s.title}
       </div>
-      <div
-        className="num"
-        style={{ marginTop: 6, fontSize: big ? 13 : 11.5, color: s.linked ? CH.warn : CH.loss }}
+      {figures && figures.length > 0 ? (
+        <StatRow figures={figures} />
+      ) : (
+        <div
+          className="num"
+          style={{ marginTop: 6, fontSize: big ? 13 : 11.5, color: s.linked ? CH.warn : CH.loss }}
+        >
+          {s.linked ? "" : "seems to be "}
+          {worthLine(s)}
+        </div>
+      )}
+      <p
+        style={{
+          margin: "var(--space-3) 0 0",
+          fontSize: big ? 14 : 12.5,
+          lineHeight: 1.6,
+          color: big ? "var(--color-neutral-300)" : dim(72),
+          maxWidth: 680,
+        }}
       >
-        {s.linked ? "" : "seems to be "}
-        {worthLine(s)}
-      </div>
-      <p style={{ margin: "var(--space-2) 0 0", fontSize: big ? 13.5 : 12.5, lineHeight: 1.6, color: dim(72), maxWidth: 680 }}>
         {s.evidence}
       </p>
-      {!s.blocked && (s.laps.length > 0 || PINNABLE.includes(s.key)) && (
-        <div style={{ marginTop: "var(--space-3)", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {s.laps.length > 0 && <CompareButton lap={s.laps[0]} corner={s.corners[0]} />}
-          <PinButton s={s} />
+      {((!s.blocked && (s.laps.length > 0 || PINNABLE.includes(s.key))) || actions) && (
+        <div style={{ marginTop: "var(--space-4)", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {!s.blocked && s.laps.length > 0 && <CompareButton lap={s.laps[0]} corner={s.corners[0]} primary={big} />}
+          {!s.blocked && <PinButton s={s} big={big} />}
+          {actions}
         </div>
       )}
       {s.blocked && (
@@ -221,64 +259,77 @@ export function WorthBar({ value, max, linked }: { value: number | null; max: nu
   );
 }
 
-export function AspectTile({
-  a,
-  max,
-  gates,
-  Icon,
-}: {
-  a: AspectSummary;
-  max: number;
-  gates: CoachGates | null;
-  Icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
-}) {
-  const { dispatch } = useProctor();
-  const top = a.suggestions.find((s) => s.key !== "drift.improving");
-  return (
-    <button
-      type="button"
-      className="pk coach-tile"
-      onClick={() => dispatch({ t: "aspect", aspect: a.key })}
-      style={{
-        textAlign: "left",
-        border: 0,
-        cursor: "pointer",
-        background: "var(--color-surface)",
-        borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-sm)",
-        padding: "var(--space-4)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--space-2)",
-        color: "var(--color-text)",
-        minWidth: 0,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, color: dim(60) }}>
-        <Icon size={16} strokeWidth={1.6} />
-        <span style={{ font: "500 12.5px var(--font-heading)", color: "var(--color-text)" }}>{ASPECT_LABEL[a.key]}</span>
-        <span style={{ flex: 1 }} />
-        <ArrowRight size={13} strokeWidth={1.6} />
-      </div>
-      <div className="num" style={{ font: "500 22px var(--font-heading)", color: a.atStakeS ? (a.linked ? CH.warn : CH.loss) : dim(40) }}>
-        {a.atStakeS == null ? "—" : `${a.atStakeS.toFixed(2)} s`}
-        <span style={{ fontSize: 11, marginLeft: 6, color: dim(42), fontWeight: 400 }}>
-          {a.atStakeS == null ? "not measured" : a.linked ? "went with" : "up to, a lap"}
-        </span>
-      </div>
-      <WorthBar value={a.atStakeS} max={max} linked={a.linked} />
-      <div style={{ fontSize: 12, lineHeight: 1.5, color: dim(70), minHeight: 36 }}>
-        {top ? top.title : aspectHeadline(a, gates)}
-      </div>
-      {a.tendency && <div style={{ fontSize: 11, lineHeight: 1.5, color: dim(46) }}>{a.tendency}</div>}
-      <div style={{ marginTop: "auto", paddingTop: 4 }}>
-        <GearChip check={a.gear} />
-      </div>
-    </button>
-  );
-}
-
 export function GearChip({ check }: { check: GearCheck }) {
   if (!check.findings.length) return <span style={{ fontSize: 10.5, color: dim(38) }}>nothing on the rig decides this</span>;
   return <VerdictChip verdict={check.verdict} />;
+}
+
+const FIGURE_TONE: Record<Figure["tone"], string> = {
+  loss: CH.loss,
+  warn: CH.warn,
+  gain: CH.gain,
+  neutral: "var(--color-text)",
+};
+
+/** Up to four figures between hairlines: a muted label over a mono value in
+ *  its tone. Every value is formatted in coach.ts from the report. On a phone
+ *  it is a two-by-two grid (`.stat-row` in globals.css). */
+export function StatRow({ figures }: { figures: Figure[] }) {
+  return (
+    <div className="stat-row">
+      {figures.map((f) => (
+        <div key={f.label} style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11.5, lineHeight: 1.35, color: "var(--color-neutral-500)" }}>{f.label}</div>
+          <div className="num" style={{ fontSize: 22, marginTop: 2, color: FIGURE_TONE[f.tone], whiteSpace: "nowrap" }}>
+            {f.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const DEVICE: Record<"braking" | "throttle" | "turn_in", string> = {
+  braking: "Brake pedal",
+  throttle: "Throttle",
+  turn_in: "Wheel",
+};
+
+/** You or your gear, one cell a device: what each pedal and the wheel
+ *  reported, then the PC's frame rate as context. Opens the Gear screen. */
+export function GearStrip() {
+  const { bundle, dispatch } = useProctor();
+  if (!bundle) return null;
+  const checks = allGearChecks({
+    inputResponse: bundle.inputResponse,
+    hardware: bundle.hardware,
+    reportCard: bundle.reportCard,
+  });
+  const pc = frameCell(bundle.reportCard);
+  const cells = [
+    ...checks.map((g) => ({
+      key: g.aspect,
+      title: DEVICE[g.aspect as keyof typeof DEVICE] ?? g.aspect,
+      tone: g.findings.length ? VERDICT_TONE[g.verdict] : "var(--color-text)",
+      line: g.findings.length ? VERDICT_WORDS[g.verdict] : "nothing measured",
+    })),
+    { key: "pc", title: "PC", tone: pc.dipped ? CH.warn : "var(--color-text)", line: pc.line },
+  ];
+  return (
+    <div className="gear-strip" role="list" aria-label="You or your gear?">
+      {cells.map((c) => (
+        <button
+          key={c.key}
+          type="button"
+          role="listitem"
+          className="pk gear-cell"
+          onClick={() => dispatch({ t: "screen", screen: "hardware" })}
+          title="Open Gear"
+        >
+          <span style={{ display: "block", color: c.tone, fontWeight: 600 }}>{c.title}</span>
+          <span style={{ display: "block", color: "var(--color-neutral-500)", marginTop: 2 }}>{c.line}</span>
+        </button>
+      ))}
+    </div>
+  );
 }

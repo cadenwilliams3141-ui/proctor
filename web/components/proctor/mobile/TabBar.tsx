@@ -2,7 +2,6 @@
 
 import { Armchair, LayoutGrid, ListOrdered, Sparkles } from "lucide-react";
 
-import { CH, dim } from "@/lib/proctor/channels";
 import { useProctor, type Screen } from "@/lib/proctor/store";
 
 /* Four tabs: Sessions, Coach, Lap, Gear. Upload and the rig builder are desktop
@@ -58,11 +57,25 @@ export default function TabBar() {
               borderRadius: 10,
               border: 0,
               background: "transparent",
-              color: active ? CH.a : dim(38),
+              color: active ? "var(--ch-a)" : "var(--color-neutral-500)",
             }}
           >
-            <Icon size={21} strokeWidth={1.7} />
-            <span style={{ font: "500 10px var(--font-heading)", letterSpacing: ".01em" }}>
+            {/* Carbon: the active tab's glyph sits in a filled cyan pill, as
+                the active screen does on the desktop rail. */}
+            <span
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: 46,
+                height: 28,
+                borderRadius: 999,
+                background: active ? "var(--color-accent)" : "transparent",
+                color: active ? "var(--color-on-accent)" : undefined,
+              }}
+            >
+              <Icon size={20} strokeWidth={1.8} />
+            </span>
+            <span style={{ font: "var(--font-heading-weight) 10.5px var(--font-heading)", letterSpacing: ".02em" }}>
               {label}
             </span>
           </button>

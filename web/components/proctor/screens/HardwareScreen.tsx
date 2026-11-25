@@ -230,7 +230,7 @@ export default function HardwareScreen() {
 
   return (
     <div
-      className="scrollpane screen-pad"
+      className="scrollpane screen-pad roomy"
       style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}
     >
       {guided && (

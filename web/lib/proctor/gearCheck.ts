@@ -325,6 +325,15 @@ function frameContext(rc: ReportCardData | null): string | undefined {
   return undefined;
 }
 
+/** The PC, in a few words for the gear strip's last cell. Context only: a
+ *  frame-rate dip never decides an aspect's verdict. */
+export function frameCell(rc: ReportCardData | null): { dipped: boolean; line: string } {
+  const fh = rc?.frame_health;
+  if (!fh || !fh.available) return { dipped: false, line: "frame rate not recorded" };
+  if (fh.sub_60_seconds > 0) return { dipped: true, line: `${one(fh.sub_60_seconds)} s under 60 fps` };
+  return { dipped: false, line: "never under 60 fps" };
+}
+
 const HEADLINE: Record<Verdict, string> = {
   "gear-first": "Check your gear first",
   "looks-like-you": "Looks like you, not your gear",

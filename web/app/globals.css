@@ -319,6 +319,16 @@ button[disabled] {
 .btn-secondary:hover {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
 }
+/* A link-weight button: no border, muted until hovered. */
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-neutral-300);
+}
+.btn-ghost:hover {
+  color: var(--color-text);
+  background: var(--color-raised);
+}
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -640,7 +650,7 @@ button[disabled] {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Tailwind + shadcn bridge. shadcn's semantic names are mapped onto Nocturne
+   Tailwind + shadcn bridge. shadcn's semantic names are mapped onto Carbon
    so any shadcn component dropped in inherits the system rather than fighting
    it. Gives utilities like bg-surface, text-accent-300, border-divider.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -722,13 +732,13 @@ button[disabled] {
   .lap-rail {
     width: 100%;
     max-height: 38vh;
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 -1px 0 var(--color-line);
   }
   .icon-rail {
     width: 100% !important;
     flex-direction: row !important;
     justify-content: space-between;
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 -1px 0 var(--color-line);
   }
   /* The switch-to-phone link is pushed to the foot of a column rail; in a row
      it belongs at the end of the row instead. */
@@ -736,10 +746,18 @@ button[disabled] {
     margin-top: 0 !important;
     padding-bottom: 0 !important;
   }
+  .icon-rail {
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 8px 12px !important;
+    gap: 4px !important;
+  }
+  .icon-rail .rail-btn { width: 36px; height: 36px; border-radius: 10px; }
+  .icon-rail .rail-divider { width: 1px !important; height: 20px !important; margin: 0 4px !important; }
 }
 
 /* ── Controls under a finger ─────────────────────────────────────────────────
-   Nocturne is dense on purpose (density 0.70x) and that density is right for a
+   The lap views are dense on purpose (density 0.70x) and that density is right for a
    pointer: the lap rail's rows are 28px, the view and detail switchers 24-25px,
    the corner blocks 26px. Under a fingertip those same controls are a coin
    toss, and a tablet gets THIS app rather than the phone one by an explicit
@@ -867,7 +885,7 @@ button[disabled] {
 /* ── The Rig screen ──────────────────────────────────────────────────────────
    The 3D stage and what floats over it. In CSS rather than inline for the same
    reason as the rules above: hover, data-attribute states and a breakpoint are
-   things an inline style object cannot say. Nocturne tokens only.
+   things an inline style object cannot say. Carbon tokens only.
 
    The captions and the selection ring are positioned every frame by
    views/RigScene.tsx writing `transform` directly, so nothing here sets one. */
@@ -1441,7 +1459,7 @@ button[disabled] {
    An exploded car that fills the workspace, with chrome laid over it. In CSS
    for the same reason as the Rig screen above: hover, data-attribute states
    and a scroll container are things an inline style object cannot say.
-   Nocturne tokens only.
+   Carbon tokens only.
 
    The tags (.ana-label) are positioned every frame by views/AnatomyScene.tsx,
    which writes `transform`, `opacity` and the tag's own offsets directly — so
@@ -1784,31 +1802,142 @@ button[disabled] {
   }
 }
 
-/* ── Coach and aspect screens ────────────────────────────────────────────────
-   Five aspect tiles in a row on a desktop, folding to three, two and one as the
-   window narrows. The hero's track map drops under the text on a narrow window
-   rather than squeezing the sentence. */
-.coach-tiles {
+/* ── Coach and aspect screens (Carbon) ───────────────────────────────────────
+   Two columns from 1100px: the work on the left (the one thing, or an aspect's
+   sections), "Your driving" on the right as a stack of cards. Under 1100px the
+   stack drops below the work rather than squeezing either. */
+.carbon-split {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr);
+  gap: var(--space-6);
+  align-items: start;
 }
-.coach-tile {
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+.carbon-split > .carbon-side {
+  position: sticky;
+  top: 0;
 }
-.coach-tile:hover {
-  box-shadow: var(--shadow-sm), inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+@media (max-width: 1100px) {
+  .carbon-split { grid-template-columns: minmax(0, 1fr); }
+  .carbon-split > .carbon-side { position: static; }
 }
-@media (max-width: 1280px) {
-  .coach-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* Coach, aspect and gear screens breathe more than the dense lap views: the
+   spacing scale, about 1.25x, inside these containers only. */
+.roomy {
+  --space-1: 3.5px;
+  --space-2: 7px;
+  --space-3: 10.5px;
+  --space-4: 14px;
+  --space-5: 18px;
+  --space-6: 21px;
+  --space-8: 28px;
+}
+
+/* The one thing: a card with the text on the left, the track map on its own
+   darker panel on the right, and the you-or-your-gear strip as its footer. */
+.coach-hero {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.coach-hero-body {
+  display: flex;
+}
+.coach-hero-text {
+  flex: 1;
+  min-width: 0;
+  padding: 24px;
+}
+.coach-hero-map {
+  width: 300px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--color-rail);
+  border-left: 1px solid var(--color-line);
 }
 @media (max-width: 860px) {
-  .coach-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .coach-hero { flex-direction: column; }
-  .coach-hero-map { width: 100% !important; }
+  .coach-hero-body { flex-direction: column; }
+  .coach-hero-map { width: auto; border-left: 0; border-top: 1px solid var(--color-line); padding: 12px 0; }
+  .coach-hero-text { padding: 18px; }
   .aspect-where { grid-template-columns: minmax(0, 1fr) !important; }
   .aspect-answer { flex-direction: column; }
 }
-@media (max-width: 520px) {
-  .coach-tiles { grid-template-columns: minmax(0, 1fr); }
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin-top: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+@media (max-width: 600px) {
+  .stat-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.gear-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--color-line);
+}
+.gear-cell {
+  padding: 12px 16px;
+  border: 0;
+  border-right: 1px solid var(--color-line);
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  cursor: pointer;
+  min-width: 0;
+}
+.gear-cell:last-child { border-right: 0; }
+.gear-cell:hover { background: var(--color-raised); }
+@media (max-width: 600px) {
+  .gear-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gear-cell:nth-child(2n) { border-right: 0; }
+  .gear-cell:nth-child(-n + 2) { border-bottom: 1px solid var(--color-line); }
+}
+
+/* An aspect in "Your driving": a bordered card, outlined in cyan when it is the
+   one thing's aspect or the screen it opens is the one showing. */
+.aspect-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.aspect-card:hover { border-color: var(--color-line-strong); background: var(--color-raised); }
+.aspect-card[data-outlined],
+.aspect-card[aria-current="page"] { border-color: var(--color-accent); }
+
+/* ── The rail (Carbon) ───────────────────────────────────────────────────────
+   42px buttons; the active one is filled cyan with a dark glyph. On a short
+   window the buttons shrink before the rail has to scroll. */
+.rail-btn {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-neutral-500);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.rail-btn:hover:not([aria-current="page"]) { background: var(--color-raised); color: var(--color-text); }
+.rail-btn[aria-current="page"] { background: var(--color-accent); color: var(--color-on-accent); }
+@media (max-height: 760px) and (min-width: 721px) {
+  .rail-btn { width: 36px; height: 36px; border-radius: 10px; }
+  .icon-rail { gap: 2px !important; }
 }

@@ -50,6 +50,15 @@ import {
 
 export type { AspectKey, RuleKey };
 
+/** One number in a stat row: a short label over a value that carries its unit.
+ *  Values are always formatted from payload numbers here, never typed. */
+export interface Figure {
+  label: string;
+  value: string;
+  /** loss = time; warn = linked time; gain = what your own quick pass did. */
+  tone: "loss" | "warn" | "gain" | "neutral";
+}
+
 export interface Suggestion {
   key: RuleKey;
   aspect: AspectKey;
@@ -68,6 +77,9 @@ export interface Suggestion {
   why: TechniqueNote | null;
   /** Set when a gear-first finding stops this being shown as technique. */
   blocked: GearFinding | null;
+  /** At most two: what the lead corner's quick pass did, then what you usually
+   *  do — the same numbers the evidence quotes, as figures for a stat row. */
+  figures: Figure[];
 }
 
 export interface AspectSummary {
@@ -246,7 +258,18 @@ interface Hit {
   titleAt: (w: string) => string;
   evidence: string;
   laps: number[];
+  /** The habit in numbers: the quick pass, then the usual. */
+  figures?: Figure[];
 }
+
+/** "lap 4 held the brake" 1.02 s, then "you usually" 0.50 s. */
+function pair(quickLabel: string, quick: string, typical: string, typicalLabel = "you usually"): Figure[] {
+  return [
+    { label: quickLabel, value: quick, tone: "gain" },
+    { label: typicalLabel, value: typical, tone: "neutral" },
+  ];
+}
+const times = (v: number) => `${v.toFixed(Number.isInteger(v) ? 0 : 1)}×`;
 
 function metric(c: AspectCorner, key: keyof AspectCorner["metrics"]): AspectMetric | null {
   const m = c.metrics[key];
@@ -301,6 +324,7 @@ function cornerHits(
           ? `Lap ${best.lap}, your quickest entry to ${t(c.id)}, had ${p0(best.brake_at_turn_in_pct!)} brake at turn-in and held it ${sec(best.trail_s)}; you usually ${p0(med.brake_at_turn_in_pct!)}, ${sec(med.trail_s)}.`
           : `Lap ${best.lap}, your quickest entry to ${t(c.id)}, held the brake ${sec(best.trail_s)} past turn-in; you usually release after ${sec(med.trail_s)}.`,
         laps: [best.lap],
+        figures: pair(`lap ${best.lap} held the brake`, sec(best.trail_s), sec(med.trail_s)),
       });
     } else if (
       stood &&
@@ -321,6 +345,7 @@ function cornerHits(
         titleAt: (w) => `Hold some brake to the turn-in at ${w}`,
         evidence: `You were usually off the brake ${sec(med.trail_s)} before turning in to ${t(c.id)}; lap ${best.lap}, your quickest entry, held it ${sec(best.trail_s)} past.`,
         laps: [best.lap],
+        figures: pair(`lap ${best.lap} held it past turn-in`, sec(best.trail_s), sec(med.trail_s), "you were usually off before"),
       });
     }
     if (stood && (med.restabs ?? 0) >= 1 && best.restabs === 0) {
@@ -334,6 +359,7 @@ function cornerHits(
         titleAt: (w) => `Release the brake in one movement into ${w}`,
         evidence: `Your release into ${t(c.id)} usually pressed the pedal again; lap ${best.lap}, your quickest entry, did not.`,
         laps: [best.lap],
+        figures: pair(`lap ${best.lap} pressed again`, times(best.restabs ?? 0), times(med.restabs ?? 0)),
       });
     }
     if (
@@ -353,6 +379,7 @@ function cornerHits(
         titleAt: (w) => `Blend the brake into the steering at ${w}`,
         evidence: `Between braking and turning into ${t(c.id)} you usually dropped to ${p0(med.transition_min_pct)} of your grip; lap ${best.lap} kept ${p0(best.transition_min_pct)}.`,
         laps: [best.lap],
+        figures: pair(`lap ${best.lap} kept, of your grip`, p0(best.transition_min_pct), p0(med.transition_min_pct), "you usually dropped to"),
       });
     }
     if (
@@ -372,6 +399,7 @@ function cornerHits(
         titleAt: (w) => `Close the gap between brake and throttle in ${w}`,
         evidence: `You usually coast ${sec(med.coast_s)} with neither pedal in ${t(c.id)}; lap ${best.lap} coasted ${sec(best.coast_s)}.`,
         laps: [best.lap],
+        figures: pair(`lap ${best.lap} coasted`, sec(best.coast_s), sec(med.coast_s)),
       });
     }
   }
@@ -395,6 +423,7 @@ function cornerHits(
       titleAt: (w) => `Brake later for ${w}`,
       evidence: `Your quicker passes into ${t(c.id)} (${laps(quickLaps("braking"))}) braked ${m1(bp.typical - bp.quick!)} later than you usually do.`,
       laps: quickLaps("braking"),
+      figures: [{ label: "your quicker passes braked", value: `${m1(bp.typical - bp.quick!)} later`, tone: "gain" }],
     });
   }
 
@@ -410,6 +439,7 @@ function cornerHits(
       titleAt: (w) => `Brake harder at the top of the stop into ${w}`,
       evidence: `Your quicker stops into ${t(c.id)} peaked at ${p0(pk.quick!)}; you usually peak at ${p0(pk.typical)}.`,
       laps: quickLaps("braking"),
+      figures: pair("your quicker stops peaked at", p0(pk.quick!), p0(pk.typical)),
     });
   }
 
@@ -425,6 +455,10 @@ function cornerHits(
       titleAt: (w) => `Ease the first hit of the brake into ${w}`,
       evidence: `${l.laps_with} laps locked a wheel into ${t(c.id)} and were ${sec(l.delta_s)} slower through it than the ${l.laps_without} that didn't.`,
       laps: [],
+      figures: [
+        { label: "laps that locked were slower by", value: sec(l.delta_s), tone: "warn" },
+        { label: "laps that locked a wheel", value: `${l.laps_with} of ${l.laps_with + l.laps_without}`, tone: "neutral" },
+      ],
     });
   }
 
@@ -441,6 +475,7 @@ function cornerHits(
       titleAt: (w) => `Turn in once at ${w}`,
       evidence: `Your quicker passes made ${corr.quick!.toFixed(0)} steering corrections to the apex of ${t(c.id)}; you usually make ${corr.typical.toFixed(0)}.`,
       laps: quickLaps("rotation"),
+      figures: pair("your quicker passes corrected", times(Math.round(corr.quick!)), times(Math.round(corr.typical))),
     });
   }
 
@@ -466,6 +501,7 @@ function cornerHits(
       titleAt: (w) => `Get on the throttle sooner out of ${w}`,
       evidence: `Your quicker exits from ${t(c.id)} ${early.what} ${fromApex(mm.quick!)}; you usually do at ${fromApex(mm.typical)}.`,
       laps: quickLaps("exit"),
+      figures: [{ label: `your quicker exits ${early.what}`, value: `${m1(mm.typical - mm.quick!)} sooner`, tone: "gain" }],
     });
   }
 
@@ -481,6 +517,7 @@ function cornerHits(
       titleAt: (w) => `Commit to one throttle application out of ${w}`,
       evidence: `You usually lift on the way out of ${t(c.id)}; your quicker exits (${laps(quickLaps("exit"))}) did not.`,
       laps: quickLaps("exit"),
+      figures: pair("your quicker exits lifted", times(lifts.quick!), times(lifts.typical), "you usually lift"),
     });
   }
 
@@ -496,6 +533,10 @@ function cornerHits(
       titleAt: (x) => `Squeeze the throttle out of ${x}`,
       evidence: `${w.laps_with} laps spun a wheel out of ${t(c.id)} and were ${sec(w.delta_s)} slower to the next corner than the ${w.laps_without} that didn't.`,
       laps: [],
+      figures: [
+        { label: "laps that spun were slower by", value: sec(w.delta_s), tone: "warn" },
+        { label: "laps that spun a wheel", value: `${w.laps_with} of ${w.laps_with + w.laps_without}`, tone: "neutral" },
+      ],
     });
   }
 
@@ -535,6 +576,10 @@ function cornerHits(
             : `Turn in ${m1(delta)} ${how} at ${w}`,
       evidence: `Your quicker passes through ${t(c.id)} were ${m1(delta)} further ${toward} at ${phase}, across ${om.link.n} laps.`,
       laps: c.corner_total.quick_laps,
+      figures: [
+        { label: `your quicker passes, at ${phase}`, value: `${m1(delta)} ${outside == null ? toward : how}`, tone: "gain" },
+        { label: "laps behind it", value: `${om.link.n}`, tone: "neutral" },
+      ],
     });
   }
   return hits;
@@ -566,6 +611,7 @@ function improvingZones(da: DrivingAspectsData): { set: Set<string>; hits: Hit[]
         titleAt: (w) => `Keep going at ${w}`,
         evidence: `You found ${sec(zone.at_stake_s)} here as the session went on: your quickest passes came late.`,
         laps: zone.quick_laps,
+        figures: [{ label: "found as the session went on", value: sec(zone.at_stake_s), tone: "gain" }],
       });
     }
   }
@@ -624,6 +670,7 @@ function group(
       laps: lead.laps,
       why: why(key, `this fired in ${where(corners)}`),
       blocked,
+      figures: (lead.figures ?? []).slice(0, 2),
     });
   }
   out.sort(
@@ -834,6 +881,34 @@ export function worthLine(s: Suggestion): string {
   return s.linked
     ? `went with up to ${sec(s.atStakeS)} a lap`
     : `up to ${sec(s.atStakeS)} a lap ${s.zone ? ZONE_PHRASE[s.zone] : ""}`.trim();
+}
+
+/** Where the claimed time is, short enough for a stat label. */
+const ZONE_SHORT: Record<AspectZoneKey, string> = {
+  braking: "braking zone",
+  rotation: "turn-in to apex",
+  exit: "apex to full throttle",
+  straight: "the straight",
+};
+
+/** The hero's stat row: what the aspect seems to cost, what this habit is
+ *  worth and where, then the habit itself in the driver's own numbers. At most
+ *  four, every value formatted from the report. */
+export function heroFigures(s: Suggestion, a: AspectSummary | null): Figure[] {
+  const out: Figure[] = [];
+  if (a && a.atStakeS != null && a.atStakeS > 0) {
+    out.push(
+      a.linked
+        ? { label: `${a.label.toLowerCase()} went with`, value: sec(a.atStakeS), tone: "warn" }
+        : { label: `${a.label.toLowerCase()} seems to cost`, value: sec(a.atStakeS), tone: "loss" },
+    );
+  }
+  out.push(
+    s.linked
+      ? { label: "this habit went with", value: sec(s.atStakeS), tone: "warn" }
+      : { label: s.zone ? `this habit, ${ZONE_SHORT[s.zone]}` : "this habit", value: sec(s.atStakeS), tone: "loss" },
+  );
+  return [...out, ...s.figures].slice(0, 4);
 }
 
 /** The aspect's time in one hedged sentence. */

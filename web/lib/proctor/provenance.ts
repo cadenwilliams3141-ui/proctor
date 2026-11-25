@@ -105,6 +105,22 @@ export const FIELD_PROVENANCE: Record<string, FieldNote> = {
     provenance: "derived",
     note: "Your clean laps only, against your own quickest entry. The grip envelope is your own g-g boundary this session, not a tyre model.",
   },
+  "aspect.at_stake": {
+    provenance: "derived",
+    note: "Your typical pass through each stretch of road against your second-quickest, so a single lucky pass cannot set the target. The quick passes came from different laps and may not all be possible together; the straights between corners are counted but billed to nothing.",
+  },
+  "coach.suggestion": {
+    provenance: "derived",
+    note: "Aimed at what your own quicker passes did this session, never an outside ideal. Proctor cannot see why you did what you did — only that the quick passes did this and the typical ones did not.",
+  },
+  "coach.linked": {
+    provenance: "derived",
+    note: "Time that went with this habit across your laps. It overlaps the braking, turn-in and exit figures and is never added to them.",
+  },
+  "gear.verdict": {
+    provenance: "derived",
+    note: "Read from what the rig reported: the shape of your stops, the throttle's range, the wheel's force. Proctor cannot see the rig itself, and the fixes beside a finding are general equipment advice.",
+  },
   "stint.trend": {
     provenance: "derived",
     note: "A drift across the laps of one run, fitted over your clean laps in the order you drove them. It names no cause: tires, brakes, fuel load, track surface and simply learning the lap all move these numbers, and one session cannot separate them.",

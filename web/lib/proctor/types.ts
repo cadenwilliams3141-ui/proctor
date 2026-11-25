@@ -417,6 +417,35 @@ export interface SteerBand {
   peak_lateral_g?: number;
 }
 
+/** How the hard stops met the session's highest pedal reading. A foot varies
+ *  its peak; a pedal calibrated short reports the same value stop after stop.
+ *  `gear_rule` is the verdict's thresholds, sent by the parser. */
+export interface CeilingShape {
+  hard_stops: number;
+  min_peak_pct: number;
+  flat_tolerance_pct: number;
+  flat_min_ms: number;
+  gear_rule: { min_stops: number; at_ceiling_share: number; full_pct: number };
+  at_ceiling?: number;
+  flat_at_ceiling?: number;
+  flat_with_abs?: number;
+  median_peak_pct?: number;
+  peak_spread_pct?: number;
+}
+
+/** The throttle's lowest and highest readings. Not "throttle while braking":
+ *  a left-foot braker overlaps the pedals on purpose. */
+export type ThrottleRange =
+  | { measured: false; reason: string }
+  | {
+      measured: true;
+      floor_pct: number;
+      ceiling_pct: number;
+      flat_out_holds: number;
+      holds_flat_at_ceiling: number;
+      rule: { floor_watch_pct: number; full_pct: number; hold_s: number };
+    };
+
 /** What you asked the car for against what it did.
  *
  *  Numbers only. The parser used to store a sentence beside most of these, and
@@ -434,6 +463,8 @@ export interface InputResponseData {
     decel_per_pedal_g?: number;
     abs?: AbsBlock;
     stationary_ticks_excluded?: number;
+    /** Absent on sessions ingested before 2026-11-25. */
+    ceiling_shape?: CeilingShape;
   }>;
   throttle: Measured<{
     on_power_ticks: number;
@@ -446,6 +477,8 @@ export interface InputResponseData {
       /** Absent on sessions ingested before 2026-10-15. */
       threshold_pct?: number;
     };
+    /** Absent on sessions ingested before 2026-11-25. */
+    range?: ThrottleRange;
   }>;
   steering: Measured<{
     bands: SteerBand[];
@@ -629,6 +662,8 @@ export interface HardwareData {
     flagged: boolean;
     flag_threshold_pct: number | null;
     reason?: string;
+    /** Clip share per reference-lap corner. Empty before 2026-11-25. */
+    by_corner: { id: number; clipping_pct: number; ticks: number }[];
   };
   /** Column torque in newton-metres. `ffb` is the same force normalised to
    *  whatever the rig's range is set to, so it cannot be compared between
@@ -766,6 +801,8 @@ export type TrailLink =
       measured: true;
       laps: number;
       rho: number | null;
+      /** Two-sided p. Absent on sessions ingested before 2026-11-25. */
+      p?: number | null;
       link: "longer_trail_faster" | "longer_trail_slower" | "none";
       reason?: string;
     };
@@ -825,6 +862,196 @@ export interface TrailBrakingData {
   caveat: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The parts of driving (driving_aspects, module 20)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A Spearman link across laps. p is two-sided, t approximation. */
+export interface AspectLink {
+  rho: number;
+  p: number;
+  n: number;
+}
+
+/** The four stretches each corner is carved into. `straight` is billed to no
+ *  aspect: tow, fuel and gearing live there too. */
+export type AspectZoneKey = "braking" | "rotation" | "exit" | "straight";
+
+/** One stretch of road across the clean laps. `at_stake_s` is the typical pass
+ *  minus the SECOND-quickest — a time driven at least twice. */
+export interface AspectZone {
+  typical_s: number;
+  best_s: number;
+  best_lap: number;
+  second_best_s: number;
+  at_stake_s: number;
+  quick_laps: number[];
+  /** Lap order against zone time: a "best" that came late may just be fuel. */
+  drift: AspectLink | null;
+  per_lap: Record<string, number>;
+  /** The quick passes through THIS zone, over the whole corner. */
+  quick_corner_total_s?: number;
+}
+
+export type AspectMetricKey =
+  | "brake_point_m"
+  | "peak_brake_pct"
+  | "corrections"
+  | "envelope_use_pct"
+  | "min_speed_kmh"
+  | "pickup_m"
+  | "full_m"
+  | "pickup_to_full_s"
+  | "exit_lifts"
+  | "exit_speed_kmh"
+  | "offset_turn_in_m"
+  | "offset_apex_m"
+  | "offset_exit_m";
+
+/** One habit through one corner: typical against the quickest third of passes. */
+export interface AspectMetric {
+  zone: AspectZoneKey | "total";
+  typical: number;
+  quick: number | null;
+  link: AspectLink | null;
+  per_lap: Record<string, number>;
+}
+
+export type AspectSplit =
+  | { measured: false; laps_with: number; laps_without: number; reason: string }
+  | { measured: true; laps_with: number; laps_without: number; delta_s: number };
+
+export interface AspectCorner {
+  id: number;
+  start_pct: number;
+  apex_pct: number;
+  end_pct: number;
+  dir?: "left" | "right" | null;
+  radius_m?: number | null;
+  bounds: {
+    brake_pct: number;
+    turn_in_pct: number;
+    apex_pct: number;
+    full_pct: number;
+    next_brake_pct: number;
+  };
+  braked_laps: number;
+  early_brakers: number[];
+  braking_truncated_at_line: boolean;
+  zones: Record<AspectZoneKey, AspectZone>;
+  corner_total: AspectZone;
+  metrics: Partial<Record<AspectMetricKey, AspectMetric>>;
+  /** Overlapping time: never added to the zones. */
+  linked: {
+    lockup: AspectSplit;
+    wheelspin: AspectSplit;
+    carry: { measured: false; reason: string } | ({ measured: true } & AspectLink);
+  };
+}
+
+/** The gates the suggestion rules apply, sent by the parser so the web carries
+ *  no copy of its own. */
+export interface CoachGates {
+  strong_n: number;
+  strong_p: number;
+  one_corner_p: number;
+  min_at_stake_s: number;
+  one_thing_min_s: number;
+  brake_point_m: number;
+  peak_brake_pts: number;
+  pickup_m: number;
+  corrections: number;
+  line_m: number;
+  dip_pts: number;
+  coast_s: number;
+  drift_rho: number;
+  linked_min_laps_each_side: number;
+}
+
+export interface DrivingAspectsData {
+  reference_lap: number;
+  laps_used: number[];
+  lap_times_s: Record<string, number>;
+  median_lap_s: number;
+  second_best_lap_s: number;
+  best_lap_s: number;
+  actual_gap_s: number;
+  theoretical_gap_s: number;
+  aspects: Record<
+    AspectZoneKey,
+    { at_stake_s: number; corners: { id: number; at_stake_s: number }[]; billed: boolean }
+  >;
+  lead_in: AspectZone;
+  corners: AspectCorner[];
+  track_length_known: boolean;
+  envelope_available: boolean;
+  line_available: boolean;
+  thresholds: {
+    brake_on_pct: number;
+    brake_off_pct: number;
+    turn_in_pct_of_peak_lat: number;
+    full_throttle_pct: number;
+    full_hold_s: number;
+    pickup_pct: number;
+    lift_pct: number;
+    early_brake_mads: number;
+    min_laps: number;
+    quick_share: number;
+  };
+  coach_gates: CoachGates;
+  distance_note?: string;
+  caveat: string;
+}
+
+/** Self-calibrated balance: where the car rotated more or less than the steering
+ *  asked, against this session's own average. Relative, not absolute. */
+export interface BalanceCorner {
+  id: number;
+  start_pct: number;
+  apex_pct: number;
+  end_pct: number;
+  understeer_pct: number;
+  oversteer_pct: number;
+  lean: "understeer" | "oversteer" | "even" | "no divergences here";
+  divergence_ticks: number;
+}
+
+export interface BalanceData {
+  fit_r2: number;
+  divergence_share_pct: number;
+  tendency: { understeer_pct: number; oversteer_pct: number };
+  by_input_state: Record<
+    "braking" | "on_throttle" | "coasting",
+    { understeer_pct: number; oversteer_pct: number; ticks: number }
+  >;
+  corners: BalanceCorner[] | null;
+  cornersReason?: string;
+  yaw_sign_flipped: boolean;
+  caveat: string;
+}
+
+/** report_card's pieces that the aspects read. */
+export interface ReportCardData {
+  /** Release-to-brake handoff. Negative median: brake before the lift. */
+  driving_style: Measured<{
+    median_release_to_brake_ms: number;
+    brake_applications: number;
+    brake_before_lift_pct: number;
+    style_observation: string;
+  }>;
+  frame_health:
+    | { available: false; reason: string }
+    | {
+        available: true;
+        min_fps: number;
+        mean_fps: number;
+        sub_60_ticks: number;
+        sub_60_seconds: number;
+        finding?: string;
+      };
+  caveat: string;
+}
+
 export interface SessionBundle {
   session: SessionMeta;
   laps: Lap[];
@@ -850,6 +1077,10 @@ export interface SessionBundle {
   contactPatch: ContactPatchData | null;
   /** null when the module did not run, or could not (its reason is an absence). */
   trailBraking: TrailBrakingData | null;
+  /** What each part of the driving was worth. Null: did not run, or could not. */
+  drivingAspects: DrivingAspectsData | null;
+  balance: BalanceData | null;
+  reportCard: ReportCardData | null;
   /** Sample count on the shared distance grid. */
   gridSize: number;
   /** Circuit centreline in metres, gridSize long. */

@@ -54,9 +54,14 @@ from tests.synthetic import build_ibt, make_core_channels
 
 R_LAT, R_LON = 33.80, -84.27          # Road-Atlanta-ish corner of the world
 N_CORNERS = 6
+# How far apart the ordinary laps are, as a share of lap time. Laps are a
+# minute long so the corners' zones are long enough to carry tenths, as on a
+# real circuit; a 15-second lap with twelve corners leaves every zone a few
+# milliseconds and no coaching rule anything to find.
+SPREAD = 0.08
 
 
-def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
+def circuit(n_laps=12, ticks_per_lap=3600, slow_lap=None, incident_lap=None,
             clean=True, cap_brake=None, ffb_div=9.0):
     """A lap-by-lap build, so laps can differ in LENGTH and therefore in TIME.
 
@@ -72,7 +77,7 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
     rng = np.random.default_rng(7)
     for L in range(n_laps):
         # Lap 0 is the out lap; the last lap is deliberately partial.
-        pace = 1.0 + 0.028 * rng.random() + (0.06 if L == 0 else 0.0)
+        pace = 1.0 + SPREAD * rng.random() + (0.06 if L == 0 else 0.0)
         if slow_lap is not None and L == slow_lap:
             pace += 0.22                       # a scruffy lap, clearly slower
         m = int(round(ticks_per_lap * pace))
@@ -83,7 +88,16 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
         tau = 2 * np.pi * d
         turn = np.sin(N_CORNERS * tau)
         cp = np.abs(turn)
-        speed = (62.0 - 26.0 * cp ** 1.4) / pace
+        # 0 on the slowest ordinary lap, 1 on the quickest: the habits below
+        # follow it, so driving_aspects finds links between them and zone time
+        # rather than every lap being the same lap scaled.
+        quick = float(np.clip(1.0 - (pace - 1.0) / SPREAD, 0.0, 1.0))
+        hump = np.minimum((2 * N_CORNERS * d).astype(int), 2 * N_CORNERS - 1)
+        # Some corners are where the quick laps were quick: more speed through
+        # them, so their zones carry real time and the coaching has a target.
+        weight = np.array([1.0, 0.1, 0.2, 0.9, 0.1, 0.3, 0.1, 0.8, 0.2, 0.1, 0.6, 0.1])
+        dip = 26.0 - 6.0 * quick * weight[hump]
+        speed = (62.0 - dip * cp ** 1.4) / pace
         if L == 0:
             speed[:10] = 0.0
         if not clean:
@@ -101,12 +115,7 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
         # cp 0.6), and the quicker laps trail longer, so the fixture carries
         # both straight-line and trailed entries and a link between them.
         gain = 0.9 / max(float(-decel.min()), 1e-6)
-        release_cp = float(np.clip(0.95 - (pace - 1.0) / 0.028 * 0.55, 0.35, 0.95))
-        # 0 on the slowest ordinary lap, 1 on the quickest: the habits below
-        # follow it, so driving_aspects finds links between them and zone time
-        # rather than every lap being the same lap scaled.
-        quick = float(np.clip(1.0 - (pace - 1.0) / 0.028, 0.0, 1.0))
-        hump = np.minimum((2 * N_CORNERS * d).astype(int), 2 * N_CORNERS - 1)
+        release_cp = float(np.clip(0.95 - (pace - 1.0) / SPREAD * 0.55, 0.35, 0.95))
         # A real foot does not hit the same peak at every stop. Without this
         # every stop peaks at exactly 90% and the pedal reads as calibrated flat.
         peak = 0.80 + 0.14 * rng.random(2 * N_CORNERS)

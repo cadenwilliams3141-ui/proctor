@@ -16,7 +16,8 @@
  * │ and it is a great deal more useful than a number on its own.            │
  * │                                                                         │
  * │ So: `describe()` states what happened. `lookAt()` points at the moment  │
- * │ worth studying. Neither ever says what to do with the controls.         │
+ * │ worth studying. Neither says what to do with the controls: since        │
+ * │ 2026-11-25 that is coach.ts's job alone, under its own four conditions. │
  * └─────────────────────────────────────────────────────────────────────────┘
  */
 

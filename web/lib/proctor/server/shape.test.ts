@@ -18,6 +18,9 @@ import {
   inputResponseFrom,
   stintFrom,
   trailBrakingFrom,
+  drivingAspectsFrom,
+  balanceFrom,
+  reportCardFrom,
   trackBoundaryFrom,
   trackEdgesFrom,
   trackWidthFrom,
@@ -34,6 +37,9 @@ describe("a module that did not run produces nothing", () => {
     ["stint", stintFrom],
     ["track_width", trackWidthFrom],
     ["hardware", hardwareFrom],
+    ["driving_aspects", drivingAspectsFrom],
+    ["balance", balanceFrom],
+    ["report_card", reportCardFrom],
   ] as const)("%s returns null rather than an empty shape", (key, fn) => {
     expect(fn({ [key]: NOT_RUN })).toBeNull();
     expect(fn({ [key]: FAILED })).toBeNull();
@@ -430,7 +436,7 @@ describe("absences are classified by what would fix them", () => {
         "track_map", "traction_circle", "tire_temps", "lockup_wheelspin",
         "shift_analysis", "hardware", "balance", "report_card", "grip",
         "track_edges", "input_response", "stint", "track_width",
-        "contact_patch", "trail_braking",
+        "contact_patch", "trail_braking", "driving_aspects",
       ].map((k) => [k, k === "tire_temps" ? { ...ok, curve: [1, 2] } : ok]),
     );
     const a = absencesFrom(metrics, { wear_masked: false });
@@ -549,5 +555,53 @@ describe("trail braking", () => {
     expect(t?.corners).toHaveLength(1);
     expect(t?.brake_temperature).toEqual({ available: false, reason: "no channel" });
     expect(t?.thresholds?.turn_in_pct_of_peak_lat).toBe(30);
+  });
+});
+
+describe("the coaching inputs", () => {
+  it("names a session ingested before driving_aspects existed as stale, with the remedy", () => {
+    const a = absencesFrom({}, { wear_masked: false }).find((x) => x.key === "driving_aspects");
+    expect(a?.kind).toBe("stale");
+    expect(a?.short).toMatch(/re-ingest/);
+  });
+
+  it("carries the module's own reason when there were too few clean laps", () => {
+    const a = absencesFrom(
+      { driving_aspects: { insufficient_data: true, reason: "3 clean lap(s); needs at least 4" } },
+      { wear_masked: false },
+    ).find((x) => x.key === "driving_aspects");
+    expect(a?.reason).toBe("3 clean lap(s); needs at least 4");
+  });
+
+  it("reads report_card's handoff as unmeasured, not zero, when it was not measured", () => {
+    const r = reportCardFrom({
+      report_card: {
+        driving_style: { insufficient_data: true, reason: "need >=5 brake applications; found 2" },
+        frame_health: { available: false, reason: "FrameRate channel carried no samples" },
+      },
+    });
+    expect(r?.driving_style).toEqual({ measured: false, reason: "need >=5 brake applications; found 2" });
+    expect(r?.frame_health.available).toBe(false);
+  });
+
+  it("keeps balance's per-corner reason when it could not place corners", () => {
+    const b = balanceFrom({
+      balance: {
+        fit_r2: 0.8,
+        divergence_share_pct: 10,
+        tendency: { understeer_pct: 60, oversteer_pct: 40 },
+        by_input_state: {},
+        by_corner: { available: false, reason: "no corners detected on the reference lap's speed profile" },
+      },
+    });
+    expect(b?.corners).toBeNull();
+    expect(b?.cornersReason).toContain("no corners");
+  });
+
+  it("passes per-corner FFB clipping through, and an older block as an empty list", () => {
+    const now = hardwareFrom({ hardware: { ffb: { clipping_pct: 3, flagged: true, flag_threshold_pct: 2, by_corner: [{ id: 3, clipping_pct: 9.5, ticks: 400 }] } } });
+    expect(now?.ffb.by_corner).toEqual([{ id: 3, clipping_pct: 9.5, ticks: 400 }]);
+    const old = hardwareFrom({ hardware: { ffb: { clipping_pct: 3 } } });
+    expect(old?.ffb.by_corner).toEqual([]);
   });
 });

@@ -14,7 +14,7 @@ const hw = (over: Partial<HardwareData> = {}): HardwareData => ({
     qualifying_ticks: 8812,
     brief: { events: 0, peak_pct: null, max_duration_ms: 50, min_reading_pct: 5 },
   },
-  ffb: { clipping_pct: 0, flagged: false, flag_threshold_pct: 2 },
+  ffb: { clipping_pct: 0, flagged: false, flag_threshold_pct: 2, by_corner: [] },
   steerTorque: { available: false, median_nm: null, peak_nm: null, at_own_max_pct: null },
   brake_bias: { available: false },
   ...over,
@@ -61,7 +61,7 @@ describe("equipmentReadings", () => {
   });
 
   it("takes the FFB watch line from the module, not from this file", () => {
-    const r = byKey(hw({ ffb: { clipping_pct: 3.1, flagged: true, flag_threshold_pct: 2 } }));
+    const r = byKey(hw({ ffb: { clipping_pct: 3.1, flagged: true, flag_threshold_pct: 2, by_corner: [] } }));
     expect(r.ffb.flagged).toBe(true);
     expect(r.ffb.note).toContain("2%");
   });

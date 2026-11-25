@@ -38,6 +38,9 @@ import type {
   TractionData,
   TrailBrakingData,
   TrailCorner,
+  BalanceData,
+  DrivingAspectsData,
+  ReportCardData,
 } from "@/lib/proctor/types";
 
 type Payload = Record<string, unknown>;
@@ -542,6 +545,68 @@ export function trailBrakingFrom(metrics: MetricPayloads): TrailBrakingData | nu
   };
 }
 
+/** What each part of the driving was worth. Null when the module did not run or
+ *  could not (fewer than four clean laps, no corners) — an absence with the
+ *  module's own reason, never an empty screen. The payload is already the shape
+ *  the screens read; this only refuses a block that is not one. */
+export function drivingAspectsFrom(metrics: MetricPayloads): DrivingAspectsData | null {
+  const d = block(metrics, "driving_aspects");
+  if (!ran(d) || !Array.isArray(d.corners) || d.aspects == null || d.coach_gates == null) return null;
+  return d as unknown as DrivingAspectsData;
+}
+
+/** Self-calibrated balance. Below its own fit floor the module reports
+ *  insufficient data, which arrives here as null. */
+export function balanceFrom(metrics: MetricPayloads): BalanceData | null {
+  const b = block(metrics, "balance");
+  if (!ran(b) || b.tendency == null || b.by_input_state == null) return null;
+  const bc = (b.by_corner ?? {}) as Payload;
+  const available = bc.available === true && Array.isArray(bc.corners);
+  return {
+    fit_r2: Number(b.fit_r2),
+    divergence_share_pct: Number(b.divergence_share_pct),
+    tendency: b.tendency as BalanceData["tendency"],
+    by_input_state: b.by_input_state as BalanceData["by_input_state"],
+    corners: available ? (bc.corners as BalanceData["corners"]) : null,
+    cornersReason: available ? undefined : String(bc.reason ?? "balance was not placed on corners"),
+    yaw_sign_flipped: b.yaw_sign_flipped === true,
+    caveat: String(b.caveat ?? ""),
+  };
+}
+
+/** The two pieces of the session report the aspects read: the pedal handoff
+ *  (left-foot braking shows here) and the frame rate. */
+export function reportCardFrom(metrics: MetricPayloads): ReportCardData | null {
+  const r = block(metrics, "report_card");
+  if (!ran(r)) return null;
+  const ds = (r.driving_style ?? {}) as Payload;
+  const fh = (r.frame_health ?? {}) as Payload;
+  return {
+    driving_style:
+      ds.insufficient_data === true || ds.median_release_to_brake_ms == null
+        ? { measured: false, reason: String(ds.reason ?? "the handoff was not measured") }
+        : {
+            measured: true,
+            median_release_to_brake_ms: Number(ds.median_release_to_brake_ms),
+            brake_applications: Number(ds.brake_applications),
+            brake_before_lift_pct: Number(ds.brake_before_lift_pct),
+            style_observation: String(ds.style_observation ?? ""),
+          },
+    frame_health:
+      fh.available === true
+        ? {
+            available: true,
+            min_fps: Number(fh.min_fps),
+            mean_fps: Number(fh.mean_fps),
+            sub_60_ticks: Number(fh.sub_60_ticks),
+            sub_60_seconds: Number(fh.sub_60_seconds),
+            finding: fh.finding == null ? undefined : String(fh.finding),
+          }
+        : { available: false, reason: String(fh.reason ?? "frame rate was not recorded") },
+    caveat: String(r.caveat ?? ""),
+  };
+}
+
 export function stintFrom(metrics: MetricPayloads): StintData | null {
   const s = block(metrics, "stint");
   if (!ran(s) || !Array.isArray(s.laps)) return null;
@@ -790,6 +855,13 @@ export function hardwareFrom(metrics: MetricPayloads): HardwareData | null {
       flagged: flag(ffb.flagged, "force-feedback clipping"),
       flag_threshold_pct: num(ffb.flag_threshold_pct),
       reason: str(ffb.reason),
+      by_corner: Array.isArray(ffb.by_corner)
+        ? (ffb.by_corner as Payload[]).flatMap((c) => {
+            const id = num(c.id);
+            const pct = num(c.clipping_pct);
+            return id != null && pct != null ? [{ id, clipping_pct: pct, ticks: num(c.ticks) ?? 0 }] : [];
+          })
+        : [],
     },
     steerTorque: {
       available: torque.available === true,
@@ -936,6 +1008,7 @@ export function absencesFrom(
     track_width: "The road you used",
     contact_patch: "Between the car and the ground",
     trail_braking: "Trail braking into each corner",
+    driving_aspects: "What each part of your driving was worth",
   };
 
   for (const [key, title] of Object.entries(TITLES)) {

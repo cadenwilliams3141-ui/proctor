@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from proctor_parser.analysis.corners import detect_corners
 from proctor_parser.laps import moving_mask
 from proctor_parser.session import ParsedSession
 
@@ -88,7 +89,7 @@ def compute(session: ParsedSession) -> dict:
     return {
         "basis": _BASIS,
         "pedal_noise_floor": _pedal_noise_floor(throttle, brake_raw, moving, tick_rate),
-        "ffb": _ffb(ffb_stops, moving),
+        "ffb": _with_corners(_ffb(ffb_stops, moving), session),
         "steer_torque": _steer_torque(steer_torque, moving),
         "brake_bias": _brake_bias(session),
         "caveat": _CAVEAT,
@@ -222,6 +223,39 @@ def _ffb(ffb_stops: np.ndarray, moving: np.ndarray) -> dict:
     if clipping_pct == 0.0:
         out["finding"] = "no FFB clipping detected"
     return out
+
+
+def _with_corners(ffb: dict, session: ParsedSession) -> dict:
+    """The FFB block, plus how much of each corner the wheel spent at its stops.
+
+    Per corner because the steering gear check is per corner: a wheel that is
+    clipped through Turn 3 cannot report the front tyres there, so a technique
+    tip about Turn 3's steering is not one the driver could have acted on.
+    Corner ids are the reference lap's, from the same detect_corners call as
+    every other per-corner module.
+    """
+    if ffb.get("insufficient_data"):
+        return ffb
+    clean = [
+        l for l in session.laps
+        if l.is_valid and not l.is_out_lap and not l.is_anomalous and "ffb_stops" in l.raw
+    ]
+    valid = [l for l in session.laps if l.is_valid and l.lap_time_s is not None]
+    if not clean or not valid:
+        return ffb
+    ref = min([l for l in valid if not l.is_anomalous] or valid, key=lambda l: l.lap_time_s)
+    corners = detect_corners(ref.grid["speed"], ref.grid["grid_pct"])
+    rows = []
+    for c in corners:
+        hit = total = 0
+        for lap in clean:
+            dist = lap.raw["dist"]
+            inside = (dist >= c["start_pct"]) & (dist <= c["end_pct"]) & moving_mask(lap.raw["speed"])
+            total += int(np.count_nonzero(inside))
+            hit += int(np.count_nonzero(np.abs(lap.raw["ffb_stops"][inside]) >= 0.99))
+        if total:
+            rows.append({"id": int(c["id"]), "clipping_pct": round(100.0 * hit / total, 2), "ticks": total})
+    return {**ffb, "by_corner": rows}
 
 
 def _steer_torque(steer_torque: np.ndarray | None, moving: np.ndarray) -> dict:

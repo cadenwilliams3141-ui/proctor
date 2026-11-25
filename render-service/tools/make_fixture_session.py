@@ -57,7 +57,7 @@ N_CORNERS = 6
 
 
 def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
-            clean=True, cap_brake=None):
+            clean=True, cap_brake=None, ffb_div=9.0):
     """A lap-by-lap build, so laps can differ in LENGTH and therefore in TIME.
 
     make_core_channels uses a fixed ticks_per_lap, which makes every lap take
@@ -124,7 +124,9 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
             brake_raw[:10] = 0.0
         rx = 900.0 + 260.0 * np.sin(3 * tau)
         wide = 1.0 + np.where(decel > 0, 1.5 * quick * cp, 0.0) / 800.0
-        stops = np.clip(np.clip(lat / 9.0, -1.4, 1.4), -1.0, 1.0)
+        # ffb_div sets how strong the wheel is: 9 pins it through every corner,
+        # 16 only through the fastest few, so per-corner clipping varies.
+        stops = np.clip(np.clip(lat / ffb_div, -1.4, 1.4), -1.0, 1.0)
 
         vals = {
             "Lap": np.full(m, float(L)),
@@ -206,7 +208,7 @@ def main():
     conn = connect()
     for filename, kwargs in [
         ("porsche992rgt3_roadatlanta full 2026-08-30 19-04-11.ibt",
-         dict(n_laps=12, slow_lap=7, incident_lap=9, clean=True)),
+         dict(n_laps=12, slow_lap=7, incident_lap=9, clean=True, ffb_div=16.0)),
         ("porsche992rgt3_roadatlanta full 2026-08-30 20-11-02.ibt",
          dict(n_laps=4, slow_lap=None, incident_lap=None, clean=False)),
         ("porsche992rgt3_roadatlanta full 2026-08-30 21-40-00.ibt",

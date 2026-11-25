@@ -42,6 +42,7 @@ _CAVEAT = (
     "off your own data rather than brought in from outside"
 )
 
+_DEFAULT_TICK_RATE = 60
 _BRAKING = 0.2          # brake_raw above this counts as a braking tick
 _ON_POWER = 0.5         # throttle above this counts as asking for drive
 _MIN_TICKS = 40         # below this a block reports itself unmeasured
@@ -101,10 +102,11 @@ def compute(session: ParsedSession) -> dict:
         )
     }
 
+    rate = session.meta.tick_rate or _DEFAULT_TICK_RATE
     return {
         "basis": _BASIS,
-        "brake": _brake_block(ch, speed, moving),
-        "throttle": _throttle_block(ch, speed, moving),
+        "brake": _brake_block(ch, speed, moving, rate),
+        "throttle": _throttle_block(ch, speed, moving, rate),
         "steering": _steering_block(ch, moving),
         "caveat": _CAVEAT,
     }
@@ -114,7 +116,7 @@ def compute(session: ParsedSession) -> dict:
 # Brake: pedal pressed vs pressure applied
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _brake_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
+def _brake_block(ch: dict, speed: np.ndarray, moving: np.ndarray, rate: int) -> dict:
     pedal = ch.get("brake_raw")
     applied = ch.get("brake")
     if pedal is None or applied is None:
@@ -161,6 +163,10 @@ def _brake_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
             abs_block["finding"] = "the ABS never engaged this session"
         out["abs"] = abs_block
 
+    out["ceiling_shape"] = _ceiling_shape(
+        np.where(moving, pedal, 0.0), float(asked.max()), abs_active, rate,
+    )
+
     # What the braking actually produced, so the pedal has an outcome attached.
     long_accel = ch.get("long_accel")
     if long_accel is not None:
@@ -180,7 +186,7 @@ def _brake_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
 # Throttle: asked for drive vs put it down
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _throttle_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
+def _throttle_block(ch: dict, speed: np.ndarray, moving: np.ndarray, rate: int) -> dict:
     throttle = ch.get("throttle")
     if throttle is None:
         return _unmeasured("the file does not carry a throttle channel")
@@ -194,6 +200,7 @@ def _throttle_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
         "measured": True,
         "on_power_ticks": n,
         "mean_throttle_pct": round(100.0 * float(throttle[on_power].mean()), 1),
+        "range": _throttle_range(throttle, moving, rate),
     }
 
     wheels = [ch.get(f"{w}_speed") for w in _WHEELS]
@@ -221,6 +228,125 @@ def _throttle_block(ch: dict, speed: np.ndarray, moving: np.ndarray) -> dict:
         drive_g = np.maximum(long_accel[on_power], 0.0) / _G
         out["peak_traction_g"] = round(float(np.percentile(drive_g, 98)), 3)
     return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The shape of the pedal's top end: a foot, or a calibration?
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A hard stop: one brake application whose peak reached this much pedal.
+_HARD_STOP = 0.5
+# "Flat" at the ceiling: within this of it, moving no more than this per tick,
+# for at least this long. A foot holding steady still jitters by more than a
+# tenth of a point; a pedal calibrated short reads the same value exactly.
+_FLAT_TOL = 0.001
+_FLAT_MIN_S = 0.15
+# The verdict the web app reads off these numbers (lib/proctor/gearCheck.ts).
+# They travel here so the web never carries a copy of its own. The deciding
+# share is of hard stops landing ON the ceiling: a foot does not find the same
+# value to a tenth of a point stop after stop. ABS on the plateau does not
+# explain a flat BrakeRaw -- that channel is the pedal, read before the ABS --
+# so it is reported but not part of the rule. A ceiling at 100% is the pedal's
+# full travel being used, which is a driver's choice as much as a limit.
+_GEAR_RULE = {"min_stops": 5, "at_ceiling_share": 0.5, "full_pct": 99.5}
+_THROTTLE_RULE = {"floor_watch_pct": 1.0, "full_pct": 99.0, "hold_s": 1.0}
+
+
+def _flat_run(seg: np.ndarray, top: float, min_ticks: int) -> np.ndarray | None:
+    """Ticks of the longest flat stretch of `seg` sitting at `top`, if long enough."""
+    at = np.abs(seg - top) <= _FLAT_TOL
+    steady = np.r_[True, np.abs(np.diff(seg)) <= _FLAT_TOL]
+    flat = at & steady
+    idx = np.flatnonzero(flat)
+    if idx.size < min_ticks:
+        return None
+    runs = np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)
+    longest = max(runs, key=len)
+    return longest if longest.size >= min_ticks else None
+
+
+def _ceiling_shape(pedal: np.ndarray, ceiling: float, abs_active, rate: int) -> dict:
+    """How the hard stops met the session's highest pedal reading.
+
+    Two shapes, two meanings. Peaks that vary stop to stop and rarely sit at
+    the top are a foot choosing how hard to press. Stop after stop flattening
+    at the SAME value below 100% is a pedal that cannot report more -- its
+    calibration or its travel, not the driver. ABS on the plateau is the third
+    reading: the car capping pressure, which is neither.
+    """
+    on = pedal >= 0.05
+    idx = np.flatnonzero(on)
+    min_ticks = max(2, int(round(_FLAT_MIN_S * rate)))
+    base = {
+        "min_peak_pct": round(100.0 * _HARD_STOP, 1),
+        "flat_tolerance_pct": round(100.0 * _FLAT_TOL, 2),
+        "flat_min_ms": round(1000.0 * _FLAT_MIN_S),
+        "gear_rule": dict(_GEAR_RULE),
+    }
+    if idx.size == 0:
+        return {**base, "hard_stops": 0}
+    runs = np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)
+    peaks, at_top, flat, flat_abs = [], 0, 0, 0
+    for r in runs:
+        seg = pedal[r[0] : r[-1] + 1]
+        peak = float(seg.max())
+        if peak < _HARD_STOP:
+            continue
+        peaks.append(peak)
+        if peak >= ceiling - _FLAT_TOL:
+            at_top += 1
+            plateau = _flat_run(seg, ceiling, min_ticks)
+            if plateau is not None:
+                flat += 1
+                if abs_active is not None:
+                    a = abs_active[r[0] : r[-1] + 1][plateau].astype(bool)
+                    if a.size and a.mean() > 0.5:
+                        flat_abs += 1
+    out = {**base, "hard_stops": len(peaks)}
+    if not peaks:
+        return out
+    q75, q25 = np.percentile(peaks, [75, 25])
+    out.update({
+        "at_ceiling": at_top,
+        "flat_at_ceiling": flat,
+        "flat_with_abs": flat_abs,
+        "median_peak_pct": round(100.0 * float(np.median(peaks)), 1),
+        "peak_spread_pct": round(100.0 * float(q75 - q25), 1),
+    })
+    return out
+
+
+def _throttle_range(throttle: np.ndarray, moving: np.ndarray, rate: int) -> dict:
+    """The throttle's lowest and highest readings, and whether flat-out is flat.
+
+    The floor is the 1st percentile of moving readings: a pedal that never
+    returns to zero reads above it. Throttle-while-braking is NOT used, because
+    a left-foot braker overlaps the pedals on purpose.
+    """
+    vals = throttle[moving]
+    if vals.size < _MIN_TICKS:
+        return {"measured": False, "reason": f"only {vals.size} moving throttle readings"}
+    top = float(vals.max())
+    hold = max(2, int(round(_THROTTLE_RULE["hold_s"] * rate)))
+    full = (throttle >= 0.9) & moving
+    idx = np.flatnonzero(full)
+    holds, flat_holds = 0, 0
+    if idx.size:
+        for r in np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1):
+            if r.size < hold:
+                continue
+            holds += 1
+            seg = throttle[r[0] : r[-1] + 1]
+            if float(np.median(np.abs(seg - top))) <= _FLAT_TOL:
+                flat_holds += 1
+    return {
+        "measured": True,
+        "floor_pct": round(100.0 * float(np.percentile(vals, 1)), 2),
+        "ceiling_pct": round(100.0 * top, 2),
+        "flat_out_holds": holds,
+        "holds_flat_at_ceiling": flat_holds,
+        "rule": dict(_THROTTLE_RULE),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

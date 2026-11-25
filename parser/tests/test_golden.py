@@ -78,3 +78,18 @@ def test_golden_parse(token):
         assert 30.0 < lap.lap_time_s < 600.0
     # First lap of the file is never valid (out lap by definition).
     assert all_laps[0].is_valid is False
+
+    # driving_aspects on real driving: every clean lap's zones add up to its
+    # recorded time. Synthetic laps cannot vouch for a real lap's LapDistPct.
+    from proctor_parser.analysis import driving_aspects
+
+    for s in sessions:
+        p = driving_aspects.compute(s)
+        if p.get("insufficient_data"):
+            continue
+        for k, lap_time in p["lap_times_s"].items():
+            total = p["lead_in"]["per_lap"][k] + sum(
+                c["zones"][z]["per_lap"][k]
+                for c in p["corners"] for z in driving_aspects.ZONES
+            )
+            assert total == pytest.approx(lap_time, abs=5e-3)

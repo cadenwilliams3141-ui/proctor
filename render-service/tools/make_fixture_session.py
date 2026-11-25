@@ -14,7 +14,7 @@ hand-written bundle steps over that seam.
     psql "$DATABASE_URL" -f migrations/002_track_boundaries.sql
     DATABASE_URL=... python render-service/tools/make_fixture_session.py
 
-Writes three sessions, chosen because they are the three shapes that break
+Writes four sessions, chosen because they are the shapes that break
 different things:
 
   1. twelve laps, nine of them clean, one flagged  -> the healthy case
@@ -23,6 +23,12 @@ different things:
                                                       which is what exposes a
                                                       spinner that never
                                                       resolves
+  4. session 1 on a brake pedal calibrated short   -> the gear check says
+                                                      "your gear first"
+
+Quicker laps brake later, get to the throttle sooner and run a little wider on
+the exits, so the coaching rules have real links to find; stop peaks vary per
+corner the way a foot's do.
 
 TWO TRAPS THIS FILE EXISTS TO AVOID REPEATING. Both were hit while writing it,
 and both produce a fixture that renders without complaint and proves nothing:
@@ -51,7 +57,7 @@ N_CORNERS = 6
 
 
 def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
-            clean=True):
+            clean=True, cap_brake=None):
     """A lap-by-lap build, so laps can differ in LENGTH and therefore in TIME.
 
     make_core_channels uses a fixed ticks_per_lap, which makes every lap take
@@ -96,20 +102,36 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
         # both straight-line and trailed entries and a link between them.
         gain = 0.9 / max(float(-decel.min()), 1e-6)
         release_cp = float(np.clip(0.95 - (pace - 1.0) / 0.028 * 0.55, 0.35, 0.95))
-        brake = np.clip(-decel * gain, 0, 1) * on
+        # 0 on the slowest ordinary lap, 1 on the quickest: the habits below
+        # follow it, so driving_aspects finds links between them and zone time
+        # rather than every lap being the same lap scaled.
+        quick = float(np.clip(1.0 - (pace - 1.0) / 0.028, 0.0, 1.0))
+        hump = np.minimum((2 * N_CORNERS * d).astype(int), 2 * N_CORNERS - 1)
+        # A real foot does not hit the same peak at every stop. Without this
+        # every stop peaks at exactly 90% and the pedal reads as calibrated flat.
+        peak = 0.80 + 0.14 * rng.random(2 * N_CORNERS)
+        brake = np.clip(-decel * gain, 0, 1) * on * (peak[hump] / 0.9)
         brake[(cp > release_cp) & (decel < 0)] = 0.0
+        # Quicker laps brake later: the start of each stop is trimmed.
+        start_cp = 0.30 + 0.22 * quick
+        brake[(cp < start_cp) & (decel < 0)] = 0.0
+        if cap_brake is not None:
+            # A pedal calibrated short: every hard stop flattens at the cap.
+            brake = np.minimum(brake * 1.25, cap_brake)
         brake_raw = brake.copy()
         if L == 0:
             brake[:10] = 1.0
             brake_raw[:10] = 0.0
         rx = 900.0 + 260.0 * np.sin(3 * tau)
+        wide = 1.0 + np.where(decel > 0, 1.5 * quick * cp, 0.0) / 800.0
         stops = np.clip(np.clip(lat / 9.0, -1.4, 1.4), -1.0, 1.0)
 
         vals = {
             "Lap": np.full(m, float(L)),
             "LapDistPct": np.clip(d, 0, 0.9999),
             "Speed": speed,
-            "Throttle": np.clip(decel * 6.0 + 0.35, 0, 1) * on,
+            # Quicker laps get to the throttle sooner on the way out.
+            "Throttle": np.clip(decel * 6.0 + 0.35 + np.where(decel > 0, 0.25 * quick, 0.0), 0, 1) * on,
             "Brake": brake,
             "BrakeRaw": brake_raw,
             "SteeringWheelAngle": steer,
@@ -122,8 +144,9 @@ def circuit(n_laps=12, ticks_per_lap=900, slow_lap=None, incident_lap=None,
             "Yaw": np.cumsum(lat / np.clip(speed, 1, None)) * 0.016,
             "VelocityX": speed,
             "VelocityY": speed * 0.052 * turn * cp,
-            "Lat": R_LAT + (700.0 * np.sin(tau) + 150.0 * np.sin(2 * tau)) / 111320.0,
-            "Lon": R_LON + (rx * np.cos(tau)) / (111320.0 * np.cos(np.radians(R_LAT))),
+            # ...and run up to ~1.5 m wider on the exits.
+            "Lat": R_LAT + (700.0 * np.sin(tau) + 150.0 * np.sin(2 * tau)) * wide / 111320.0,
+            "Lon": R_LON + (rx * np.cos(tau)) * wide / (111320.0 * np.cos(np.radians(R_LAT))),
             "Alt": 300.0 + 32.0 * np.sin(tau) + 9.0 * np.sin(4 * tau),
             "FuelLevel": np.full(m, 78.0 - 3.9 * L),
             "LFspeed": np.where(brake_raw > 0.55, speed * 0.42, speed),
@@ -188,6 +211,10 @@ def main():
          dict(n_laps=4, slow_lap=None, incident_lap=None, clean=False)),
         ("porsche992rgt3_roadatlanta full 2026-08-30 21-40-00.ibt",
          dict(n_laps=2, slow_lap=None, incident_lap=0, clean=False)),
+        # The healthy session again, on a brake pedal calibrated short: every
+        # hard stop flattens at 82%, so the braking gear check renders gear-first.
+        ("porsche992rgt3_roadatlanta full 2026-08-31 18-02-44.ibt",
+         dict(n_laps=12, slow_lap=7, incident_lap=9, clean=True, cap_brake=0.82)),
     ]:
         data = build_ibt(circuit(**kwargs))
         row = conn.execute(

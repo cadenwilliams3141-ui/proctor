@@ -54,6 +54,20 @@ REVERSAL_MIN_RAD_PER_TICK = 0.005
 # When a lap crossed a point of the track
 # ─────────────────────────────────────────────────────────────────────────────
 
+def lap_distance(lap: ParsedLap, tick_rate: int) -> np.ndarray:
+    """LapDistPct for `lap`, cleaned so it only ever moves forward.
+
+    LapDistPct can still read ~1.0 for the first tick or two after the line;
+    those are the previous lap and are read as 0. A running maximum removes the
+    odd backwards step.
+    """
+    d = lap.raw["dist"].astype(np.float64).copy()
+    head = min(d.size, max(1, int(tick_rate)))
+    first = d[:head]
+    first[first > 0.5] = 0.0
+    return np.maximum.accumulate(d)
+
+
 def crossing_clock(lap: ParsedLap, tick_rate: int) -> Callable[[np.ndarray | float], np.ndarray]:
     """Seconds into `lap` at which it crossed each lap fraction p (0..1).
 
@@ -61,17 +75,9 @@ def crossing_clock(lap: ParsedLap, tick_rate: int) -> Callable[[np.ndarray | flo
     which is exactly how `lap_time_s` is defined), so a set of boundaries that
     starts at 0 and ends at 1 partitions the recorded lap time with nothing
     lost to resampling.
-
-    LapDistPct can still read ~1.0 for the first tick or two after the line;
-    those are the previous lap and are read as 0. A running maximum removes the
-    odd backwards step, so the clock never runs backwards.
     """
-    d = lap.raw["dist"].astype(np.float64).copy()
+    d = lap_distance(lap, tick_rate)
     n = d.size
-    head = min(n, max(1, int(tick_rate)))
-    first = d[:head]
-    first[first > 0.5] = 0.0
-    d = np.maximum.accumulate(d)
     # Strictly increasing for interpolation; the nudge is far below one tick.
     d = d + np.arange(n) * 1e-12
     t = np.arange(n, dtype=np.float64) / tick_rate
@@ -87,8 +93,8 @@ def crossing_clock(lap: ParsedLap, tick_rate: int) -> Callable[[np.ndarray | flo
 
 
 def index_at(dist: np.ndarray, p: float) -> int:
-    """First tick at or past lap fraction p (clamped to the lap)."""
-    i = int(np.searchsorted(np.maximum.accumulate(dist), p))
+    """First tick at or past lap fraction p, on a distance from `lap_distance`."""
+    i = int(np.searchsorted(dist, p))
     return min(max(i, 0), dist.size - 1)
 
 

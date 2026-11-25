@@ -77,6 +77,11 @@ conditions). Both live in the code AND the UI copy.
 - The web writes to Neon in exactly one place: `app/api/focus` (driver_focus, migrations/003). User
   state only, never telemetry; it re-derives everything it saves from the stored session. The site
   has no login — accepted for this row on 2026-11-25.
+- One palette (theme "Carbon" since 2026-11-25, Decisions: "Carbon replaces Nocturne"). Colours
+  live in `app/globals.css` tokens and, for SVG/canvas, `lib/proctor/channels.ts` (`CH`, `INK`,
+  `alpha()`, `inkA()`); fonts are next/font variables (Chakra Petch headings, Inter body, Roboto
+  Mono via `.num`/`.mono`). `palette.test.ts` fails if the two lists drift or if any file in
+  app/, components/ or lib/ spells a hex/rgb/hsl colour of its own — re-theme at the sources.
 - MCP first, CLI fallback.
 
 ## Regression tripwire (the golden fixtures — exact filenames, in OneDrive iRacing\Telemetry)
@@ -100,7 +105,7 @@ conditions). Both live in the code AND the UI copy.
   89.8% ceiling reads as the foot or the pedal. `test_golden.py` checks zone closure on the files.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
   (**186 collected: 180 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**304 tests**). The third suite was missing from this list
+  `cd web && npx vitest run` (**332 tests**). The third suite was missing from this list
   until 2026-09-05 and is the one that covers ingest and the dev tools:
   `cd render-service && python -m pytest tests -q` (**47 tests**).
   If these numbers move, you broke something.

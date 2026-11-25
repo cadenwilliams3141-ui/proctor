@@ -69,6 +69,9 @@
   --space-2: 5.6px;
   --space-3: 8.4px;
   --space-4: 11.2px;
+  /* Used across the app for card padding but never defined until 2026-11-25,
+     so every padding that named it computed to zero. */
+  --space-5: 14px;
   --space-6: 16.8px;
   --space-8: 22.4px;
 

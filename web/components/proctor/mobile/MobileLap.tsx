@@ -9,7 +9,7 @@ import { useMemo } from "react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
-import { CH, deltaColor, dim } from "@/lib/proctor/channels";
+import { CH, MATCHED_BAND_S, deltaColor, dim } from "@/lib/proctor/channels";
 import { fixed, fmtDelta, fmtLap } from "@/lib/proctor/format";
 import { observationShort, ranked } from "@/lib/proctor/ledger";
 import NotDrawable from "@/components/proctor/ui/NotDrawable";
@@ -23,7 +23,7 @@ export default function MobileLap() {
 
   const stack = useMemo(() => {
     if (!ledger) return null;
-    const losses = ledger.corners.filter((c) => c.delta > 0.004);
+    const losses = ledger.corners.filter((c) => c.delta > MATCHED_BAND_S);
     const total = losses.reduce((s, c) => s + c.delta, 0) + Math.max(0, ledger.remainder);
     const worst = Math.max(...ledger.corners.map((c) => c.delta), 1e-6);
     return { losses, total: total || 1, worst, rest: Math.max(0, ledger.remainder) };
@@ -70,6 +70,15 @@ export default function MobileLap() {
           </Eyebrow>
           <span style={{ flex: 1 }} />
           {bundle.session.wear_masked && <span className="tag-warn">wear masked</span>}
+          {/* Live lost its own tab to Coach; it is reached from the lap it replays. */}
+          <button
+            type="button"
+            className="tap"
+            onClick={() => dispatch({ t: "screen", screen: "live" })}
+            style={{ border: 0, background: "transparent", color: CH.a, font: "500 12px var(--font-heading)", padding: "6px 0" }}
+          >
+            Watch it live
+          </button>
         </div>
         <h1 style={{ font: "500 21px/1.2 var(--font-heading)", margin: "5px 0 0" }}>
           {bundle.session.track_name}

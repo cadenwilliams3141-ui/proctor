@@ -1,18 +1,22 @@
 "use client";
 
-import { CirclePlay, Gauge, LayoutGrid, ListOrdered } from "lucide-react";
+import { Armchair, LayoutGrid, ListOrdered, Sparkles } from "lucide-react";
 
 import { CH, dim } from "@/lib/proctor/channels";
 import { useProctor, type Screen } from "@/lib/proctor/store";
 
-/* Four tabs, not six. Session report and Upload are desktop concerns — you are
-   not uploading a file from the sofa, and the report is a reading you do at the
-   rig. The phone carries the four things you actually want after a session. */
-const TABS: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
-  { id: "sessions", label: "Sessions", Icon: LayoutGrid },
-  { id: "analyze", label: "Lap", Icon: ListOrdered },
-  { id: "live", label: "Live", Icon: CirclePlay },
-  { id: "rig", label: "Physics", Icon: Gauge },
+/* Four tabs: Sessions, Coach, Lap, Gear. Upload and the rig builder are desktop
+   concerns — you are not uploading a file from the sofa. The coach is what you
+   want after a session; the lap is the drill-down it points into (Live is
+   reached from there); Gear is whether it was you or the rig.
+
+   A tab can stand for more than one screen: Coach is lit while an aspect is
+   open, Lap while Live is. */
+const TABS: { id: Screen; also: Screen[]; label: string; Icon: typeof LayoutGrid }[] = [
+  { id: "sessions", also: [], label: "Sessions", Icon: LayoutGrid },
+  { id: "coach", also: ["aspect"], label: "Coach", Icon: Sparkles },
+  { id: "analyze", also: ["live"], label: "Lap", Icon: ListOrdered },
+  { id: "hardware", also: ["rig"], label: "Gear", Icon: Armchair },
 ];
 
 export default function TabBar() {
@@ -34,8 +38,8 @@ export default function TabBar() {
         background: "linear-gradient(180deg, transparent, var(--color-bg) 34%)",
       }}
     >
-      {TABS.map(({ id, label, Icon }) => {
-        const active = state.screen === id;
+      {TABS.map(({ id, also, label, Icon }) => {
+        const active = state.screen === id || also.includes(state.screen);
         return (
           <button
             key={id}

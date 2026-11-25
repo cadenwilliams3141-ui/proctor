@@ -1,3 +1,4 @@
+import type { AspectKey } from "@/lib/proctor/coach";
 import type { Metadata } from "next";
 
 import MobileApp from "@/components/proctor/mobile/MobileApp";
@@ -40,7 +41,10 @@ export const viewport = {
    design (see mobile/TabBar.tsx), so a link to one of them cannot be honoured
    here and falls back to the ranked lap read rather than landing on a tab that
    does not exist. */
-const PHONE_SCREENS: Screen[] = ["sessions", "analyze", "live", "rig"];
+const PHONE_SCREENS: Screen[] = ["sessions", "coach", "aspect", "analyze", "live", "hardware"];
+/* Ids from before the 2026-11-25 redesign, kept working for saved links. */
+const RETIRED: Partial<Record<string, Screen>> = { rig: "hardware", report: "coach" };
+const ASPECTS: AspectKey[] = ["braking", "turn_in", "throttle", "line", "grip"];
 
 export default async function MobilePage({
   searchParams,
@@ -56,12 +60,15 @@ export default async function MobilePage({
      ignored, which is worse than not carrying it — the address bar would say
      one thing and the app show another. */
   const asked = one(q.screen) as Screen | undefined;
-  const screen = asked && PHONE_SCREENS.includes(asked) ? asked : "analyze";
+  const screen: Screen =
+    asked && PHONE_SCREENS.includes(asked) ? asked : (asked && RETIRED[asked]) || "coach";
+  const aspect = ASPECTS.includes(one(q.aspect) as AspectKey) ? (one(q.aspect) as AspectKey) : "braking";
 
   return (
     <ProctorProvider
       initialTier={tier}
       initialScreen={screen}
+      initialAspect={aspect}
       skipSplash={q.screen != null || q.view != null}
     >
       <MobileApp />

@@ -6,9 +6,10 @@
 
    The divergences from desktop are DECISIONS, not omissions:
 
-   1. The ranked corner list is the HOME SCREEN, not a tab you find. On a phone
-      you have seconds of attention, so the answer comes first and the evidence
-      is one tap behind it.
+   1. The coach is the HOME SCREEN, not a tab you find. On a phone you have
+      seconds of attention, so the one thing to work on comes first and each
+      part of the driving is one tap behind it. The ranked corner list is the
+      Lap tab, the drill-down the coach points into.
    2. The ribbon is not here AT ALL. A shared-axis lane stack needs a pointer
       and a wide viewport; on a phone it would be five illegible strips. It was
       dropped deliberately rather than shrunk into uselessness.
@@ -25,7 +26,7 @@ import { useProctor } from "@/lib/proctor/store";
 import CornerSheet from "@/components/proctor/mobile/CornerSheet";
 import MobileLap from "@/components/proctor/mobile/MobileLap";
 import MobileLive from "@/components/proctor/mobile/MobileLive";
-import MobileRig from "@/components/proctor/mobile/MobileRig";
+import MobileCoach, { MobileAspect, MobileGear } from "@/components/proctor/mobile/MobileCoach";
 import MobileSessions from "@/components/proctor/mobile/MobileSessions";
 import TabBar from "@/components/proctor/mobile/TabBar";
 import LaunchScreen from "@/components/proctor/shell/LaunchScreen";
@@ -77,10 +78,12 @@ export default function MobileApp() {
           className="scrollpane"
           style={{ flex: 1, minHeight: 0, animation: "fadeIn .25s both" }}
         >
+          {state.screen === "coach" && <MobileCoach />}
+          {state.screen === "aspect" && <MobileAspect />}
           {state.screen === "analyze" && <MobileLap />}
           {state.screen === "sessions" && <MobileSessions />}
           {state.screen === "live" && <MobileLive />}
-          {state.screen === "rig" && <MobileRig />}
+          {(state.screen === "hardware" || state.screen === "rig") && <MobileGear />}
           {/* Space for the tab bar, which floats over the scroll. */}
           <div style={{ height: 120 }} />
         </div>

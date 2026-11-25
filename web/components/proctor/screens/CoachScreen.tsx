@@ -229,7 +229,9 @@ function OneThing() {
               {r.available ? "No single habit stood out this session." : "No coaching for this session yet."}
             </div>
             <p style={{ margin: "var(--space-2) 0 0", fontSize: 13, lineHeight: 1.6, color: dim(62), maxWidth: 640 }}>
-              {one.reason}
+              {/* The module's own words, as a sentence. */}
+              {one.reason.charAt(0).toUpperCase() + one.reason.slice(1)}
+              {/[.!?]$/.test(one.reason) ? "" : "."}
             </p>
             <button
               type="button"

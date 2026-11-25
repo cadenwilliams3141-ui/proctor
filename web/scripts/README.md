@@ -23,6 +23,7 @@ createdb proctordb
 export DATABASE_URL=postgresql://localhost/proctordb
 psql "$DATABASE_URL" -f ../migrations/001_init.sql
 psql "$DATABASE_URL" -f ../migrations/002_track_boundaries.sql
+psql "$DATABASE_URL" -f ../migrations/003_driver_focus.sql
 
 # 2. three session shapes, through the REAL ingest path
 python ../render-service/tools/make_fixture_session.py
@@ -31,7 +32,7 @@ python ../render-service/tools/make_fixture_session.py
 mkdir -p .sweep/bundles
 npm run build && npx next start -p 3210 &
 curl -s localhost:3210/api/sessions             > .sweep/bundles/sessions.json
-for s in 1 2 3; do
+for s in 1 2 3 4; do
   curl -s "localhost:3210/api/session/$s/data"  > .sweep/bundles/s$s.json
   curl -s "localhost:3210/api/session/$s/traces?laps=0,1,2,3" > .sweep/bundles/s${s}t.json
 done

@@ -54,7 +54,15 @@ export default function MobileCoach() {
           </>
         )}
         {one.kind === "none" && (
-          <div style={{ fontSize: 13, lineHeight: 1.6, color: dim(66) }}>{one.reason}</div>
+          <>
+            <div style={{ font: "500 15px/1.4 var(--font-heading)", color: dim(80) }}>
+              {r.available ? "No single habit stood out this session." : "No coaching for this session yet."}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.6, color: dim(66) }}>
+              {one.reason.charAt(0).toUpperCase() + one.reason.slice(1)}
+              {/[.!?]$/.test(one.reason) ? "" : "."}
+            </div>
+          </>
         )}
       </Panel>
 

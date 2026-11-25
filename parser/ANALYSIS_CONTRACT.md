@@ -88,7 +88,11 @@ ParsedLap:
   diagnose. Findings that need more sessions to be trustworthy must carry a
   `"caveat"` string saying so.
 - **Describe, don't prescribe.** Report what the channels show and where —
-  never why the driver did it or what to do differently.
+  never why the driver did it or what to do differently. Since 2026-11-25 the
+  web app's coach (`web/lib/proctor/coach.ts`) composes suggestions FROM these
+  numbers, aimed only at what the driver's own quick passes did; any gate it
+  applies travels in the payload (`driving_aspects.coach_gates`), never as a
+  literal in the web.
 - **Missing ≠ zero.** Absent/insufficient data → explicit
   `{"insufficient_data": true, "reason": ...}` style fields, never silent zeros.
 - **Report negative results.** "No clipping detected" is a finding; include it.

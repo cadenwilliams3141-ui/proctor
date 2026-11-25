@@ -12,6 +12,7 @@ hand-written bundle steps over that seam.
     createdb proctordb
     psql "$DATABASE_URL" -f migrations/001_init.sql
     psql "$DATABASE_URL" -f migrations/002_track_boundaries.sql
+    psql "$DATABASE_URL" -f migrations/003_driver_focus.sql
     DATABASE_URL=... python render-service/tools/make_fixture_session.py
 
 Writes four sessions, chosen because they are the shapes that break

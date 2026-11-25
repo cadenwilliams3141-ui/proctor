@@ -72,6 +72,12 @@ fs.mkdirSync(SHOTS, { recursive: true });
 const B = (n) => JSON.parse(fs.readFileSync(path.join(BUNDLES, n + '.json'), 'utf8'));
 const bundles = { sessions: B('sessions'), 1: B('s1'), 2: B('s2'), 3: B('s3') };
 const traces  = { 1: B('s1t'), 2: B('s2t'), 3: B('s3t') };
+// Session 4 is the healthy session on a pedal calibrated short — the one shape
+// that renders the gear-first states. Optional, for bundles captured before it.
+if (fs.existsSync(path.join(BUNDLES, 's4.json'))) {
+  bundles[4] = B('s4');
+  traces[4] = B('s4t');
+}
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 const DESKTOP = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';

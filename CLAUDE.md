@@ -2,7 +2,9 @@
 
 Read this before doing anything. Proctor is an iRacing .ibt telemetry analysis app.
 Core thesis: every insight compares the driver TO THEMSELVES — no per-car physics models.
-Product identity: observations, not verdicts. This constraint lives in the code AND the UI copy.
+Product identity: observations, not verdicts — and, since 2026-11-25, coaching that points ONLY at
+what the driver's own quick passes already did (`web/lib/proctor/coach.ts` holds its four
+conditions). Both live in the code AND the UI copy.
 
 ## Start-of-session ritual (do this first, every session)
 1. Read the latest Proctor **Build Log** entry in Notion (via Notion MCP — the workspace hub is
@@ -61,6 +63,20 @@ Product identity: observations, not verdicts. This constraint lives in the code 
 - Coaching targets the driver's OWN best execution, never an outside ideal: trail braking points
   at the lap whose entry to a corner was quickest. Thresholds are self-relative where they can be
   (turn-in = lateral g reaching 30% of that lap's own peak) and travel in the payload as numbers.
+- The coach (2026-11-25, Decisions: "Coach in the imperative, aimed at your own best") may say what
+  to try, under four conditions enforced by `coach.test.ts`: the target is something the driver's
+  own quick passes did, quoted with the lap; a Spearman link with a one-sided p and lap count from
+  `driving_aspects.coach_gates` gates it; a gear-first finding (`gearCheck.ts`) replaces any tip it
+  would distort; time is hedged ("seems to cost up to", linked time "went with", never "cost") and
+  the general "why" carries technique.ts's LABEL. Payloads still only describe — the instructions
+  are composed in the web from their numbers.
+- Zone time has one owner: `driving_aspects` (module 20). A lap is carved into braking / rotation /
+  exit / straight per corner and timed from RAW ticks through `zones.crossing_clock`, so the zones
+  sum to the recorded lap time exactly. `at_stake` is typical minus SECOND-best. The onset,
+  turn-in, full-throttle and reversal rules live once, in `analysis/zones.py`.
+- The web writes to Neon in exactly one place: `app/api/focus` (driver_focus, migrations/003). User
+  state only, never telemetry; it re-derives everything it saves from the stored session. The site
+  has no login — accepted for this row on 2026-11-25.
 - MCP first, CLI fallback.
 
 ## Regression tripwire (the golden fixtures — exact filenames, in OneDrive iRacing\Telemetry)
@@ -78,10 +94,13 @@ Product identity: observations, not verdicts. This constraint lives in the code 
   on 2026-10-15 and have NO known-good count yet — record the Long Beach figure here once run.
   Trail braking (`trail_braking`, 2026-10-23: brake at turn-in, trail, coast, the transition dip
   against your own g-g envelope, best entry per corner) likewise has NO known-good numbers yet —
-  run Long Beach on the rig and record a corner or two here.
+  run Long Beach on the rig and record a corner or two here. The same goes for `driving_aspects`
+  (2026-11-25: per-aspect at_stake, theoretical vs actual gap) and `input_response.brake.
+  ceiling_shape` — record Long Beach's hard stops / at-ceiling count, which decides whether the
+  89.8% ceiling reads as the foot or the pedal. `test_golden.py` checks zone closure on the files.
 - If you change the parser or a module, RE-RUN `cd parser && python -m pytest tests -q`
-  (**157 collected: 151 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
-  `cd web && npx vitest run` (**215 tests**). The third suite was missing from this list
+  (**186 collected: 180 pass, 6 golden skip** without the .ibt fixtures on the machine) AND
+  `cd web && npx vitest run` (**304 tests**). The third suite was missing from this list
   until 2026-09-05 and is the one that covers ingest and the dev tools:
   `cd render-service && python -m pytest tests -q` (**47 tests**).
   If these numbers move, you broke something.
@@ -104,5 +123,7 @@ Check the Decisions database in Notion first. If it's there and Active, don't re
 state the prior decision and its rationale. Only revisit if the user explicitly wants to.
 
 ## Honesty rules (code + copy)
-Observations not verdicts. Describe don't prescribe. Missing ≠ zero. Report negative results.
-Limits/ideals come from the driver's own data, labelled as such.
+Observations not verdicts. Payloads describe; only `coach.ts` prescribes, and only toward the
+driver's own quick passes. Missing ≠ zero. Report negative results ("nothing stood out" is a
+result). Limits/ideals come from the driver's own data, labelled as such. Every tip shows its "you
+or your gear?" verdict.

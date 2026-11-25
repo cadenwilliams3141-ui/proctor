@@ -25,8 +25,6 @@ import AnatomyScreen from "@/components/proctor/screens/AnatomyScreen";
 import AspectScreen from "@/components/proctor/screens/AspectScreen";
 import CoachScreen from "@/components/proctor/screens/CoachScreen";
 import LiveScreen from "@/components/proctor/screens/LiveScreen";
-import ReportScreen from "@/components/proctor/screens/ReportScreen";
-import ForcesScreen from "@/components/proctor/screens/ForcesScreen";
 import HardwareScreen from "@/components/proctor/screens/HardwareScreen";
 import SessionsScreen from "@/components/proctor/screens/SessionsScreen";
 import UploadScreen from "@/components/proctor/screens/UploadScreen";
@@ -148,8 +146,6 @@ export default function AppShell() {
             {state.screen === "analyze" && <AnalyzeScreen />}
             {state.screen === "live" && <LiveScreen />}
             {state.screen === "sessions" && <SessionsScreen />}
-            {state.screen === "report" && <ReportScreen />}
-            {state.screen === "rig" && <ForcesScreen />}
             {state.screen === "hardware" && <HardwareScreen />}
             {state.screen === "anatomy" && <AnatomyScreen />}
             {state.screen === "upload" && <UploadScreen />}

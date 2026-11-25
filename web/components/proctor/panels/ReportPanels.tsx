@@ -1,25 +1,9 @@
 "use client";
 
-/* The session report.
- *
- * ┌ THE LAP CHART WAS BACKWARDS ────────────────────────────────────────────┐
- * │ The old chart plotted lap time upward, so a SLOWER lap was drawn        │
- * │ HIGHER. Every reader's instinct says higher is better, and here higher  │
- * │ meant worse — which is most of why it read as confusing. It also mixed  │
- * │ two grammars in one picture: a stem down to a baseline (a bar chart's   │
- * │ idea) with a line joining the tops (a trend's idea), so neither could   │
- * │ be read cleanly.                                                        │
- * │                                                                         │
- * │ It is now one grammar and one direction: bars measuring how far behind  │
- * │ your own best clean lap each lap was, hanging DOWN from a zero line at  │
- * │ the top. Your best lap is the line itself. A short bar is a good lap.   │
- * │ Excluded laps still appear — a lap that vanishes is a lap you cannot    │
- * │ reason about — with their own colour and their own reason on hover.     │
- * └─────────────────────────────────────────────────────────────────────────┘
- *
- * Two other rules this screen keeps: every lap appears, including the ones the
- * analysis excludes; and a module that could not run says WHY, as a finding,
- * rather than rendering an empty card. */
+/* The session-level panels from the retired Session report: every lap against
+ * your best, how the run changed from first lap to last, your controls against
+ * what the car did with them, and the measured cards. Moved, not rewritten —
+ * the Coach and Gear screens show them now. */
 
 import { useMemo, useState } from "react";
 import { Ban, Fuel, Gauge, ShieldCheck, Thermometer, TrendingDown, Waves } from "lucide-react";
@@ -39,181 +23,19 @@ import { useProctor } from "@/lib/proctor/store";
 import { isUsable, type Lap, type StintSeries } from "@/lib/proctor/types";
 import { atLeast } from "@/lib/tier";
 
-/* Absences this screen states in its own words, where the reader went looking
-   for the number. The summary block at the bottom skips them so that one
-   missing measurement is reported once rather than twice.
- *
- * Tier-dependent on purpose: a card that a lower detail level does not render
- * is not voicing anything, so its absence has to fall back through to the
- * summary block. Absences are never tier-gated — hiding a negative result at a
- * lower detail level would leave a gap the reader has to notice themselves.
- *
- * THE SAME RULE APPLIES TO <Evidence>. A section folded behind a disclosure is
- * not voicing anything either, because the reader has to already suspect there
- * is something to find before they will open it. So `input_response` came off
- * this list when ResponseSection moved behind the fold: its absence now falls
- * through to the summary block, which is always visible. Getting this wrong is
- * how the answer-first layout would have quietly deleted a negative result. */
-function voicedHere(deep: boolean): ReadonlySet<string> {
-  const keys = [
-    // Voiced by the always-visible "Fuel used" card. StintSection voices it
-    // too, but that section now sits behind <Evidence> and so cannot be
-    // counted — see the note below.
-    "stint",
-    "grip", // → the "Grip you demonstrated" card (always)
-  ];
-  // The tire card is deep-only.
-  if (deep) keys.push("tire_temp_curve", "tire_temps");
-  return new Set(keys);
-}
-
-export default function ReportScreen() {
-  const { bundle, state } = useProctor();
-
-  const stats = useMemo(() => {
-    if (!bundle) return null;
-    const clean = bundle.laps.filter(isUsable);
-    const times = clean.map((l) => l.lap_time_s as number);
-    if (times.length === 0) return { clean, times, mean: 0, sd: 0, best: null as number | null };
-    const mean = times.reduce((s, v) => s + v, 0) / times.length;
-    const sd = Math.sqrt(times.reduce((s, v) => s + (v - mean) ** 2, 0) / times.length);
-    return { clean, times, mean, sd, best: Math.min(...times) };
-  }, [bundle]);
-
-  if (!bundle || !stats) {
-    return <div style={{ padding: "var(--space-8) var(--space-6)", color: dim(45) }}>Reading…</div>;
-  }
-
-  const { session } = bundle;
-  const deep = atLeast(state.tier, "deep");
-
-  return (
-    <div className="scrollpane" style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          gap: "var(--space-6)",
-          flexWrap: "wrap",
-          rowGap: "var(--space-4)",
-        }}
-      >
-        <div style={{ minWidth: 260 }}>
-          <Eyebrow color="var(--color-accent-300)">session report</Eyebrow>
-          <h1 style={{ fontSize: 26, margin: "6px 0 4px" }}>{session.track_name ?? "Unknown track"}</h1>
-          <div
-            style={{
-              fontSize: 12,
-              color: dim(48),
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            <span>
-              {[session.car_name, session.session_type, fmtDay(session.recorded_at), `${session.lap_count} ${session.lap_count === 1 ? "lap" : "laps"}`]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-            {session.wear_masked && <span className="tag-warn">wear masked</span>}
-          </div>
-        </div>
-        <span style={{ flex: 1 }} />
-        <div style={{ display: "flex", gap: "var(--space-6)", flexWrap: "wrap" }}>
-          {[
-            { l: "best clean lap", v: stats.best == null ? "—" : fmtLap(stats.best), c: CH.a },
-            { l: "clean laps", v: `${stats.clean.length} of ${bundle.laps.length}` },
-            { l: "your spread", v: stats.times.length ? `${stats.sd.toFixed(3)} s` : "—" },
-            { l: "corners", v: String(bundle.corners.length) },
-          ].map((s) => (
-            <div key={s.l} style={{ textAlign: "right" }}>
-              <Eyebrow size={9.5}>{s.l}</Eyebrow>
-              <div
-                className="num"
-                style={{ font: "500 24px var(--font-heading)", color: s.c, marginTop: 2 }}
-              >
-                {s.v}
-              </div>
-            </div>
-          ))}
-        </div>
-      </header>
-
-      <div style={{ marginTop: "var(--space-6)" }}>
-        <Lede item={explainSession(bundle.laps, stats.clean)} />
-      </div>
-
-      {/* ── The evidence ─────────────────────────────────────────────────────
-          Everything below proves the paragraph above. It is one click away, not
-          gone — and the absences it would otherwise have voiced now fall
-          through to the always-visible block at the foot of the screen. See
-          voicedHere. */}
-      <Evidence
-        label="Show every lap against your best"
-        hint={`${bundle.laps.length} laps, ${stats.clean.length} of them clean`}
-      >
-        <div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
-            <h2 style={{ fontSize: 13, margin: 0 }}>Every lap, against your own best</h2>
-            <span style={{ fontSize: 11, color: dim(40) }}>
-              bars hang down from your best clean lap — a short bar is a quick lap
-            </span>
-          </div>
-          <LapChart best={stats.best} sd={stats.sd} />
-        </div>
-      </Evidence>
-
-      <Evidence
-        label="Show how the run changed from start to finish"
-        hint="lap time, brake response, tyre surface and fuel, in lap order"
-      >
-        <StintSection />
-      </Evidence>
-
-      <Evidence
-        label="Show your inputs against what the car did with them"
-        hint="pedal versus applied pressure, ABS, wheel slip, steering against grip"
-      >
-        <ResponseSection />
-      </Evidence>
-
-      {/* ── The measured cards ───────────────────────────────────────────── */}
-      <section
-        style={{
-          marginTop: "var(--space-8)",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
-          gap: "var(--space-4)",
-        }}
-      >
-        <MeasuredCards deep={deep} stats={stats} />
-      </section>
-
-      {/* ── What is not here ─────────────────────────────────────────────────
-          One block, below the measurements, grouped by why. Absences that a
-          section above already voiced in its own words are dropped: the reader
-          met them where they went looking for the number, and repeating them
-          here turned one missing thing into two. */}
-      <section style={{ marginTop: "var(--space-8)" }}>
-        <Absences absences={bundle.absences} exclude={voicedHere(deep)} />
-      </section>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The lap chart
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VBW = 1180;
-const VBH = 230;
-const TOP = 26; // the zero line: your best clean lap
-const BOTTOM = 186;
-const LEFT = 46;
-const RIGHT = 1168;
+export const VBW = 1180;
+export const VBH = 230;
+export const TOP = 26; // the zero line: your best clean lap
+export const BOTTOM = 186;
+export const LEFT = 46;
+export const RIGHT = 1168;
 
-function LapChart({ best, sd }: { best: number | null; sd: number }) {
+export function LapChart({ best, sd }: { best: number | null; sd: number }) {
   const { bundle, state, dispatch } = useProctor();
   const [hover, setHover] = useState<number | null>(null);
 
@@ -423,7 +245,7 @@ function LapChart({ best, sd }: { best: number | null; sd: number }) {
   );
 }
 
-function LapTick({ x, n, dim: isDim, strong }: { x: number; n: number; dim?: boolean; strong?: boolean }) {
+export function LapTick({ x, n, dim: isDim, strong }: { x: number; n: number; dim?: boolean; strong?: boolean }) {
   return (
     <text
       x={x}
@@ -438,7 +260,7 @@ function LapTick({ x, n, dim: isDim, strong }: { x: number; n: number; dim?: boo
   );
 }
 
-function Key({ color, label }: { color: string; label: string }) {
+export function Key({ color, label }: { color: string; label: string }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: dim(45) }}>
       <span style={{ width: 10, height: 8, borderRadius: 2, background: color }} />
@@ -451,7 +273,7 @@ function Key({ color, label }: { color: string; label: string }) {
 // Stint: how the run changed
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TREND_ROWS: { key: string; label: string; good: "down" | "up" | "neither" }[] = [
+export const TREND_ROWS: { key: string; label: string; good: "down" | "up" | "neither" }[] = [
   { key: "lap_time_s", label: "Lap time", good: "down" },
   { key: "decel_per_pedal_g", label: "Deceleration per unit of pedal", good: "up" },
   { key: "peak_braking_g", label: "Peak braking", good: "neither" },
@@ -465,7 +287,7 @@ const TREND_ROWS: { key: string; label: string; good: "down" | "up" | "neither" 
    nothing to show can render as one quiet line instead of a full-weight
    heading above an empty box — the empty box being the thing that made a
    session with plenty to say look broken. */
-function SectionHead({ children }: { children: React.ReactNode }) {
+export function SectionHead({ children }: { children: React.ReactNode }) {
   return (
     <h2 style={{ fontSize: 13, margin: "0 0 var(--space-3)" }}>{children}</h2>
   );
@@ -474,7 +296,7 @@ function SectionHead({ children }: { children: React.ReactNode }) {
 /** A section that has nothing to show: the heading, dimmed, and the reason on
  *  the same line. No panel — a panel drawn around nothing is exactly the blank
  *  box this screen had too many of. The sentence is still the module's own. */
-function Unmeasured({ heading, reason }: { heading: string; reason: string }) {
+export function Unmeasured({ heading, reason }: { heading: string; reason: string }) {
   return (
     <section style={{ marginTop: "var(--space-6)" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
@@ -509,10 +331,10 @@ function Unmeasured({ heading, reason }: { heading: string; reason: string }) {
   );
 }
 
-const STINT_HEADING = "How the run changed, first lap to last";
-const RESPONSE_HEADING = "What you asked for, and what the car did with it";
+export const STINT_HEADING = "How the run changed, first lap to last";
+export const RESPONSE_HEADING = "What you asked for, and what the car did with it";
 
-function StintSection() {
+export function StintSection() {
   const { bundle } = useProctor();
   const stint = bundle?.stint ?? null;
 
@@ -595,7 +417,7 @@ function StintSection() {
   );
 }
 
-function TrendRow({
+export function TrendRow({
   row,
   s,
 }: {
@@ -640,7 +462,7 @@ function TrendRow({
   );
 }
 
-function Figure({ label, value, unit }: { label: string; value: string; unit?: string }) {
+export function Figure({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
     <div>
       <Eyebrow size={9}>{label}</Eyebrow>
@@ -656,7 +478,7 @@ function Figure({ label, value, unit }: { label: string; value: string; unit?: s
 // Inputs against response
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ResponseSection() {
+export function ResponseSection() {
   const { bundle } = useProctor();
   const ir = bundle?.inputResponse ?? null;
 
@@ -762,7 +584,7 @@ function ResponseSection() {
 }
 
 /** Two bars on one scale: what was asked for, and what came back. */
-function PairBar({
+export function PairBar({
   label,
   askedLabel,
   asked,
@@ -809,7 +631,7 @@ function PairBar({
 // The measured cards
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MeasuredCards({
+export function MeasuredCards({
   deep,
   stats,
 }: {
@@ -1083,7 +905,7 @@ function MeasuredCards({
   );
 }
 
-function median(a: number[]): number {
+export function median(a: number[]): number {
   const s = [...a].sort((x, y) => x - y);
   return s[Math.floor(s.length / 2)];
 }

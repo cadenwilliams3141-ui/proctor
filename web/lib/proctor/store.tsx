@@ -41,10 +41,8 @@ export type Screen =
   | "sessions"
   | "coach"
   | "aspect"
-  | "report"
   | "analyze"
   | "live"
-  | "rig"
   | "hardware"
   | "anatomy"
   | "upload";

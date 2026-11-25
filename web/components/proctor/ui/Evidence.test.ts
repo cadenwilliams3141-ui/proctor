@@ -115,52 +115,36 @@ describe("Evidence holds charts and tables and nothing else", () => {
 });
 
 describe("a screen that folds evidence still states its absences in the open", () => {
-  it("ReportScreen keeps its Absences block outside every fold", () => {
-    const text = readFileSync("components/proctor/screens/ReportScreen.tsx", "utf8");
+  /* The Session report and Physics screens these rules were written for were
+     retired on 2026-11-25; their panels moved to components/proctor/panels and
+     the rules moved with them, onto the screens that now carry the folds. */
+  it.each([
+    "components/proctor/screens/CoachScreen.tsx",
+    "components/proctor/screens/AspectScreen.tsx",
+  ])("%s keeps its Absences block outside every fold", (path) => {
+    const text = readFileSync(path, "utf8");
     expect(text).toContain("<Absences");
     for (const block of evidenceBlocks(text)) {
       expect(block).not.toContain("<Absences");
     }
   });
 
-  it("ForcesScreen keeps its Absences block outside every fold", () => {
-    /* Added 2026-09-05 with tier gating. This screen had no summary block at
-       all: every absence was voiced by exactly one section, so hiding a
-       section by tier reported its absence nowhere. */
-    const text = readFileSync("components/proctor/screens/ForcesScreen.tsx", "utf8");
-    expect(text).toContain("<Absences");
-    for (const block of evidenceBlocks(text)) {
-      expect(block).not.toContain("<Absences");
-    }
+  it("the coach skips only the absence its hero states, and only when it states it", () => {
+    /* The hero voices driving_aspects' reason when there is no aspect timing.
+       Skipping it at the foot any other time would report it nowhere; listing
+       more keys as voiced here would hide absences no section on this screen
+       states — the session context below is folded and tier-gated. */
+    const text = readFileSync("components/proctor/screens/CoachScreen.tsx", "utf8");
+    expect(text).toContain('const VOICED = new Set(["driving_aspects"]);');
+    expect(text).toContain("exclude={r.available ? undefined : VOICED}");
   });
 
-  it("ForcesScreen does not count a tier-gated section as voicing contact_patch", () => {
-    /* Steps 03 and 05 are the only places contact_patch is voiced and both are
-       deep-only, so the key may be claimed as voiced ONLY under `deep`. If it
-       were listed unconditionally, turning the detail down would skip it in
-       the summary AND hide the section that states it — reported nowhere, which
-       is the failure the 2026-08-27 Decision names. */
-    const text = readFileSync("components/proctor/screens/ForcesScreen.tsx", "utf8");
-    const fn = text.slice(
-      text.indexOf("function voicedHere"),
-      text.indexOf("export default function ForcesScreen"),
-    );
-    expect(fn).toContain('if (deep) keys.push("contact_patch")');
-    const unconditional = fn.slice(0, fn.indexOf("if (deep)"));
-    expect(unconditional).not.toContain('"contact_patch"');
-  });
-
-  it("a folded section is not counted as voicing its absence", () => {
-    /* voicedHere lists the absence keys ReportScreen states in its own words,
-       which the summary block then skips. ResponseSection moved behind a fold,
-       so input_response had to come off that list or its absence would have
-       been skipped by the summary AND hidden by the fold — reported nowhere. */
-    const text = readFileSync("components/proctor/screens/ReportScreen.tsx", "utf8");
-    const fn = text.slice(
-      text.indexOf("function voicedHere"),
-      text.indexOf("export default function ReportScreen"),
-    );
-    expect(fn).not.toContain('"input_response"');
-    expect(fn).toContain('"grip"');
+  it("an aspect screen lists its own absences at the foot whatever the tier", () => {
+    /* Its evidence section is deep-only, so the foot cannot assume a panel up
+       there already said it. The foot filters TO the aspect's keys rather than
+       excluding them. */
+    const text = readFileSync("components/proctor/screens/AspectScreen.tsx", "utf8");
+    expect(text).toContain("VOICED[key].includes(x.key) || x.permanent");
+    expect(text).not.toMatch(/<Absences[^>]*exclude=/);
   });
 });

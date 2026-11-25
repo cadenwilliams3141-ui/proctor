@@ -18,9 +18,13 @@
  * Every number here comes off the coach report or the bundle. Nothing is
  * typed into this file; components/proctor/ui/Literals.test.ts checks. */
 
+import { useMemo } from "react";
 import { Disc3, RotateCw, Route, TrendingUp, Waves } from "lucide-react";
 
 import Absences from "@/components/proctor/ui/Absences";
+import { Evidence } from "@/components/proctor/ui/Answer";
+import { Lede } from "@/components/proctor/ui/Explain";
+import { LapChart, MeasuredCards, StintSection } from "@/components/proctor/panels/ReportPanels";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import TrackMap from "@/components/proctor/ui/TrackMap";
@@ -32,7 +36,9 @@ import {
 } from "@/components/proctor/panels/CoachBits";
 import { CH, dim } from "@/lib/proctor/channels";
 import { ASPECT_LABEL, aspectHeadline, worthLine, type AspectKey, type Suggestion } from "@/lib/proctor/coach";
+import { explainSession } from "@/lib/proctor/explain";
 import { allGearChecks } from "@/lib/proctor/gearCheck";
+import { isUsable } from "@/lib/proctor/types";
 import { fmtDay, fmtLap } from "@/lib/proctor/format";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
@@ -70,7 +76,8 @@ export default function CoachScreen() {
     hardware: bundle.hardware,
     reportCard: bundle.reportCard,
   });
-  const note = hiddenNote(state.tier, deep ? 0 : 1);
+  // Glance hides the drift notes (when there are any) and the session context.
+  const note = hiddenNote(state.tier, deep ? 0 : 1 + (r.suggestions.some((x) => x.key === "drift.improving") ? 1 : 0));
 
   return (
     <div className="scrollpane" style={{ flex: 1, minHeight: 0, padding: "var(--space-6)" }}>
@@ -139,8 +146,17 @@ export default function CoachScreen() {
 
       {deep && <DriftNotes suggestions={r.suggestions} />}
 
+      {/* ── The session as a whole ────────────────────────────────────────
+          From the retired Session report: the one-line read of the laps, every
+          lap against your best, and how the run drifted from first lap to last.
+          Deep and up — the coach above is the answer; this is the context. */}
+      {deep && <SessionContext />}
+
       <section style={{ marginTop: "var(--space-8)" }}>
-        <Absences absences={bundle.absences} exclude={r.available ? VOICED : undefined} />
+        {/* When there is no aspect timing, the hero states why in the module's
+            own words, so the foot does not say it twice. When there is, there
+            is no such absence to skip. */}
+        <Absences absences={bundle.absences} exclude={r.available ? undefined : VOICED} />
       </section>
     </div>
   );
@@ -248,6 +264,45 @@ function OneThing() {
             })}
             apexes={bundle.corners.filter((c) => corners.includes(c.id))}
           />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SessionContext() {
+  const { bundle, state } = useProctor();
+  const stats = useMemo(() => {
+    if (!bundle) return null;
+    const clean = bundle.laps.filter(isUsable);
+    const times = clean.map((l) => l.lap_time_s as number);
+    if (!times.length) return { clean, times, mean: 0, sd: 0, best: null as number | null };
+    const mean = times.reduce((a, v) => a + v, 0) / times.length;
+    const sd = Math.sqrt(times.reduce((a, v) => a + (v - mean) ** 2, 0) / times.length);
+    return { clean, times, mean, sd, best: Math.min(...times) };
+  }, [bundle]);
+  if (!bundle || !stats) return null;
+  return (
+    <section style={{ marginTop: "var(--space-8)" }}>
+      <Eyebrow style={{ marginBottom: "var(--space-3)" }}>The session as a whole</Eyebrow>
+      <Lede item={explainSession(bundle.laps, stats.clean)} />
+      <Evidence label="Show every lap against your best" hint={`${bundle.laps.length} laps, ${stats.clean.length} of them clean`}>
+        <LapChart best={stats.best} sd={stats.sd} />
+      </Evidence>
+      <Evidence label="Show how the run changed from start to finish" hint="lap time, brake response, tyre surface and fuel, in lap order">
+        <StintSection />
+      </Evidence>
+      {/* "everything" promises every panel the session produced. */}
+      {atLeast(state.tier, "everything") && (
+        <div
+          style={{
+            marginTop: "var(--space-6)",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
+            gap: "var(--space-4)",
+          }}
+        >
+          <MeasuredCards deep stats={stats} />
         </div>
       )}
     </section>

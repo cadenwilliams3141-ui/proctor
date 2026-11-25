@@ -16,7 +16,7 @@ const TABS: { id: Screen; also: Screen[]; label: string; Icon: typeof LayoutGrid
   { id: "sessions", also: [], label: "Sessions", Icon: LayoutGrid },
   { id: "coach", also: ["aspect"], label: "Coach", Icon: Sparkles },
   { id: "analyze", also: ["live"], label: "Lap", Icon: ListOrdered },
-  { id: "hardware", also: ["rig"], label: "Gear", Icon: Armchair },
+  { id: "hardware", also: [], label: "Gear", Icon: Armchair },
 ];
 
 export default function TabBar() {

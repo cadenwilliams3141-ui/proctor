@@ -83,7 +83,7 @@ export default function MobileApp() {
           {state.screen === "analyze" && <MobileLap />}
           {state.screen === "sessions" && <MobileSessions />}
           {state.screen === "live" && <MobileLive />}
-          {(state.screen === "hardware" || state.screen === "rig") && <MobileGear />}
+          {state.screen === "hardware" && <MobileGear />}
           {/* Space for the tab bar, which floats over the scroll. */}
           <div style={{ height: 120 }} />
         </div>

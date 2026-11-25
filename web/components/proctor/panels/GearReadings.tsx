@@ -17,6 +17,8 @@ import { Cpu, Disc3, Footprints } from "lucide-react";
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
 import Panel from "@/components/proctor/ui/Panel";
 import { EquipmentCards } from "@/components/proctor/panels/ForcesPanels";
+import { ResponseSection } from "@/components/proctor/panels/ReportPanels";
+import { Evidence } from "@/components/proctor/ui/Answer";
 import { GearFix, VerdictChip } from "@/components/proctor/panels/CoachBits";
 import { dim } from "@/lib/proctor/channels";
 import { gearCheck, type GearCheck, type GearFinding, type Verdict } from "@/lib/proctor/gearCheck";
@@ -122,6 +124,12 @@ export default function GearReadings({ pedals, wheel }: { pedals: string | null;
       <Eyebrow style={{ margin: "var(--space-5) 0 var(--space-3)" }}>The raw readings</Eyebrow>
       <EquipmentCards hw={bundle.hardware} absences={bundle.absences} />
       <Caveat maxWidth={760}>{noteFor("gear.verdict")}</Caveat>
+      {/* From the retired Session report: the pedal against the pressure the
+          car used, the ABS, wheel slip, lock against grip. The rig and the car
+          meet here, so it is read on Gear. */}
+      <Evidence label="Show your inputs against what the car did with them" hint="pedal versus applied pressure, ABS, wheel slip, steering against grip">
+        <ResponseSection />
+      </Evidence>
     </section>
   );
 }

@@ -11,7 +11,6 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
   sessions: { title: "Sessions", sub: "everything the rig watcher has sent" },
   coach: { title: "Coach", sub: "what to work on next, aimed at what your own quick laps did" },
   aspect: { title: "Your driving", sub: "one part of it at a time, against your own quick passes" },
-  report: { title: "Session report", sub: "what this session did, module by module" },
   /* The id stays `analyze` for links people have kept; the screen is the
      lap-against-lap drill-down the coach points into. */
   analyze: { title: "Laps", sub: "any lap of this session against any other" },
@@ -20,10 +19,6 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
      the screen and the readout beside it already states the truth; the subtitle
      now says what is true at every multiplier. */
   live: { title: "Live trace", sub: "where the car was, moment by moment, at a speed you choose" },
-  rig: {
-    title: "Physics",
-    sub: "what you asked for, what the car did with it, and what the ground actually gave",
-  },
   /* Labelled Gear, though its id is `hardware`: `rig` was the Physics screen's
      id and is in links people have kept. See shell/IconRail.tsx. */
   hardware: { title: "Gear", sub: "is it you or your rig? What the pedals and wheel reported, and your setup" },

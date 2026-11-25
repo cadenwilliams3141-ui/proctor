@@ -89,12 +89,15 @@ const VIEWPORTS = [
    a shared-axis lane stack, a map with a delta trace, and a drawn racing line.
    Sweeping only the default meant three of the four had never been looked at,
    and they are 2,100 lines between them. */
+const ASPECT_SCREENS = ['braking', 'turn_in', 'throttle', 'line', 'grip'].map((a) => `aspect&aspect=${a}`);
 const DESKTOP_SCREENS = [
-  'sessions', 'report',
+  'sessions', 'coach', ...ASPECT_SCREENS,
   'analyze', 'analyze&view=ribbon', 'analyze&view=map', 'analyze&view=line',
-  'live', 'rig', 'hardware', 'anatomy', 'upload',
+  'live', 'hardware', 'anatomy', 'upload',
 ];
-const PHONE_SCREENS   = ['sessions', 'analyze', 'live', 'rig'];
+/* The aspect screen is ONE component for five aspects, but each draws different
+   evidence — every one is swept for the same reason every Analyze view is. */
+const PHONE_SCREENS   = ['sessions', 'coach', ...ASPECT_SCREENS, 'analyze', 'live', 'hardware'];
 
 const SESSION = process.env.SWEEP_SESSION || '1';
 const TIER = process.env.SWEEP_TIER || 'deep';

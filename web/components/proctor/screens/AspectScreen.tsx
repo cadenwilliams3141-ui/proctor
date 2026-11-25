@@ -31,7 +31,9 @@ import {
 } from "@/components/proctor/panels/CoachBits";
 import {
   EnvelopeBars,
+  GradeSection,
   GripSection,
+  ResponseRow,
   SlipPanel,
   SlipSection,
   TorqueSection,
@@ -43,7 +45,12 @@ import { ASPECT_LABEL, ASPECT_ORDER, aspectHeadline, type AspectKey } from "@/li
 import { fixed } from "@/lib/proctor/format";
 import { noteFor } from "@/lib/proctor/provenance";
 import { useProctor } from "@/lib/proctor/store";
-import { techniqueForSlip, techniqueForSteerTorque } from "@/lib/proctor/technique";
+import {
+  techniqueForGrade,
+  techniqueForInputResponse,
+  techniqueForSlip,
+  techniqueForSteerTorque,
+} from "@/lib/proctor/technique";
 import type { AspectCorner, AspectMetricKey } from "@/lib/proctor/types";
 import { atLeast } from "@/lib/tier";
 
@@ -75,7 +82,7 @@ const HABITS: Record<AspectKey, { key: AspectMetricKey; label: string; unit: str
 
 /** Module absences each aspect states itself, where the reader looks for them. */
 const VOICED: Record<AspectKey, string[]> = {
-  braking: ["driving_aspects", "trail_braking"],
+  braking: ["driving_aspects", "trail_braking", "input_response"],
   turn_in: ["driving_aspects", "contact_patch"],
   throttle: ["driving_aspects"],
   line: ["driving_aspects", "track_width"],
@@ -382,9 +389,17 @@ function AspectEvidence({ aspect, cornerId }: { aspect: AspectKey; cornerId: num
     <section style={{ marginTop: "var(--space-6)" }}>
       <Eyebrow style={{ marginBottom: "var(--space-3)" }}>The evidence</Eyebrow>
 
-      {aspect === "braking" && cornerId != null && (
+      {aspect === "braking" && (
         <>
-          <IntoTheCorner trail={bundle.trailBraking} corner={trailCorner} id={cornerId} />
+          {cornerId != null && <IntoTheCorner trail={bundle.trailBraking} corner={trailCorner} id={cornerId} />}
+          {/* What the car did with the pedal — the ABS, the pressure it held
+              back — and the slope under the braking zones. From Physics. */}
+          <div style={{ marginTop: "var(--space-4)" }}>
+            <ResponseRow ir={bundle.inputResponse} absences={bundle.absences} />
+          </div>
+          <TechniqueNotes notes={techniqueForInputResponse(bundle.inputResponse)} />
+          <GradeSection cp={bundle.contactPatch} />
+          <TechniqueNotes notes={techniqueForGrade(bundle.contactPatch)} />
           <Evidence label="Show every lockup" hint={`${lockups.length} lockups, with the inputs on the car at the time`}>
             <SlipPanel kind="lockup" events={lockups} />
           </Evidence>
@@ -441,6 +456,15 @@ function AspectEvidence({ aspect, cornerId }: { aspect: AspectKey; cornerId: num
               <GripSection grip={bundle.grip} />
             </Evidence>
           )}
+          {/* The walls: what grip cannot be split into from a disk file. */}
+          <Panel padding="var(--space-4)" style={{ marginTop: "var(--space-4)" }}>
+            <div style={{ font: "500 12.5px var(--font-heading)", marginBottom: 4 }}>
+              Not possible from disk telemetry — and it will not be faked.
+            </div>
+            <div style={{ fontSize: 12, color: dim(58), lineHeight: 1.6, maxWidth: 760 }}>
+              {noteFor("tire.load_kg")} {noteFor("brake.temperature")}
+            </div>
+          </Panel>
           <Evidence label="Show every moment a wheel let go" hint={`${lockups.length} lockups, ${spins.length} wheelspin`}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 400px), 1fr))", gap: "var(--space-4)" }}>
               <SlipPanel kind="lockup" events={lockups} />

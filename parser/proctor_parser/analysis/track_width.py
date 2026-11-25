@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from proctor_parser.analysis import line_offset
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "track_width"
@@ -35,21 +36,14 @@ _CAVEAT = (
     "narrows means you were repeatable there, not that the road did"
 )
 
-# Same projection constant and frame as track_map / corners, so the centreline,
-# the corner radii and this band are all the same geometry.
-_M_PER_DEG = 111320.0
-
 _MIN_SPAN_DEG = 1e-6   # below this the GPS never moved: not a lap, a point
 _MIN_LAPS = 2          # one lap has nothing to be wide against
 
-# Half-chord, in samples, for the reference lap's direction of travel. A single
-# adjacent sample is at the mercy of GPS jitter; a chord either side of the point
-# gives a direction stable enough to measure a perpendicular against.
-_TANGENT_HALF_CHORD = 6
-
-# An offset past this is not a line through a corner — it is a GPS dropout, a
-# tow, or a lap that left the circuit. Excluded from the band and counted.
-_MAX_PLAUSIBLE_OFFSET_M = 40.0
+# The projection, the reference lap's normals and the plausibility cut live in
+# analysis/line_offset.py, shared with driving_aspects. An offset past
+# MAX_PLAUSIBLE_OFFSET_M is a GPS dropout, a tow, or a lap that left the circuit:
+# excluded from the band and counted.
+_MAX_PLAUSIBLE_OFFSET_M = line_offset.MAX_PLAUSIBLE_OFFSET_M
 
 
 def _has_gps(lap: ParsedLap) -> bool:
@@ -94,44 +88,19 @@ def compute(session: ParsedSession) -> dict:
             f"{_MIN_LAPS} laps to have a width at all"
         )
 
-    lat_ref = ref.grid["lat_gps"].astype(np.float64)
-    lon_ref = ref.grid["lon_gps"].astype(np.float64)
-    lat_mean = float(np.mean(lat_ref))
-    lon_mean = float(np.mean(lon_ref))
-    scale_x = _M_PER_DEG * float(np.cos(np.radians(lat_mean)))
-
-    def project(lat: np.ndarray, lon: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        return (lon - lon_mean) * scale_x, (lat - lat_mean) * _M_PER_DEG
-
-    x_ref, y_ref = project(lat_ref, lon_ref)
+    frame = line_offset.frame(ref.grid["lat_gps"], ref.grid["lon_gps"])
+    lat_mean, lon_mean = frame.lat_mean, frame.lon_mean
+    x_ref, y_ref, nx, ny = frame.x_ref, frame.y_ref, frame.nx, frame.ny
     n = len(x_ref)
-
-    # Unit normal to the reference lap's direction of travel, pointing left.
-    h = min(_TANGENT_HALF_CHORD, max(1, n // 8))
-    tx = np.roll(x_ref, -h) - np.roll(x_ref, h)
-    ty = np.roll(y_ref, -h) - np.roll(y_ref, h)
-    length = np.hypot(tx, ty)
-    # Where the car was stationary the chord collapses; a zero-length tangent has
-    # no perpendicular, so those samples are marked and never measured against.
-    usable_normal = length > 1e-6
-    safe = np.where(usable_normal, length, 1.0)
-    nx = -ty / safe
-    ny = tx / safe
 
     offsets: list[np.ndarray] = []
     lap_numbers: list[int] = []
     excluded = 0
     for lap in clean:
-        x, y = project(
-            lap.grid["lat_gps"].astype(np.float64),
-            lap.grid["lon_gps"].astype(np.float64),
-        )
-        if len(x) != n:
+        off = line_offset.offsets(frame, lap.grid["lat_gps"], lap.grid["lon_gps"])
+        if off is None:
             excluded += 1
             continue
-        off = (x - x_ref) * nx + (y - y_ref) * ny
-        off = np.where(usable_normal, off, np.nan)
-        off = np.where(np.abs(off) <= _MAX_PLAUSIBLE_OFFSET_M, off, np.nan)
         if not np.isfinite(off).any():
             excluded += 1
             continue

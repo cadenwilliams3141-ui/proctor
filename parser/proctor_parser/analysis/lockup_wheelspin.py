@@ -57,8 +57,8 @@ def compute(session: ParsedSession) -> dict:
     for lap in session.laps:
         if "speed" not in lap.raw or len(lap.raw["speed"]) == 0:
             continue
-        lockups.extend(_events(lap, tick_rate, "lockup"))
-        wheelspin.extend(_events(lap, tick_rate, "wheelspin"))
+        lockups.extend(lap_events(lap, tick_rate, "lockup"))
+        wheelspin.extend(lap_events(lap, tick_rate, "wheelspin"))
 
     lock_total = len(lockups)
     spin_total = len(wheelspin)
@@ -92,8 +92,13 @@ def compute(session: ParsedSession) -> dict:
     return payload
 
 
-def _events(lap: ParsedLap, tick_rate: int, mode: str) -> list[dict]:
-    """Grouped slip events for one lap in either 'lockup' or 'wheelspin' mode."""
+def lap_events(lap: ParsedLap, tick_rate: int, mode: str) -> list[dict]:
+    """Grouped slip events for one lap in either 'lockup' or 'wheelspin' mode.
+
+    Public because driving_aspects asks it per lap: this module's payload keeps
+    only the _EVENT_CAP most severe events, which is right for a list on screen
+    and wrong for sorting laps into "had one here" and "did not".
+    """
     speed = lap.raw["speed"].astype(np.float64)
     moving = moving_mask(speed)
     # Guard the division: moving ticks are already > 5 m/s, but clip anyway.

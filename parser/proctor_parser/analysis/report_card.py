@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from proctor_parser.analysis.zones import steering_reversals
 from proctor_parser.session import ParsedLap, ParsedSession
 
 METRIC_KEY = "report_card"
@@ -21,9 +22,8 @@ METRIC_KEY = "report_card"
 _BASIS = "self-comparison within this session"
 _CAVEAT = "one session; fingerprints firm up with history"
 
-# A steering-velocity reversal only counts when the wheel actually moved this
-# much between ticks; below it the "reversal" is sensor jitter, not input.
-_REVERSAL_MIN_RAD_PER_TICK = 0.005
+# A steering reversal is counted by the shared rule in analysis/zones.py, which
+# driving_aspects also uses per corner -- one definition, two readings of it.
 
 
 def compute(session: ParsedSession) -> dict:
@@ -228,8 +228,5 @@ def _reversal_rate(laps: list[ParsedLap], tick_rate: int) -> float:
     if minutes <= 0 or len(steer) < 3:
         return 0.0
 
-    vel = np.diff(steer)
-    sign = np.sign(vel)
     # A reversal: velocity sign flips AND the wheel actually moved this tick.
-    flips = (sign[:-1] * sign[1:] < 0) & (np.abs(vel[1:]) > _REVERSAL_MIN_RAD_PER_TICK)
-    return int(np.count_nonzero(flips)) / minutes
+    return steering_reversals(steer) / minutes

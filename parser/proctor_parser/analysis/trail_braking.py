@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from proctor_parser.analysis import zones
 from proctor_parser.analysis.corners import detect_corners
 from proctor_parser.analysis.grade import grade_per_tick
 from proctor_parser.analysis.traction_circle import envelope, fraction_of_envelope
@@ -62,10 +63,12 @@ _DEFAULT_TICK_RATE = 60
 # which is where detect_corners begins the window. The same lead-in the web app
 # uses to attribute braking-zone events to their corner.
 _LEAD_IN = 0.035
-_ONSET = 0.10           # BrakeRaw at or above this: the brake is on
-_OFF = 0.05             # below this: the brake is off
-_TURN_IN_FRACTION = 0.30
-_MIN_PEAK_LAT_G = 0.15  # below this the "corner" was not one on this lap
+# The brake and turn-in rules are shared with driving_aspects (analysis/zones.py)
+# so "brake on", "brake off" and "turn-in" mean one thing across the product.
+_ONSET = zones.BRAKE_ON           # BrakeRaw at or above this: the brake is on
+_OFF = zones.BRAKE_OFF            # below this: the brake is off
+_TURN_IN_FRACTION = zones.TURN_IN_FRACTION
+_MIN_PEAK_LAT_G = zones.MIN_PEAK_LAT_G  # below this the "corner" was not one on this lap
 _RESTAB = 0.05          # a re-application of at least 5 points of pedal
 _THROTTLE_ON = 0.05
 _DIP_PCTILE = 10        # robust minimum of the transition, not one noisy tick
@@ -355,17 +358,6 @@ def _summarise(c: dict, rows: list[dict]) -> dict:
     return block
 
 
-def _ranks(x: np.ndarray) -> np.ndarray:
-    """Average ranks, so tied values do not invent an order."""
-    order = np.argsort(x, kind="mergesort")
-    ranks = np.empty(len(x), dtype=np.float64)
-    ranks[order] = np.arange(len(x), dtype=np.float64)
-    for v in np.unique(x):
-        tie = x == v
-        ranks[tie] = ranks[tie].mean()
-    return ranks
-
-
 def _link(rows: list[dict]) -> dict:
     """Spearman correlation between trail length and entry time over these laps."""
     pairs = [(r["trail_s"], r["entry_time_s"]) for r in rows if r.get("trail_s") is not None]
@@ -378,23 +370,25 @@ def _link(rows: list[dict]) -> dict:
         }
     trail = np.array([p[0] for p in pairs], dtype=np.float64)
     entry = np.array([p[1] for p in pairs], dtype=np.float64)
-    rt, re = _ranks(trail), _ranks(entry)
-    if rt.std() == 0 or re.std() == 0:
+    sp = zones.spearman(trail, entry)
+    if sp is None:
         return {
             "measured": True,
             "laps": n,
             "rho": None,
+            "p": None,
             "link": "none",
             "reason": "the trail or the entry time did not vary across these laps",
         }
-    rho = float(np.corrcoef(rt, re)[0, 1])
+    rho, p = sp
     # Negative rho: a longer trail went with a SHORTER (quicker) entry.
     link = (
         "longer_trail_faster" if rho <= -_LINK_RHO
         else "longer_trail_slower" if rho >= _LINK_RHO
         else "none"
     )
-    return {"measured": True, "laps": n, "rho": round(rho, 2), "link": link}
+    # p: how often chance alone would produce a rho this strong over n laps.
+    return {"measured": True, "laps": n, "rho": round(rho, 2), "p": round(p, 3), "link": link}
 
 
 def _session_summary(corners: list[dict]) -> dict:

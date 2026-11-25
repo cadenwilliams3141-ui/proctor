@@ -32,6 +32,9 @@ export interface TrackMapProps {
   eraser?: string;
   /** Highlight one corner's arc. */
   highlight?: { from: number; to: number; color: string } | null;
+  /** Several arcs at once, each with its own strength 0..1 — the corners an
+   *  aspect's time came from, weighted by their share of it. */
+  highlights?: { from: number; to: number; color: string; weight: number }[];
   apexes?: Corner[];
   events?: TrackEvent[];
   /** Sample index of the car. May be FRACTIONAL: the Live screen drives the
@@ -56,6 +59,7 @@ export default function TrackMap({
   drawIn = false,
   eraser = "var(--color-surface)",
   highlight = null,
+  highlights,
   apexes,
   events,
   car = null,
@@ -105,6 +109,16 @@ export default function TrackMap({
     const len = pathLength(geo.p, x, y, highlight.from, highlight.to, 2);
     return { d, len };
   }, [highlight, geo, x, y]);
+
+  const manyPaths = useMemo(
+    () =>
+      (highlights ?? []).map((h) => ({
+        d: pathFor(geo.p, x, y, h.from, h.to, 2),
+        color: h.color,
+        weight: Math.max(0.15, Math.min(1, h.weight)),
+      })),
+    [highlights, geo, x, y],
+  );
 
   const trailPath = useMemo(() => {
     if (car == null || trail <= 0) return null;
@@ -226,6 +240,13 @@ export default function TrackMap({
           />
         </>
       )}
+
+      {manyPaths.map((h, i) => (
+        <g key={i} style={{ animation: "fadeIn .5s both", animationDelay: `${(0.15 + i * 0.05).toFixed(2)}s` }}>
+          <path d={h.d} fill="none" stroke={h.color} strokeWidth={16} strokeLinecap="round" opacity={0.12 * h.weight} />
+          <path d={h.d} fill="none" stroke={h.color} strokeWidth={2 + 3 * h.weight} strokeLinecap="round" opacity={0.45 + 0.55 * h.weight} />
+        </g>
+      ))}
 
       {apexes?.map((c, i) => {
         const k = wrapIndex(Math.round(c.apex_pct * n), n);

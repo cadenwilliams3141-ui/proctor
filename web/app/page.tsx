@@ -1,10 +1,11 @@
 import AppShell from "@/components/proctor/AppShell";
+import type { AspectKey } from "@/lib/proctor/coach";
 import { ProctorProvider, type AnalysisView, type Screen } from "@/lib/proctor/store";
 import { openingStep, SETUP_PARAM } from "@/lib/setup";
 import { readSetupDone } from "@/lib/setup-server";
 import { readTier } from "@/lib/tier-server";
 
-/* The desktop app. One shell, eight screens, four analysis views.
+/* The desktop app. One shell: the coach, five aspects of the driving, and the drill-downs.
  *
  * The tier is read on the server from its cookie so the first paint is already
  * at the right detail level — no flash of the default tier before the client
@@ -23,14 +24,19 @@ export const dynamic = "force-dynamic";
 
 const SCREENS: Screen[] = [
   "sessions",
-  "report",
+  "coach",
+  "aspect",
   "analyze",
   "live",
-  "rig",
   "hardware",
   "anatomy",
   "upload",
 ];
+/* Retired screens whose ids are in links people have kept. The Session report
+   and Physics were replaced by the coach and the aspect screens on 2026-11-25;
+   a saved link opens the coach rather than a blank. */
+const RETIRED: Record<string, Screen> = { report: "coach", rig: "coach" };
+const ASPECTS: AspectKey[] = ["braking", "turn_in", "throttle", "line", "grip"];
 const VIEWS: AnalysisView[] = ["loss", "ribbon", "map", "line"];
 
 export default async function Page({
@@ -42,9 +48,13 @@ export default async function Page({
   const q = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-  const screen = SCREENS.includes(one(q.screen) as Screen)
-    ? (one(q.screen) as Screen)
-    : "analyze";
+  const asked = one(q.screen) ?? "";
+  const screen: Screen = SCREENS.includes(asked as Screen)
+    ? (asked as Screen)
+    : RETIRED[asked] ?? "coach";
+  const aspect = ASPECTS.includes(one(q.aspect) as AspectKey)
+    ? (one(q.aspect) as AspectKey)
+    : "braking";
   const view = VIEWS.includes(one(q.view) as AnalysisView)
     ? (one(q.view) as AnalysisView)
     : "loss";
@@ -63,6 +73,7 @@ export default async function Page({
       initialTier={tier}
       initialScreen={screen}
       initialView={view}
+      initialAspect={aspect}
       skipSplash={linked}
       initialSetup={setup}
     >

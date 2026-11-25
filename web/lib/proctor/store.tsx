@@ -30,6 +30,7 @@ import {
 
 import { data } from "@/lib/proctor/data-source";
 import { buildLedger } from "@/lib/proctor/ledger";
+import { coach, type AspectKey, type CoachReport } from "@/lib/proctor/coach";
 import { deriveReadiness, type Readiness } from "@/lib/proctor/readiness";
 import type { CornerLedger, SessionBundle, Trace } from "@/lib/proctor/types";
 import { isUsable } from "@/lib/proctor/types";
@@ -38,6 +39,8 @@ import { DEFAULT_TIER, parseTier, TIER_COOKIE, type Tier } from "@/lib/tier";
 
 export type Screen =
   | "sessions"
+  | "coach"
+  | "aspect"
   | "report"
   | "analyze"
   | "live"
@@ -80,6 +83,8 @@ export interface ProctorState {
   pick: "A" | "B";
   /** phone only */
   sheet: number | null;
+  /** Which part of the driving the aspect screen is reading. */
+  aspect: AspectKey;
 }
 
 type Action =
@@ -96,6 +101,7 @@ type Action =
   | { t: "setup"; step: SetupStep | null }
   | { t: "pick"; which: "A" | "B" }
   | { t: "sheet"; id: number | null }
+  | { t: "aspect"; aspect: AspectKey }
   | { t: "initLaps"; a: number; b: number | null };
 
 function reducer(s: ProctorState, a: Action): ProctorState {
@@ -104,11 +110,12 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       // A different session shares nothing with the one before it: lap 4 of
       // yesterday's race is not lap 4 of this one, and carrying the selection
       // across would put a stale lap number against a new set of traces.
-      if (a.id === s.sessionId) return { ...s, screen: "analyze", setup: null };
+      // A session opens on the coach: what to work on comes before how.
+      if (a.id === s.sessionId) return { ...s, screen: "coach", setup: null };
       return {
         ...s,
         sessionId: a.id,
-        screen: "analyze",
+        screen: "coach",
         setup: null,
         lapA: null,
         lapB: null,
@@ -159,6 +166,9 @@ function reducer(s: ProctorState, a: Action): ProctorState {
       return { ...s, setup: a.step, splash: a.step ? false : s.splash };
     case "sheet":
       return { ...s, sheet: a.id };
+    case "aspect":
+      // The corner picked on one aspect is rarely the one that matters on the next.
+      return { ...s, aspect: a.aspect, screen: "aspect", selCorner: null, sheet: null };
     case "initLaps":
       return { ...s, lapA: a.a, lapB: a.b };
     default:
@@ -168,7 +178,7 @@ function reducer(s: ProctorState, a: Action): ProctorState {
 
 const INITIAL: ProctorState = {
   sessionId: "latest",
-  screen: "analyze",
+  screen: "coach",
   view: "loss",
   lapA: null,
   lapB: null,
@@ -180,6 +190,7 @@ const INITIAL: ProctorState = {
   setup: null,
   pick: "B",
   sheet: null,
+  aspect: "braking",
 };
 
 interface Ctx {
@@ -198,6 +209,8 @@ interface Ctx {
   readiness: Readiness;
   /** The selected corner, falling back to the biggest single loss. */
   selectedCornerId: number | null;
+  /** What to work on, per aspect, with the gear checks. Null until a bundle. */
+  coachReport: CoachReport | null;
   setTier: (t: Tier) => void;
 }
 
@@ -206,8 +219,9 @@ const ProctorCtx = createContext<Ctx | null>(null);
 export function ProctorProvider({
   sessionId = "latest",
   initialTier = DEFAULT_TIER,
-  initialScreen = "analyze",
+  initialScreen = "coach",
   initialView = "loss",
+  initialAspect = "braking",
   skipSplash = false,
   initialSetup = null,
   children,
@@ -217,6 +231,8 @@ export function ProctorProvider({
   /** From ?screen= — an analysis view is worth being able to link to. */
   initialScreen?: Screen;
   initialView?: AnalysisView;
+  /** From ?aspect= — "look at my braking" is a link worth sending. */
+  initialAspect?: AspectKey;
   skipSplash?: boolean;
   /** The setup step this visit opens on, decided on the server from a cookie
    *  (lib/setup.ts). The phone app never passes one. */
@@ -229,6 +245,7 @@ export function ProctorProvider({
     tier: initialTier,
     screen: initialScreen,
     view: initialView,
+    aspect: initialAspect,
     splash: !skipSplash && initialSetup == null,
     setup: initialSetup,
   });
@@ -326,6 +343,22 @@ export function ProctorProvider({
     return ledger.corners.reduce((w, c) => (c.delta > w.delta ? c : w)).corner.id;
   }, [state.selCorner, ledger]);
 
+  /* The coach reads only the bundle, so it is built once per session — never
+     on a cursor move or a lap pick. */
+  const coachReport = useMemo<CoachReport | null>(() => {
+    if (!bundle) return null;
+    return coach({
+      drivingAspects: bundle.drivingAspects,
+      trailBraking: bundle.trailBraking,
+      inputResponse: bundle.inputResponse,
+      hardware: bundle.hardware,
+      reportCard: bundle.reportCard,
+      balance: bundle.balance,
+      trackWidth: bundle.trackWidth,
+      absentReason: bundle.absences.find((a) => a.key === "driving_aspects")?.reason,
+    });
+  }, [bundle]);
+
   const setTier = useCallback((t: Tier) => {
     dispatch({ t: "tier", tier: t });
     document.cookie = `${TIER_COOKIE}=${t}; path=/; max-age=31536000; samesite=lax`;
@@ -377,6 +410,7 @@ export function ProctorProvider({
       ledger,
       readiness,
       selectedCornerId,
+      coachReport,
       setTier,
     }),
     [
@@ -390,6 +424,7 @@ export function ProctorProvider({
       ledger,
       readiness,
       selectedCornerId,
+      coachReport,
       setTier,
     ],
   );

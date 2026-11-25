@@ -30,7 +30,12 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const ROOTS = ["components/proctor/screens", "components/proctor/views", "components/proctor/mobile"];
+const ROOTS = [
+  "components/proctor/screens",
+  "components/proctor/views",
+  "components/proctor/mobile",
+  "components/proctor/panels",
+];
 
 /** Elements that must never be inside an <Evidence> block. See the header for
  *  why <Caveat> is not among them. */

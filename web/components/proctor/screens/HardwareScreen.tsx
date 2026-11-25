@@ -48,6 +48,7 @@ import dynamic from "next/dynamic";
 import { createContext, useContext, useEffect, useState } from "react";
 
 import Caveat, { Eyebrow } from "@/components/proctor/ui/Caveat";
+import GearReadings from "@/components/proctor/panels/GearReadings";
 import Panel from "@/components/proctor/ui/Panel";
 import { dim } from "@/lib/proctor/channels";
 import {
@@ -153,6 +154,11 @@ function Option({
   );
 }
 
+/** A product the driver named, or null — "not chosen" is not a name. */
+function named(choice: RigChoice): string | null {
+  return choice.state === "product" ? productName(choice.product) : null;
+}
+
 function choiceText(choice: RigChoice): string {
   if (choice.state === "product") return productName(choice.product);
   return choice.state === "none" ? "none fitted" : "not chosen";
@@ -201,7 +207,7 @@ export default function HardwareScreen() {
 
   function finish() {
     dispatch({ t: "setup", step: null });
-    dispatch({ t: "screen", screen: "analyze" });
+    dispatch({ t: "screen", screen: "coach" });
   }
 
   const layout = prefs ? rigLayout(prefs.layout) : null;
@@ -245,6 +251,19 @@ export default function HardwareScreen() {
             {saidCount === 0 ? "Skip for now" : "Finish"}
           </button>
         </section>
+      )}
+
+      {/* The rig's own report on this session comes first: the driver came to
+          Gear to find out whether it was them or the equipment. The builder
+          below is how they name it. Hidden during the guided setup, which is
+          about building, not reading. */}
+      {!guided && (
+        <div style={{ marginBottom: "var(--space-6)" }}>
+          <GearReadings
+            pedals={named(choiceFor("pedals"))}
+            wheel={named(choiceFor("wheelbase"))}
+          />
+        </div>
       )}
 
       <div className="rig-split">

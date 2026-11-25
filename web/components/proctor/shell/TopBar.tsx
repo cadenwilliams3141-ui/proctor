@@ -9,8 +9,12 @@ import { TIER_BLURB, TIERS } from "@/lib/tier";
 
 const TITLE: Record<Screen, { title: string; sub: string }> = {
   sessions: { title: "Sessions", sub: "everything the rig watcher has sent" },
+  coach: { title: "Coach", sub: "what to work on next, aimed at what your own quick laps did" },
+  aspect: { title: "Your driving", sub: "one part of it at a time, against your own quick passes" },
   report: { title: "Session report", sub: "what this session did, module by module" },
-  analyze: { title: "Analyze", sub: "any lap of this session against any other" },
+  /* The id stays `analyze` for links people have kept; the screen is the
+     lap-against-lap drill-down the coach points into. */
+  analyze: { title: "Laps", sub: "any lap of this session against any other" },
   /* NOT "in the time it actually took": playback defaults to 4x, so that
      sentence was false the moment the screen opened. The rate is a control on
      the screen and the readout beside it already states the truth; the subtitle
@@ -20,9 +24,9 @@ const TITLE: Record<Screen, { title: string; sub: string }> = {
     title: "Physics",
     sub: "what you asked for, what the car did with it, and what the ground actually gave",
   },
-  /* Labelled Rig, though its id is `hardware`: `rig` is the Physics screen's id
-     and is in links people have kept. See shell/IconRail.tsx. */
-  hardware: { title: "Rig", sub: "the layout you drive from, and what you have said is in each slot" },
+  /* Labelled Gear, though its id is `hardware`: `rig` was the Physics screen's
+     id and is in links people have kept. See shell/IconRail.tsx. */
+  hardware: { title: "Gear", sub: "is it you or your rig? What the pedals and wheel reported, and your setup" },
   anatomy: {
     title: "Anatomy",
     sub: "a prototype racer taken apart, and the rig hardware that stands in for each system",

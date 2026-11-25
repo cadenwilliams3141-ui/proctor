@@ -8,43 +8,97 @@ import {
   Armchair,
   ChartLine,
   CirclePlay,
-  Gauge,
+  Disc3,
   Layers,
   LayoutGrid,
-  NotebookText,
+  RotateCw,
+  Route,
+  Sparkles,
+  TrendingUp,
   Upload,
+  Waves,
 } from "lucide-react";
 
+import type { AspectKey } from "@/lib/proctor/coach";
+import { ASPECT_LABEL } from "@/lib/proctor/coach";
 import { dim } from "@/lib/proctor/channels";
 import { useProctor, type Screen } from "@/lib/proctor/store";
 
 import ViewSwitch from "@/components/proctor/ui/ViewSwitch";
 
-/* Phosphor is what the design specifies; lucide is what is vendored in this
-   app, so each glyph is mapped to its nearest lucide equivalent. The one that
-   is not a like-for-like is `steering-wheel` -> Gauge: lucide has no steering
-   wheel, and Gauge reads as instrumentation, which is what Physics is.
+/* The rail is organised the way a driver thinks after a session: the coach
+   first, then the five parts of the driving, each its own item, then the
+   drill-downs and the rig.
 
-   The `rig` id is deliberately unchanged though the label is not: it appears in
-   ?screen= links people may have kept.
+   Two ids are kept for links people have saved, though their labels moved:
+   `analyze` is labelled "Laps" (the lap-against-lap drill-down the coach points
+   into) and `hardware` is labelled "Gear" (the rig, and whether it was the rig
+   or you). The retired Physics (`rig`) and Session report (`report`) ids open
+   the coach — see app/page.tsx.
 
-   That leaves the screen that IS about the rig without the obvious id, so it is
-   `hardware`, labelled "Rig". Its glyph is a seat because the rig is the thing
-   you sit in, and because a second dial next to Physics would read as the same
-   screen twice.
-
-   Anatomy is the exploded car. Its glyph is a stack of layers lifting apart,
-   which is what the screen does; a car glyph would promise the driver's own. */
-const NAV: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
+   Lucide has no steering wheel or brake pedal, so the aspect glyphs are the
+   nearest honest picture: a brake disc, rotation, the throttle's rising line,
+   a route, and the friction of the road. */
+const TOP: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
   { id: "sessions", label: "Sessions", Icon: LayoutGrid },
-  { id: "report", label: "Session report", Icon: NotebookText },
-  { id: "analyze", label: "Analyze", Icon: ChartLine },
+  { id: "coach", label: "Coach", Icon: Sparkles },
+];
+
+const ASPECTS: { id: AspectKey; Icon: typeof LayoutGrid }[] = [
+  { id: "braking", Icon: Disc3 },
+  { id: "turn_in", Icon: RotateCw },
+  { id: "throttle", Icon: TrendingUp },
+  { id: "line", Icon: Route },
+  { id: "grip", Icon: Waves },
+];
+
+const BOTTOM: { id: Screen; label: string; Icon: typeof LayoutGrid }[] = [
+  { id: "analyze", label: "Laps", Icon: ChartLine },
   { id: "live", label: "Live trace", Icon: CirclePlay },
-  { id: "rig", label: "Physics", Icon: Gauge },
-  { id: "hardware", label: "Rig", Icon: Armchair },
+  { id: "hardware", label: "Gear", Icon: Armchair },
   { id: "anatomy", label: "Anatomy", Icon: Layers },
   { id: "upload", label: "Upload", Icon: Upload },
 ];
+
+function RailButton({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="pk"
+      title={label}
+      aria-label={label}
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+      style={{
+        width: 38,
+        height: 38,
+        flex: "none",
+        borderRadius: "var(--radius-md)",
+        border: 0,
+        display: "grid",
+        placeItems: "center",
+        color: active ? "var(--ch-a)" : dim(40),
+        background: active ? "color-mix(in srgb, var(--color-accent) 14%, transparent)" : "transparent",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+const Divider = () => (
+  <span aria-hidden style={{ width: 20, height: 1, background: dim(10), margin: "6px 0", flex: "none" }} />
+);
 
 export default function IconRail() {
   const { state, dispatch } = useProctor();
@@ -86,35 +140,38 @@ export default function IconRail() {
         P
       </button>
 
-      {NAV.map(({ id, label, Icon }) => {
-        const active = state.screen === id;
-        return (
-          <button
-            key={id}
-            type="button"
-            className="pk"
-            title={label}
-            aria-label={label}
-            aria-current={active ? "page" : undefined}
-            onClick={() => dispatch({ t: "screen", screen: id })}
-            style={{
-              width: 38,
-              height: 38,
-              flex: "none",
-              borderRadius: "var(--radius-md)",
-              border: 0,
-              display: "grid",
-              placeItems: "center",
-              color: active ? "var(--ch-a)" : dim(40),
-              background: active
-                ? "color-mix(in srgb, var(--color-accent) 14%, transparent)"
-                : "transparent",
-            }}
-          >
-            <Icon size={19} strokeWidth={1.6} />
-          </button>
-        );
-      })}
+      {TOP.map(({ id, label, Icon }) => (
+        <RailButton
+          key={id}
+          label={label}
+          active={state.screen === id}
+          onClick={() => dispatch({ t: "screen", screen: id })}
+        >
+          <Icon size={19} strokeWidth={1.6} />
+        </RailButton>
+      ))}
+      <Divider />
+      {ASPECTS.map(({ id, Icon }) => (
+        <RailButton
+          key={id}
+          label={ASPECT_LABEL[id]}
+          active={state.screen === "aspect" && state.aspect === id}
+          onClick={() => dispatch({ t: "aspect", aspect: id })}
+        >
+          <Icon size={18} strokeWidth={1.6} />
+        </RailButton>
+      ))}
+      <Divider />
+      {BOTTOM.map(({ id, label, Icon }) => (
+        <RailButton
+          key={id}
+          label={label}
+          active={state.screen === id}
+          onClick={() => dispatch({ t: "screen", screen: id })}
+        >
+          <Icon size={19} strokeWidth={1.6} />
+        </RailButton>
+      ))}
 
       {/* A Settings button used to sit here with no handler and nowhere to go.
           There is no settings screen; the one preference the app has — the

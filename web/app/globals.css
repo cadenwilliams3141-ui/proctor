@@ -1757,3 +1757,32 @@ button[disabled] {
     padding: var(--space-4);
   }
 }
+
+/* ── Coach and aspect screens ────────────────────────────────────────────────
+   Five aspect tiles in a row on a desktop, folding to three, two and one as the
+   window narrows. The hero's track map drops under the text on a narrow window
+   rather than squeezing the sentence. */
+.coach-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.coach-tile {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.coach-tile:hover {
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+@media (max-width: 1280px) {
+  .coach-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .coach-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .coach-hero { flex-direction: column; }
+  .coach-hero-map { width: 100% !important; }
+  .aspect-where { grid-template-columns: minmax(0, 1fr) !important; }
+  .aspect-answer { flex-direction: column; }
+}
+@media (max-width: 520px) {
+  .coach-tiles { grid-template-columns: minmax(0, 1fr); }
+}

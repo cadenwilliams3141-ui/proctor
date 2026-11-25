@@ -1,6 +1,6 @@
 "use client";
 
-/* The shell. One ground, three columns, eight screens.
+/* The shell. One ground, three columns: the coach, five aspects, and the drill-downs.
  *
  * What this replaces: web/app/layout.tsx plus the four routes under
  * web/app/session/[id]/. Those were separate pages you navigated between and
@@ -22,6 +22,8 @@ import TopBar from "@/components/proctor/shell/TopBar";
 
 import AnalyzeScreen from "@/components/proctor/screens/AnalyzeScreen";
 import AnatomyScreen from "@/components/proctor/screens/AnatomyScreen";
+import AspectScreen from "@/components/proctor/screens/AspectScreen";
+import CoachScreen from "@/components/proctor/screens/CoachScreen";
 import LiveScreen from "@/components/proctor/screens/LiveScreen";
 import ReportScreen from "@/components/proctor/screens/ReportScreen";
 import ForcesScreen from "@/components/proctor/screens/ForcesScreen";
@@ -141,6 +143,8 @@ export default function AppShell() {
               </div>
             )}
 
+            {state.screen === "coach" && <CoachScreen />}
+            {state.screen === "aspect" && <AspectScreen />}
             {state.screen === "analyze" && <AnalyzeScreen />}
             {state.screen === "live" && <LiveScreen />}
             {state.screen === "sessions" && <SessionsScreen />}

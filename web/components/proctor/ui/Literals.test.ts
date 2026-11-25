@@ -35,7 +35,7 @@ const SCALE_LABELS: { file: string; text: string; why: string }[] = [
   { file: "Ribbon.tsx", text: "0%", why: "start of the lap-distance axis" },
   { file: "Ribbon.tsx", text: "100% of the lap, by distance", why: "end of the lap-distance axis" },
   { file: "RacingLine.tsx", text: "10 m", why: "a scale bar's length" },
-  { file: "ForcesScreen.tsx", text: "Bars are scaled 0–100%", why: "how the bar axis runs, with a worked example" },
+  { file: "ForcesPanels.tsx", text: "Bars are scaled 0–100%", why: "how the bar axis runs, with a worked example" },
 ];
 
 const UNIT = String.raw`(?:%|ms|s|km/h|m|g|Nm|N·m|°C|fps|L|mm|°)`;
